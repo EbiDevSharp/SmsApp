@@ -110,7 +110,7 @@ fun AppNavigation(viewModel: SmsViewModel) {
             NewMessageScreen(
                 contacts = contacts,
                 onSearchChange = { query -> viewModel.searchContacts(query) },
-                onSend = { address, body -> viewModel.sendNewMessage(address, body) },
+                onSend = { address, displayName, body -> viewModel.sendNewMessage(address, displayName, body) },
                 onBack = { navController.popBackStack() }
             )
         }

@@ -1,5 +1,5 @@
 package com.petro.smsapp.ui
-
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -113,4 +113,4 @@ fun NewMessageScreen(
 
 // هلپر کوچیک چون Modifier.clickable مستقیم روی ListItem گاهی با ripple تداخل داره
 private fun Modifier.clickableItem(onClick: () -> Unit): Modifier =
-    this.then(androidx.compose.foundation.clickable(onClick = onClick))
+    this.clickable(onClick = onClick)
