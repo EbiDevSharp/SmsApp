@@ -35,13 +35,20 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             put(Telephony.Sms.READ, 0)
             put(Telephony.Sms.SEEN, 0)
         }
-        context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
-
-        val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
-        showNotification(context, sender, fullBody, threadId)
+        context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)?.let { insertedUri ->
+            val messageId = android.content.ContentUris.parseId(insertedUri)
+            val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
+            showNotification(context, sender, fullBody, threadId, messageId)
+        }
     }
 
-    private fun showNotification(context: Context, sender: String, body: String, threadId: Long) {
+    private fun showNotification(
+        context: Context,
+        sender: String,
+        body: String,
+        threadId: Long,
+        messageId: Long
+    ) {
         val channelId = "sms_channel"
         val notificationId = sender.hashCode()
 
@@ -67,8 +74,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val deleteIntent = Intent(context, com.petro.smsapp.receiver.NotificationActionReceiver::class.java).apply {
             action = com.petro.smsapp.receiver.NotificationActionReceiver.ACTION_DELETE
-            data = android.net.Uri.parse("smsapp://delete/$threadId")
-            putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
+            data = android.net.Uri.parse("smsapp://delete/$messageId")
+            putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_MESSAGE_ID, messageId)
             putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
         }
         val deletePendingIntent = PendingIntent.getBroadcast(

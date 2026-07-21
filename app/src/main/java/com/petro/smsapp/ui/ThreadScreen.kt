@@ -17,6 +17,7 @@ import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ThreadScreen(
     displayName: String,
@@ -38,6 +39,14 @@ fun ThreadScreen(
 
     // به‌محض باز شدن مکالمه یا اومدن/رفتن پیام جدید، خودکار برو پایین‌ترین (آخرین) پیام
     LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    // وقتی کیبورد باز/بسته میشه، دوباره برو آخرین پیام تا زیر کادر پیام قایم نمونه
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisible) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }

@@ -92,13 +92,24 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
-     * حذف کل مکالمه (برای اکشن «حذف» روی نوتیفیکیشن)
+     * حذف کل مکالمه (اگه لازم بشه - فعلاً جایی صداش نمی‌زنیم چون خیلی مخرب بود برای اکشن نوتیف)
      */
     fun deleteThread(threadId: Long) {
         context.contentResolver.delete(
             Telephony.Sms.CONTENT_URI,
             "${Telephony.Sms.THREAD_ID} = ?",
             arrayOf(threadId.toString())
+        )
+    }
+
+    /**
+     * حذف فقط یک پیام مشخص (برای اکشن «حذف» روی نوتیفیکیشن)
+     */
+    fun deleteMessage(messageId: Long) {
+        context.contentResolver.delete(
+            android.content.ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+            null,
+            null
         )
     }
 
