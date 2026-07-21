@@ -1,14 +1,17 @@
 package com.petro.smsapp.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
@@ -24,12 +27,28 @@ fun ThreadScreen(
 ) {
     var input by remember { mutableStateOf("") }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
+    var selectedMessage by remember { mutableStateOf<SmsMessage?>(null) }
+    val listState = rememberLazyListState()
 
-    // به محض اینکه لیست سیم‌کارت‌ها لود شد، سیم اول رو به‌صورت پیش‌فرض انتخاب کن
     LaunchedEffect(sims) {
         if (selectedSimId == null && sims.isNotEmpty()) {
             selectedSimId = sims.first().subscriptionId
         }
+    }
+
+    // به‌محض باز شدن مکالمه یا اومدن/رفتن پیام جدید، خودکار برو پایین‌ترین (آخرین) پیام
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    if (selectedMessage != null) {
+        MessageActionsSheet(
+            message = selectedMessage!!,
+            contactDisplayName = displayName,
+            onDismiss = { selectedMessage = null }
+        )
     }
 
     Scaffold(
@@ -75,27 +94,28 @@ fun ThreadScreen(
                         placeholder = { Text("پیام...") },
                         maxLines = 5,
                         // متن انگلیسی/اعداد از چپ نوشته بشن، حتی داخل کانتینر راست‌به‌چپ
-                        textStyle = LocalTextStyle.current.copy(textDirection = androidx.compose.ui.text.style.TextDirection.ContentOrLtr)
+                        textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
                     )
                 }
             }
         }
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 8.dp)
         ) {
             items(messages, key = { it.id }) { message ->
-                MessageBubble(message)
+                MessageBubble(message = message, onClick = { selectedMessage = message })
             }
         }
     }
 }
 
 @Composable
-private fun MessageBubble(message: SmsMessage) {
+private fun MessageBubble(message: SmsMessage, onClick: () -> Unit) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (message.isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFFE5E5EA)
     val textColor = if (message.isOutgoing) Color.White else Color.Black
@@ -110,7 +130,9 @@ private fun MessageBubble(message: SmsMessage) {
             Surface(
                 color = bubbleColor,
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.padding(4.dp)
+                modifier = Modifier
+                    .padding(4.dp)
+                    .clickable(onClick = onClick)
             ) {
                 Text(
                     text = message.body,

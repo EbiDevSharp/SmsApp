@@ -179,7 +179,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         navController.navigate("thread/${conversation.threadId}/${conversation.address}/${conversation.displayName}")
                     },
                     onComposeClick = {
-                        viewModel.searchContacts("")
+                        viewModel.prepareNewMessage()
                         navController.navigate("new")
                     },
                     onMenuClick = { scope.launch { drawerState.open() } }

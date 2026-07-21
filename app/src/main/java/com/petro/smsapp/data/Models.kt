@@ -15,6 +15,8 @@ data class SmsMessage(
     val address: String,
     val body: String,
     val date: Long,
+    val dateSent: Long,
+    val type: Int,
     val isOutgoing: Boolean,
     val isRead: Boolean
 )

@@ -172,12 +172,15 @@ class SmsRepository(private val context: Context) {
     private fun cursorToMessage(cursor: Cursor): SmsMessage {
         fun col(name: String) = cursor.getColumnIndex(name)
         val type = cursor.getInt(col(Telephony.Sms.TYPE))
+        val dateSentIdx = col(Telephony.Sms.DATE_SENT)
         return SmsMessage(
             id = cursor.getLong(col(Telephony.Sms._ID)),
             threadId = cursor.getLong(col(Telephony.Sms.THREAD_ID)),
             address = cursor.getStringOrNull(col(Telephony.Sms.ADDRESS)) ?: "",
             body = cursor.getStringOrNull(col(Telephony.Sms.BODY)) ?: "",
             date = cursor.getLong(col(Telephony.Sms.DATE)),
+            dateSent = if (dateSentIdx >= 0) cursor.getLong(dateSentIdx) else 0L,
+            type = type,
             isOutgoing = type == Telephony.Sms.MESSAGE_TYPE_SENT || type == Telephony.Sms.MESSAGE_TYPE_OUTBOX,
             isRead = cursor.getInt(col(Telephony.Sms.READ)) == 1
         )

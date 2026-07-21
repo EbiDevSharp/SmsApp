@@ -37,6 +37,16 @@ object DateFormatter {
         }
     }
 
+    /** برای صفحه جزئیات پیام - تاریخ کامل به‌همراه ساعت */
+    fun formatFull(millis: Long): String {
+        if (millis <= 0L) return "-"
+        val cal = Calendar.getInstance().apply { timeInMillis = millis }
+        val day = cal.get(Calendar.DAY_OF_MONTH)
+        val month = gregorianMonthNamesFa[cal.get(Calendar.MONTH)]
+        val year = cal.get(Calendar.YEAR)
+        return "$day $month $year - ${timeFormatter.format(Date(millis))}"
+    }
+
     private fun isSameDay(a: Calendar, b: Calendar): Boolean =
         a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
 

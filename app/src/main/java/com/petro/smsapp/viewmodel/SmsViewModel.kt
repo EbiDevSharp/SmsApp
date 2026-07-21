@@ -128,6 +128,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** موقع ورود به صفحه «پیام جدید»، thread قبلی که باز بوده رو فراموش کن */
+    fun prepareNewMessage() {
+        clearOpenThread()
+        searchContacts("")
+    }
+
     fun setPickedContact(contact: ContactInfo) {
         _pickedContact.value = contact
     }
@@ -144,6 +150,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.sendSms(address, body, subscriptionId) }
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
+            loadThread(threadId) // قبل از navigate لود میشه تا صفحه چت از همون لحظه‌ی اول پیام رو نشون بده
             loadConversations()
             _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
         }
