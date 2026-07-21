@@ -71,8 +71,15 @@ private fun MessageDetailsContent(message: SmsMessage, contactDisplayName: Strin
             // برای پیامی که خودمون فرستادیم، فقط یه زمان معنی داره: زمان ارسال
             DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(message.date))
         } else {
-            // برای پیام دریافتی، این دو تا می‌تونن واقعاً فرق کنن (مثلاً گوشی خاموش بوده)
-            DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(message.dateSent))
+            // برای پیام دریافتی این دو تا می‌تونن واقعاً فرق کنن (مثلاً گوشی خاموش بوده).
+            // زمان ارسال از timestamp خود PDU میاد (گزارش شبکه/فرستنده) و منطقاً باید زودتر
+            // یا هم‌زمان با زمان دریافت باشه. اگه به هر دلیلی (مثل بعضی امولاتورها که موقع
+            // تزریق پیامک تستی timestamp درستی نمی‌سازن) این ترتیب برعکس بود، به‌جای نمایش
+            // یه چیز غیرمنطقی، فقط زمان دریافت رو نشون میدیم.
+            val sentTime = message.dateSent
+            if (sentTime in 1..message.date) {
+                DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(sentTime))
+            }
             DetailRow(Icons.Filled.Done, "زمان دریافت", DateFormatter.formatFull(message.date))
         }
         DetailRow(Icons.Filled.Info, "نوع", typeLabel(message))
