@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,9 +26,11 @@ fun ThreadScreen(
     displayName: String,
     messages: List<SmsMessage>,
     sims: List<SimInfo>,
+    favoriteIds: Set<Long>,
     onSend: (body: String, subscriptionId: Int?) -> Unit,
     onDeleteMessage: (messageId: Long) -> Unit,
     onOpenNote: (text: String) -> Unit,
+    onToggleFavorite: (message: SmsMessage) -> Unit,
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
@@ -48,6 +51,7 @@ fun ThreadScreen(
         MessageActionsSheet(
             message = currentSelectedMessage,
             contactDisplayName = displayName,
+            isFavorite = favoriteIds.contains(currentSelectedMessage.id),
             onDismiss = { selectedMessage = null },
             // با یه val جدا (currentSelectedMessage) کار می‌کنیم نه با selectedMessage!!،
             // چون توی MessageActionsSheet آیتم «باز کردن در نوت» اول onDismiss (که selectedMessage
@@ -57,7 +61,8 @@ fun ThreadScreen(
             onDeleteConfirmed = {
                 onDeleteMessage(currentSelectedMessage.id)
                 selectedMessage = null
-            }
+            },
+            onToggleFavorite = { onToggleFavorite(currentSelectedMessage) }
         )
     }
 
@@ -135,6 +140,7 @@ fun ThreadScreen(
                 items(messages.reversed(), key = { it.id }) { message ->
                     MessageBubble(
                         message = message,
+                        isFavorite = favoriteIds.contains(message.id),
                         onClick = { selectedMessage = message },
                         onDoubleClick = { onOpenNote(message.body) }
                     )
@@ -146,7 +152,7 @@ fun ThreadScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: SmsMessage, onClick: () -> Unit, onDoubleClick: () -> Unit) {
+private fun MessageBubble(message: SmsMessage, isFavorite: Boolean, onClick: () -> Unit, onDoubleClick: () -> Unit) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (message.isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFFE5E5EA)
     val textColor = if (message.isOutgoing) Color.White else Color.Black
@@ -189,6 +195,16 @@ private fun MessageBubble(message: SmsMessage, onClick: () -> Unit, onDoubleClic
                     imageVector = Icons.Filled.Done,
                     contentDescription = "تحویل داده شد",
                     tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            // نشان ستاره: پیام فیوریت‌شده (قفل‌شده در برابر حذف)
+            if (isFavorite) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = "فیوریت‌شده",
+                    tint = Color(0xFFFFC107),
                     modifier = Modifier.size(14.dp)
                 )
             }

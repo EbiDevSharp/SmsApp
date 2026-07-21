@@ -10,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
+import com.petro.smsapp.data.FavoriteMessage
+import com.petro.smsapp.data.FavoriteStore
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
@@ -50,6 +52,18 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // متن پیامی که کاربر برای باز کردن توی صفحه‌ی «نوت پیام» انتخاب کرده (دابل‌کلیک یا از منو)
     private val _noteText = MutableStateFlow<String?>(null)
     val noteText: StateFlow<String?> = _noteText.asStateFlow()
+
+    // لیست کامل پیام‌های فیوریت‌شده - برای صفحه‌ی «علاقه‌مندی‌ها»
+    private val _favorites = MutableStateFlow<List<FavoriteMessage>>(emptyList())
+    val favorites: StateFlow<List<FavoriteMessage>> = _favorites.asStateFlow()
+
+    // فقط id پیام‌های فیوریت‌شده - برای اینکه توی صفحه‌ی چت سریع بشه چک کرد پیامی فیوریته یا نه
+    private val _favoriteIds = MutableStateFlow<Set<Long>>(emptySet())
+    val favoriteIds: StateFlow<Set<Long>> = _favoriteIds.asStateFlow()
+
+    // پیام یک‌بارمصرف برای اطلاع‌رسانی به کاربر (مثلاً «این پیام قفله و قابل حذف نیست»)
+    private val _operationMessage = MutableStateFlow<String?>(null)
+    val operationMessage: StateFlow<String?> = _operationMessage.asStateFlow()
 
     // threadId مکالمه‌ای که الان روی صفحه چت بازه، تا وقتی پیامک جدید میاد بدونیم کدوم thread رو دوباره لود کنیم
     private var openThreadId: Long? = null
@@ -135,9 +149,63 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     /** حذف یه پیام مشخص از داخل مکالمه (بعد از تائید کاربر توی MessageActionsSheet) */
     fun deleteMessage(threadId: Long, messageId: Long) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { repository.deleteMessage(messageId) }
+            val deleted = withContext(Dispatchers.IO) { repository.deleteMessage(messageId) }
+            if (!deleted) {
+                // پیام فیوریت‌شده بود و رد شد (نقش قفل) - فقط به کاربر اطلاع میدیم
+                _operationMessage.value = "این پیام به علاقه‌مندی‌ها اضافه شده و قفله. برای حذف، اول از علاقه‌مندی‌ها بردارش."
+                return@launch
+            }
             refreshMessages(threadId)
             loadConversations()
+        }
+    }
+
+    /** پیامی که به کاربر نشون داده شده رو مصرف می‌کنه (مثلاً بعد از نمایش Snackbar) */
+    fun consumeOperationMessage() {
+        _operationMessage.value = null
+    }
+
+    /** لود کردن لیست فیوریت‌ها - برای صفحه‌ی «علاقه‌مندی‌ها» */
+    fun loadFavorites() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { FavoriteStore.getAllFavorites(getApplication<Application>()) }
+            _favorites.value = result
+            _favoriteIds.value = result.map { it.messageId }.toSet()
+        }
+    }
+
+    /**
+     * فیوریت‌کردن/برداشتنِ فیوریت یه پیام با یک کلیک (از منوی اکشن پیام).
+     * تا وقتی پیامی فیوریته، SmsRepository.deleteMessage اجازه‌ی حذفش رو نمی‌ده.
+     */
+    fun toggleFavorite(message: SmsMessage, contactDisplayName: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                if (FavoriteStore.isFavorite(getApplication<Application>(), message.id)) {
+                    FavoriteStore.removeFavorite(getApplication<Application>(), message.id)
+                } else {
+                    FavoriteStore.addFavorite(
+                        getApplication<Application>(),
+                        FavoriteMessage(
+                            messageId = message.id,
+                            threadId = message.threadId,
+                            address = message.address,
+                            displayName = contactDisplayName,
+                            body = message.body,
+                            date = message.date
+                        )
+                    )
+                }
+            }
+            loadFavorites()
+        }
+    }
+
+    /** برداشتن فیوریت از داخل خود صفحه‌ی «علاقه‌مندی‌ها» (بدون نیاز به SmsMessage کامل) */
+    fun removeFavorite(messageId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { FavoriteStore.removeFavorite(getApplication<Application>(), messageId) }
+            loadFavorites()
         }
     }
 

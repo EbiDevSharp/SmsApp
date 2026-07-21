@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +28,7 @@ import androidx.navigation.navArgument
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.ConversationListScreen
+import com.petro.smsapp.ui.FavoritesScreen
 import com.petro.smsapp.ui.NewMessageScreen
 import com.petro.smsapp.ui.NoteScreen
 import com.petro.smsapp.ui.PlaceholderScreen
@@ -144,9 +146,26 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val pickedContact by viewModel.pickedContact.collectAsState()
     val sims by viewModel.sims.collectAsState()
     val noteText by viewModel.noteText.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
+    val favoriteIds by viewModel.favoriteIds.collectAsState()
+    val operationMessage by viewModel.operationMessage.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // لود اولیه‌ی لیست فیوریت‌ها - همون اول که برنامه بالا میاد
+    LaunchedEffect(Unit) {
+        viewModel.loadFavorites()
+    }
+
+    // پیام‌های یک‌بارمصرف (مثل «این پیام قفله») به‌صورت Toast نشون داده میشن
+    LaunchedEffect(operationMessage) {
+        operationMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            viewModel.consumeOperationMessage()
+        }
+    }
 
     // وقتی از صفحه پیام جدید، پیام ارسال و thread ساخته/پیدا شد، برو صفحه چت همون thread با آدرس درست
     LaunchedEffect(newTarget) {
@@ -217,12 +236,14 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     displayName = displayName,
                     messages = messages,
                     sims = sims,
+                    favoriteIds = favoriteIds,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
                     onOpenNote = { text ->
                         viewModel.openNote(text)
                         navController.navigate("note")
                     },
+                    onToggleFavorite = { message -> viewModel.toggleFavorite(message, displayName) },
                     onBack = {
                         viewModel.clearOpenThread()
                         navController.popBackStack()
@@ -242,7 +263,15 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("favorites") {
-                PlaceholderScreen(title = "علاقه‌مندی‌ها", onBack = { navController.popBackStack() })
+                FavoritesScreen(
+                    favorites = favorites,
+                    onBack = { navController.popBackStack() },
+                    onItemClick = { favorite ->
+                        viewModel.loadThread(favorite.threadId)
+                        navController.navigate("thread/${favorite.threadId}/${favorite.address}/${favorite.displayName}")
+                    },
+                    onRemoveFavorite = { messageId -> viewModel.removeFavorite(messageId) }
+                )
             }
             composable("trash") {
                 PlaceholderScreen(title = "سطل زباله", onBack = { navController.popBackStack() })

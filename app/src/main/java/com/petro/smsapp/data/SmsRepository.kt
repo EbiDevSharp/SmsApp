@@ -152,13 +152,22 @@ class SmsRepository(private val context: Context) {
     /**
      * حذف فقط یک پیام مشخص (برای اکشن «حذف» روی نوتیفیکیشن و منوی داخل مکالمه)
      *
+     * اگه پیام فیوریت‌شده باشه، اصلاً حذف نمیشه (نقش قفل/لاک - طبق درخواست کاربر) و
+     * false برگردونده میشه؛ برای برداشتن این قفل، اول باید از صفحه‌ی «علاقه‌مندی‌ها»
+     * از فیوریت خارج بشه.
+     *
      * نکته برای آینده: وقتی صفحه‌ی «سطل زباله» ساخته بشه، اینجا نقطه‌ی درستیه که چک کنیم
      * AppSettings.isTrashEnabled() - اگه فعال بود، به‌جای delete واقعی، پیام رو با یه فلگ
      * (مثلاً توی یه جدول/ستون جدا چون Sms provider خودش سطل زباله نداره) به‌عنوان «توی سطل زباله»
      * علامت بزنیم و از نتیجه‌ی کوئری‌های عادی مخفیش کنیم، تا کاربر بتونه بعداً بازیابیش کنه.
      * فعلاً چون اون بخش ساخته نشده، همیشه حذف واقعی انجام میشه.
+     *
+     * @return true اگه واقعاً حذف شد، false اگه به‌خاطر قفل‌بودن (فیوریت) رد شد
      */
-    fun deleteMessage(messageId: Long) {
+    fun deleteMessage(messageId: Long): Boolean {
+        if (FavoriteStore.isFavorite(context, messageId)) {
+            return false
+        }
         if (AppSettings.isTrashEnabled(context)) {
             // TODO: وقتی UI سطل زباله ساخته شد، اینجا به‌جای delete واقعی moveToTrash(messageId) صدا زده بشه
         }
@@ -168,6 +177,7 @@ class SmsRepository(private val context: Context) {
             null
         )
         DeliveryStore.clear(context, messageId)
+        return true
     }
 
     /**

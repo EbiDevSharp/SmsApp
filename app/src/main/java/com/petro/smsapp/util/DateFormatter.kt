@@ -1,19 +1,19 @@
 package com.petro.smsapp.util
 
-import java.text.SimpleDateFormat
+import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.data.CalendarType
+import com.petro.smsapp.data.ClockFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 /**
  * فرمت هوشمند تاریخ برای لیست مکالمات و زیر هر پیام.
  *
- * فعلاً میلادی با اسم ماه فارسی‌شده‌ست. وقتی برنامه دوزبانه و تقویم شمسی اضافه بشه،
- * فقط کافیه پیاده‌سازی این آبجکت عوض بشه - همه‌جای UI از همین یه نقطه صدا زده میشه.
+ * بر اساس تنظیمات کاربر (صفحه‌ی تنظیمات -> AppSettings) خروجی می‌تونه میلادی یا شمسی
+ * باشه و ساعت هم می‌تونه ۱۲ یا ۲۴ ساعته نشون داده بشه. چون AppSettings.state همیشه
+ * (بعد از AppSettings.init توی SmsApplication.onCreate) مقدار به‌روز داره، اینجا نیازی
+ * به گرفتن Context نیست و همه‌جای UI فقط با صدا زدن همین توابع، خودکار هماهنگ میشن.
  */
 object DateFormatter {
-
-    private val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     private val gregorianMonthNamesFa = arrayOf(
         "ژانویه", "فوریه", "مارس", "آوریل", "می", "ژوئن",
@@ -27,24 +27,70 @@ object DateFormatter {
         val target = Calendar.getInstance().apply { timeInMillis = millis }
 
         return when {
-            isSameDay(now, target) -> timeFormatter.format(Date(millis))
+            isSameDay(now, target) -> formatTime(millis)
             isYesterday(now, target) -> "دیروز"
             else -> {
-                val day = target.get(Calendar.DAY_OF_MONTH)
-                val month = gregorianMonthNamesFa[target.get(Calendar.MONTH)]
-                "$day $month"
+                val (day, monthName) = dayAndMonthName(target)
+                "$day $monthName"
             }
         }
     }
 
-    /** برای صفحه جزئیات پیام - تاریخ کامل به‌همراه ساعت */
+    /** برای صفحه جزئیات پیام و صفحه علاقه‌مندی‌ها - تاریخ کامل به‌همراه ساعت */
     fun formatFull(millis: Long): String {
         if (millis <= 0L) return "-"
         val cal = Calendar.getInstance().apply { timeInMillis = millis }
-        val day = cal.get(Calendar.DAY_OF_MONTH)
-        val month = gregorianMonthNamesFa[cal.get(Calendar.MONTH)]
-        val year = cal.get(Calendar.YEAR)
-        return "$day $month $year - ${timeFormatter.format(Date(millis))}"
+        val (day, monthName, year) = dayMonthNameYear(cal)
+        return "$day $monthName $year - ${formatTime(millis)}"
+    }
+
+    /** ساعت به‌تنهایی، با توجه به تنظیم ۱۲/۲۴ ساعته */
+    fun formatTime(millis: Long): String {
+        val cal = Calendar.getInstance().apply { timeInMillis = millis }
+        val hour24 = cal.get(Calendar.HOUR_OF_DAY)
+        val minute = cal.get(Calendar.MINUTE)
+
+        return if (AppSettings.state.value.clockFormat == ClockFormat.H12) {
+            val hour12 = when {
+                hour24 == 0 -> 12
+                hour24 > 12 -> hour24 - 12
+                else -> hour24
+            }
+            val suffix = if (hour24 < 12) "ق.ظ" else "ب.ظ"
+            "%d:%02d %s".format(hour12, minute, suffix)
+        } else {
+            "%02d:%02d".format(hour24, minute)
+        }
+    }
+
+    private fun dayAndMonthName(cal: Calendar): Pair<Int, String> {
+        return if (AppSettings.state.value.calendarType == CalendarType.JALALI) {
+            val j = JalaliCalendar.toJalali(
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH) + 1,
+                cal.get(Calendar.DAY_OF_MONTH)
+            )
+            j.day to JalaliCalendar.monthNames[j.month - 1]
+        } else {
+            cal.get(Calendar.DAY_OF_MONTH) to gregorianMonthNamesFa[cal.get(Calendar.MONTH)]
+        }
+    }
+
+    private fun dayMonthNameYear(cal: Calendar): Triple<Int, String, Int> {
+        return if (AppSettings.state.value.calendarType == CalendarType.JALALI) {
+            val j = JalaliCalendar.toJalali(
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH) + 1,
+                cal.get(Calendar.DAY_OF_MONTH)
+            )
+            Triple(j.day, JalaliCalendar.monthNames[j.month - 1], j.year)
+        } else {
+            Triple(
+                cal.get(Calendar.DAY_OF_MONTH),
+                gregorianMonthNamesFa[cal.get(Calendar.MONTH)],
+                cal.get(Calendar.YEAR)
+            )
+        }
     }
 
     private fun isSameDay(a: Calendar, b: Calendar): Boolean =

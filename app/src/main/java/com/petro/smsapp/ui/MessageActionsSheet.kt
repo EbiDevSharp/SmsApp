@@ -6,9 +6,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,13 +30,16 @@ import com.petro.smsapp.util.DateFormatter
 fun MessageActionsSheet(
     message: SmsMessage,
     contactDisplayName: String,
+    isFavorite: Boolean,
     onDismiss: () -> Unit,
     onOpenNote: () -> Unit,
-    onDeleteConfirmed: () -> Unit
+    onDeleteConfirmed: () -> Unit,
+    onToggleFavorite: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
     var showDetails by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showLockedInfo by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -56,6 +62,19 @@ fun MessageActionsSheet(
         )
     }
 
+    if (showLockedInfo) {
+        AlertDialog(
+            onDismissRequest = { showLockedInfo = false },
+            title = { Text("پیام قفل است") },
+            text = { Text("این پیام به علاقه‌مندی‌ها اضافه شده و قفله، برای همین قابل حذف نیست. اول باید از صفحه‌ی «علاقه‌مندی‌ها» فیوریتش رو برداری.") },
+            confirmButton = {
+                TextButton(onClick = { showLockedInfo = false }) {
+                    Text("متوجه شدم")
+                }
+            }
+        )
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         if (!showDetails) {
             Column(modifier = Modifier.padding(bottom = 24.dp)) {
@@ -73,9 +92,19 @@ fun MessageActionsSheet(
                     }
                 )
                 MenuRow(
-                    icon = Icons.Filled.Delete,
+                    icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    label = if (isFavorite) "حذف از علاقه‌مندی‌ها" else "افزودن به علاقه‌مندی‌ها",
+                    onClick = {
+                        onToggleFavorite()
+                        onDismiss()
+                    }
+                )
+                MenuRow(
+                    icon = if (isFavorite) Icons.Filled.Lock else Icons.Filled.Delete,
                     label = "حذف پیام",
-                    onClick = { showDeleteConfirm = true }
+                    onClick = {
+                        if (isFavorite) showLockedInfo = true else showDeleteConfirm = true
+                    }
                 )
                 // آیتم‌های بعدی (کپی، پاسخ، فوروارد و ...) اینجا اضافه میشن
             }

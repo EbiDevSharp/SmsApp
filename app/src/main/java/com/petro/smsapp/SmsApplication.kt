@@ -4,10 +4,13 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.petro.smsapp.data.AppSettings
 
 class SmsApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // باید قبل از هر استفاده‌ی دیگه از AppSettings.state (مثلاً توی DateFormatter) صدا زده بشه
+        AppSettings.init(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "sms_channel",
