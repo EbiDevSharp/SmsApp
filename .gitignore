@@ -1,5 +1,25 @@
+# Gradle
 .gradle/
-.idea/
 build/
 **/build/
+
+# Android Studio
+.idea/
+*.iml
+
+# Local configuration
 local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Keystore (اگر داخل پروژه نگه می‌داری)
+*.jks
+*.keystore
+
+# Native crash logs
+*.hprof
