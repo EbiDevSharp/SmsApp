@@ -81,10 +81,12 @@ class SmsRepository(private val context: Context) {
         smsManager.sendMultipartTextMessage(address, null, parts, null, null)
 
         // ذخیره توی sent box (برای وقتی که اپ پیش‌فرض هستیم)
+        val now = System.currentTimeMillis()
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address)
             put(Telephony.Sms.BODY, body)
-            put(Telephony.Sms.DATE, System.currentTimeMillis())
+            put(Telephony.Sms.DATE, now)
+            put(Telephony.Sms.DATE_SENT, now)
             put(Telephony.Sms.READ, 1)
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
         }

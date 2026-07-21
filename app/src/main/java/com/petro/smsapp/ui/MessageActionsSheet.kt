@@ -67,8 +67,14 @@ private fun MessageDetailsContent(message: SmsMessage, contactDisplayName: Strin
         Text("جزئیات پیام", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(12.dp))
 
-        DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(message.dateSent))
-        DetailRow(Icons.Filled.Done, "زمان دریافت", DateFormatter.formatFull(message.date))
+        if (message.isOutgoing) {
+            // برای پیامی که خودمون فرستادیم، فقط یه زمان معنی داره: زمان ارسال
+            DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(message.date))
+        } else {
+            // برای پیام دریافتی، این دو تا می‌تونن واقعاً فرق کنن (مثلاً گوشی خاموش بوده)
+            DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(message.dateSent))
+            DetailRow(Icons.Filled.Done, "زمان دریافت", DateFormatter.formatFull(message.date))
+        }
         DetailRow(Icons.Filled.Info, "نوع", typeLabel(message))
         DetailRow(Icons.Filled.Person, "فرستنده", if (message.isOutgoing) "شما" else contactDisplayName)
     }

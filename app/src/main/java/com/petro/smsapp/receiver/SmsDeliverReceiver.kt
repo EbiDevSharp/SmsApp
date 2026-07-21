@@ -25,13 +25,17 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val sender = messages[0].originatingAddress ?: "ناشناس"
         val fullBody = messages.joinToString(separator = "") { it.messageBody ?: "" }
-        val timestamp = messages[0].timestampMillis
+        // زمانی که شبکه/فرستنده پیام رو فرستاده (از PDU میاد)
+        val sentTimestamp = messages[0].timestampMillis
+        // زمانی که این گوشی واقعاً پیام رو پردازش کرده - اگه گوشی خاموش بوده، این خیلی دیرتر از sentTimestamp میشه
+        val receivedTimestamp = System.currentTimeMillis()
 
         // ذخیره توی content provider سیستم (جدول Sms.Inbox)
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, sender)
             put(Telephony.Sms.BODY, fullBody)
-            put(Telephony.Sms.DATE, timestamp)
+            put(Telephony.Sms.DATE, receivedTimestamp)
+            put(Telephony.Sms.DATE_SENT, sentTimestamp)
             put(Telephony.Sms.READ, 0)
             put(Telephony.Sms.SEEN, 0)
         }

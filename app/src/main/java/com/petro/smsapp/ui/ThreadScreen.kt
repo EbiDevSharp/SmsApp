@@ -17,7 +17,6 @@ import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ThreadScreen(
     displayName: String,
@@ -39,14 +38,6 @@ fun ThreadScreen(
 
     // به‌محض باز شدن مکالمه یا اومدن/رفتن پیام جدید، خودکار برو پایین‌ترین (آخرین) پیام
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
-    }
-
-    // وقتی کیبورد باز/بسته میشه، دوباره برو آخرین پیام تا زیر کادر پیام قایم نمونه
-    val imeVisible = WindowInsets.isImeVisible
-    LaunchedEffect(imeVisible) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
@@ -109,15 +100,29 @@ fun ThreadScreen(
             }
         }
     ) { padding ->
-        LazyColumn(
-            state = listState,
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 8.dp)
         ) {
-            items(messages, key = { it.id }) { message ->
-                MessageBubble(message = message, onClick = { selectedMessage = message })
+            // هر بار فضای واقعی در دسترس عوض بشه (باز/بسته شدن کیبورد، چرخش صفحه و ...)
+            // دوباره برو آخرین پیام تا زیر کادر ارسال قایم نمونه
+            val availableHeight = maxHeight
+            LaunchedEffect(availableHeight) {
+                if (messages.isNotEmpty()) {
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+            }
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp)
+            ) {
+                items(messages, key = { it.id }) { message ->
+                    MessageBubble(message = message, onClick = { selectedMessage = message })
+                }
             }
         }
     }

@@ -98,6 +98,13 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
             _messages.value = result
+
+            // اگه هنوز داخل همین مکالمه‌ایم و پیام واردی خونده‌نشده‌ای اومده، خودکار خونده‌شده علامت بزن.
+            // این خودش یه update دیگه روی content provider هست که onChange رو دوباره صدا می‌زنه،
+            // ولی چون دفعه‌ی بعد هیچ پیام خونده‌نشده‌ای پیدا نمیشه، شرط زیر false میشه و حلقه خودش تموم میشه.
+            if (openThreadId == threadId && result.any { !it.isOutgoing && !it.isRead }) {
+                withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
+            }
         }
     }
 
