@@ -74,6 +74,11 @@
             android:name=".receiver.NotificationActionReceiver"
             android:exported="false" />
 
+        <!-- گزارش دلیوری پیامک‌های ارسالی (deliveryIntent) - فقط داخلی، نیازی به exported نیست -->
+        <receiver
+            android:name=".receiver.SmsStatusReceiver"
+            android:exported="false" />
+
         <!-- پاسخ سریع بدون باز کردن اپ (Respond via Message) - اجباری -->
         <service
             android:name=".service.HeadlessSmsSendService"

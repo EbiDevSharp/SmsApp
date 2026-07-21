@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ fun ThreadScreen(
     messages: List<SmsMessage>,
     sims: List<SimInfo>,
     onSend: (body: String, subscriptionId: Int?) -> Unit,
+    onDeleteMessage: (messageId: Long) -> Unit,
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
@@ -42,7 +45,11 @@ fun ThreadScreen(
         MessageActionsSheet(
             message = selectedMessage!!,
             contactDisplayName = displayName,
-            onDismiss = { selectedMessage = null }
+            onDismiss = { selectedMessage = null },
+            onDeleteConfirmed = {
+                onDeleteMessage(selectedMessage!!.id)
+                selectedMessage = null
+            }
         )
     }
 
@@ -152,11 +159,25 @@ private fun MessageBubble(message: SmsMessage, onClick: () -> Unit) {
                 )
             }
         }
-        Text(
-            text = DateFormatter.formatSmart(message.date),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.Gray,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 12.dp)
-        )
+        ) {
+            Text(
+                text = DateFormatter.formatSmart(message.date),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
+            // تیک دلیوری: فقط برای پیام‌های ارسالی که گزارش تحویل موفق براشون برگشته
+            if (message.isDelivered) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Filled.Done,
+                    contentDescription = "تحویل داده شد",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }

@@ -216,6 +216,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     messages = messages,
                     sims = sims,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
+                    onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
                     onBack = {
                         viewModel.clearOpenThread()
                         navController.popBackStack()

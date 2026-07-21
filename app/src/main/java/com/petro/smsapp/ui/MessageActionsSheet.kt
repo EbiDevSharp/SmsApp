@@ -3,6 +3,7 @@ package com.petro.smsapp.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
@@ -18,17 +19,40 @@ import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 
 /**
- * منوی کلیک روی پیام. فعلاً فقط «جزئیات پیام» داره؛ آیتم‌های بعدی (کپی، پاسخ، فوروارد، حذف و ...)
- * به لیست‌آیتم‌های داخل بخش منو اضافه میشن.
+ * منوی کلیک روی پیام: «جزئیات پیام» و «حذف پیام» (با تائید کاربر).
+ * آیتم‌های بعدی (کپی، پاسخ، فوروارد و ...) به لیست‌آیتم‌های داخل بخش منو اضافه میشن.
  */
 @Composable
 fun MessageActionsSheet(
     message: SmsMessage,
     contactDisplayName: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDeleteConfirmed: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
     var showDetails by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("حذف پیام") },
+            text = { Text("این پیام حذف بشه؟ این کار قابل بازگشت نیست.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDeleteConfirmed()
+                }) {
+                    Text("حذف", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         if (!showDetails) {
@@ -38,7 +62,12 @@ fun MessageActionsSheet(
                     label = "جزئیات پیام",
                     onClick = { showDetails = true }
                 )
-                // آیتم‌های بعدی (کپی، پاسخ، فوروارد، حذف و ...) اینجا اضافه میشن
+                MenuRow(
+                    icon = Icons.Filled.Delete,
+                    label = "حذف پیام",
+                    onClick = { showDeleteConfirm = true }
+                )
+                // آیتم‌های بعدی (کپی، پاسخ، فوروارد و ...) اینجا اضافه میشن
             }
         } else {
             MessageDetailsContent(message = message, contactDisplayName = contactDisplayName)
@@ -68,8 +97,13 @@ private fun MessageDetailsContent(message: SmsMessage, contactDisplayName: Strin
         Spacer(modifier = Modifier.height(12.dp))
 
         if (message.isOutgoing) {
-            // برای پیامی که خودمون فرستادیم، فقط یه زمان معنی داره: زمان ارسال
             DetailRow(Icons.Filled.Send, "زمان ارسال", DateFormatter.formatFull(message.date))
+            // زمان دلیوری (تحویل به گیرنده) فقط وقتی گزارش دلیوری موفق برگشته باشه معنی داره
+            if (message.isDelivered && message.deliveredAt > 0L) {
+                DetailRow(Icons.Filled.Done, "زمان دریافت (دلیوری)", DateFormatter.formatFull(message.deliveredAt))
+            } else {
+                DetailRow(Icons.Filled.Done, "وضعیت دلیوری", "هنوز تحویل داده نشده")
+            }
         } else {
             // برای پیام دریافتی این دو تا می‌تونن واقعاً فرق کنن (مثلاً گوشی خاموش بوده).
             // زمان ارسال از timestamp خود PDU میاد (گزارش شبکه/فرستنده) و منطقاً باید زودتر

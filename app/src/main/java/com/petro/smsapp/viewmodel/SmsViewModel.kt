@@ -128,6 +128,15 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** حذف یه پیام مشخص از داخل مکالمه (بعد از تائید کاربر توی MessageActionsSheet) */
+    fun deleteMessage(threadId: Long, messageId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.deleteMessage(messageId) }
+            refreshMessages(threadId)
+            loadConversations()
+        }
+    }
+
     fun searchContacts(query: String) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { contactsRepository.searchContacts(query) }
