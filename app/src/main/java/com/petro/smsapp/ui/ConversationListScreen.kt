@@ -5,10 +5,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.Conversation
@@ -22,17 +27,28 @@ fun ConversationListScreen(
     onComposeClick: () -> Unit
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("پیام‌ها") }) },
+        topBar = { TopAppBar(title = { Text("پیام‌ها", fontWeight = FontWeight.Bold) }) },
         floatingActionButton = {
             FloatingActionButton(onClick = onComposeClick) {
-                Text("+")
+                Icon(Icons.Filled.Edit, contentDescription = "پیام جدید")
             }
         }
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding)) {
-            items(conversations, key = { it.threadId }) { conversation ->
-                ConversationRow(conversation, onClick = { onConversationClick(conversation) })
-                Divider()
+        if (conversations.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("هنوز مکالمه‌ای نداری", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.padding(padding)) {
+                items(conversations, key = { it.threadId }) { conversation ->
+                    ConversationRow(conversation, onClick = { onConversationClick(conversation) })
+                    Divider(modifier = Modifier.padding(start = 72.dp))
+                }
             }
         }
     }
@@ -44,25 +60,66 @@ private fun ConversationRow(conversation: Conversation, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Avatar(name = conversation.displayName)
+        Spacer(modifier = Modifier.width(12.dp))
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = conversation.displayName,
-                fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal,
+                style = MaterialTheme.typography.bodyLarge
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = conversation.snippet,
                 maxLines = 1,
-                style = MaterialTheme.typography.bodySmall
+                color = if (conversation.unreadCount > 0) Color.Black else Color.Gray,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
-        Text(
-            text = formatDate(conversation.date),
-            style = MaterialTheme.typography.labelSmall
-        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatDate(conversation.date),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
+            if (conversation.unreadCount > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = conversation.unreadCount.toString(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Avatar(name: String) {
+    val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(initial, color = Color.White, style = MaterialTheme.typography.titleMedium)
     }
 }
 

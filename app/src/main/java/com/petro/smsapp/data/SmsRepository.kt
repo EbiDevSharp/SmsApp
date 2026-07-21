@@ -69,9 +69,14 @@ class SmsRepository(private val context: Context) {
 
     /**
      * ارسال پیامک - پیامک‌های بلند رو خودکار تقسیم می‌کنه
+     * subscriptionId: برای گوشی‌های دو سیم‌کارت، مشخص می‌کنه از کدوم سیم ارسال بشه (null = پیش‌فرض سیستم)
      */
-    fun sendSms(address: String, body: String) {
-        val smsManager = context.getSystemService(SmsManager::class.java)
+    fun sendSms(address: String, body: String, subscriptionId: Int? = null) {
+        val smsManager = if (subscriptionId != null && subscriptionId != -1) {
+            SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
+        } else {
+            context.getSystemService(SmsManager::class.java)
+        }
         val parts = smsManager.divideMessage(body)
         smsManager.sendMultipartTextMessage(address, null, parts, null, null)
 
@@ -84,6 +89,17 @@ class SmsRepository(private val context: Context) {
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
         }
         context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+    }
+
+    /**
+     * حذف کل مکالمه (برای اکشن «حذف» روی نوتیفیکیشن)
+     */
+    fun deleteThread(threadId: Long) {
+        context.contentResolver.delete(
+            Telephony.Sms.CONTENT_URI,
+            "${Telephony.Sms.THREAD_ID} = ?",
+            arrayOf(threadId.toString())
+        )
     }
 
     /**

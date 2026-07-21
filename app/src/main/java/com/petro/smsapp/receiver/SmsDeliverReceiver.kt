@@ -1,5 +1,6 @@
 package com.petro.smsapp.receiver
 
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
@@ -36,33 +37,57 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         }
         context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
 
-        showNotification(context, sender, fullBody)
+        val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
+        showNotification(context, sender, fullBody, threadId)
     }
 
-    private fun showNotification(context: Context, sender: String, body: String) {
+    private fun showNotification(context: Context, sender: String, body: String, threadId: Long) {
         val channelId = "sms_channel"
+        val notificationId = sender.hashCode()
+
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("thread_address", sender)
         }
-        val pendingIntent = android.app.PendingIntent.getActivity(
-            context, sender.hashCode(), openIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        val contentPendingIntent = PendingIntent.getActivity(
+            context, notificationId, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val markReadIntent = Intent(context, com.petro.smsapp.receiver.NotificationActionReceiver::class.java).apply {
+            action = com.petro.smsapp.receiver.NotificationActionReceiver.ACTION_MARK_READ
+            putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
+            putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val markReadPendingIntent = PendingIntent.getBroadcast(
+            context, notificationId * 2, markReadIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val deleteIntent = Intent(context, com.petro.smsapp.receiver.NotificationActionReceiver::class.java).apply {
+            action = com.petro.smsapp.receiver.NotificationActionReceiver.ACTION_DELETE
+            putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
+            putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val deletePendingIntent = PendingIntent.getBroadcast(
+            context, notificationId * 2 + 1, deleteIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_message) // این آیکون رو باید خودت اضافه کنی
+            .setSmallIcon(R.drawable.ic_message)
             .setContentTitle(sender)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(contentPendingIntent)
+            .addAction(0, "خوانده شد", markReadPendingIntent)
+            .addAction(0, "حذف", deletePendingIntent)
             .build()
 
         NotificationManagerCompat.from(context).apply {
-            // نیازمند پرمیشن POST_NOTIFICATIONS در اندروید 13+
             try {
-                notify(sender.hashCode(), notification)
+                notify(notificationId, notification)
             } catch (e: SecurityException) {
                 // پرمیشن نوتیفیکیشن داده نشده
             }

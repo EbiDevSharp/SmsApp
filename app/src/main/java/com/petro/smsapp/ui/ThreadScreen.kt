@@ -10,16 +10,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 
 @Composable
 fun ThreadScreen(
     displayName: String,
     messages: List<SmsMessage>,
-    onSend: (String) -> Unit,
+    sims: List<SimInfo>,
+    onSend: (body: String, subscriptionId: Int?) -> Unit,
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
+    var selectedSimId by remember { mutableStateOf<Int?>(null) }
+
+    // به محض اینکه لیست سیم‌کارت‌ها لود شد، سیم اول رو به‌صورت پیش‌فرض انتخاب کن
+    LaunchedEffect(sims) {
+        if (selectedSimId == null && sims.isNotEmpty()) {
+            selectedSimId = sims.first().subscriptionId
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -31,26 +41,38 @@ fun ThreadScreen(
             )
         },
         bottomBar = {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .imePadding()
             ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("پیام...") }
+                SimSelector(
+                    sims = sims,
+                    selectedSubscriptionId = selectedSimId,
+                    onSelect = { selectedSimId = it }
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = {
-                    if (input.isNotBlank()) {
-                        onSend(input)
-                        input = ""
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("پیام...") },
+                        maxLines = 5
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (input.isNotBlank()) {
+                            onSend(input, selectedSimId)
+                            input = ""
+                        }
+                    }) {
+                        Text("ارسال")
                     }
-                }) {
-                    Text("ارسال")
                 }
             }
         }
@@ -59,8 +81,7 @@ fun ThreadScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 8.dp),
-            reverseLayout = false
+                .padding(horizontal = 8.dp)
         ) {
             items(messages, key = { it.id }) { message ->
                 MessageBubble(message)
@@ -72,7 +93,7 @@ fun ThreadScreen(
 @Composable
 private fun MessageBubble(message: SmsMessage) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (message.isOutgoing) Color(0xFF0B93F6) else Color(0xFFE5E5EA)
+    val bubbleColor = if (message.isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFFE5E5EA)
     val textColor = if (message.isOutgoing) Color.White else Color.Black
 
     Box(

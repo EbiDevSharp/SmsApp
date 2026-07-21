@@ -1,23 +1,29 @@
 package com.petro.smsapp
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.ContactsContract
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.ConversationListScreen
 import com.petro.smsapp.ui.NewMessageScreen
+import com.petro.smsapp.ui.SmsAppTheme
 import com.petro.smsapp.ui.ThreadScreen
 import com.petro.smsapp.viewmodel.SmsViewModel
 
@@ -30,6 +36,7 @@ class MainActivity : ComponentActivity() {
     ) { result ->
         if (result.values.all { it }) {
             viewModel.loadConversations()
+            viewModel.loadSims()
         }
     }
 
@@ -39,13 +46,32 @@ class MainActivity : ComponentActivity() {
         checkPermissionsAndLoad()
     }
 
+    private val pickContactLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            result.data?.data?.let { uri -> handlePickedContact(uri) }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier) {
-                    AppNavigation(viewModel)
+            SmsAppTheme {
+                // اپ فعلاً فقط فارسیه، پس صرف‌نظر از زبان گوشی چیدمان رو راست‌به‌چپ می‌کنیم.
+                // اعداد (ساعت/تاریخ/شماره تلفن) به‌خاطر الگوریتم بایدای یونیکد خودشون چپ‌به‌راست می‌مونن.
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Surface(modifier = Modifier) {
+                        AppNavigation(
+                            viewModel = viewModel,
+                            onPickContactClick = {
+                                pickContactLauncher.launch(
+                                    Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -62,22 +88,52 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.SEND_SMS,
             Manifest.permission.READ_SMS,
             Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_CONTACTS
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.READ_PHONE_STATE
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestPermissionsLauncher.launch(permissions.toTypedArray())
     }
+
+    /** خواندن نام و شماره‌ی مخاطبی که از اپ مخاطبین سیستم انتخاب شده */
+    private fun handlePickedContact(uri: Uri) {
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use
+            val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+            val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+            val hasPhoneIdx = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+            if (idIdx < 0 || hasPhoneIdx < 0 || cursor.getInt(hasPhoneIdx) <= 0) return@use
+
+            val contactId = cursor.getLong(idIdx)
+            val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
+
+            contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                arrayOf(contactId.toString()),
+                null
+            )?.use { phoneCursor ->
+                if (phoneCursor.moveToFirst()) {
+                    val number = phoneCursor.getString(0) ?: return@use
+                    viewModel.setPickedContact(ContactInfo(contactId, name.ifBlank { number }, number))
+                }
+            }
+        }
+    }
 }
 
 @Composable
-fun AppNavigation(viewModel: SmsViewModel) {
+fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val navController = rememberNavController()
     val conversations by viewModel.conversations.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val newTarget by viewModel.newConversationTarget.collectAsState()
+    val pickedContact by viewModel.pickedContact.collectAsState()
+    val sims by viewModel.sims.collectAsState()
 
     // وقتی از صفحه پیام جدید، پیام ارسال و thread ساخته/پیدا شد، برو صفحه چت همون thread با آدرس درست
     LaunchedEffect(newTarget) {
@@ -109,8 +165,14 @@ fun AppNavigation(viewModel: SmsViewModel) {
         composable("new") {
             NewMessageScreen(
                 contacts = contacts,
+                sims = sims,
+                pickedContact = pickedContact,
+                onPickedContactConsumed = { viewModel.consumePickedContact() },
+                onPickFromContactsClick = onPickContactClick,
                 onSearchChange = { query -> viewModel.searchContacts(query) },
-                onSend = { address, displayName, body -> viewModel.sendNewMessage(address, displayName, body) },
+                onSend = { address, displayName, body, subId ->
+                    viewModel.sendNewMessage(address, displayName, body, subId)
+                },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -129,8 +191,12 @@ fun AppNavigation(viewModel: SmsViewModel) {
             ThreadScreen(
                 displayName = displayName,
                 messages = messages,
-                onSend = { body -> viewModel.sendMessage(address, body, threadId) },
-                onBack = { navController.popBackStack() }
+                sims = sims,
+                onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
+                onBack = {
+                    viewModel.clearOpenThread()
+                    navController.popBackStack()
+                }
             )
         }
     }
