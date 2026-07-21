@@ -56,6 +56,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val markReadIntent = Intent(context, com.petro.smsapp.receiver.NotificationActionReceiver::class.java).apply {
             action = com.petro.smsapp.receiver.NotificationActionReceiver.ACTION_MARK_READ
+            data = android.net.Uri.parse("smsapp://mark-read/$threadId")
             putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
             putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
         }
@@ -66,6 +67,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val deleteIntent = Intent(context, com.petro.smsapp.receiver.NotificationActionReceiver::class.java).apply {
             action = com.petro.smsapp.receiver.NotificationActionReceiver.ACTION_DELETE
+            data = android.net.Uri.parse("smsapp://delete/$threadId")
             putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
             putExtra(com.petro.smsapp.receiver.NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
         }
@@ -81,8 +83,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
-            .addAction(0, "خوانده شد", markReadPendingIntent)
-            .addAction(0, "حذف", deletePendingIntent)
+            .addAction(R.drawable.ic_check, "خوانده شد", markReadPendingIntent)
+            .addAction(R.drawable.ic_delete, "حذف", deletePendingIntent)
             .build()
 
         NotificationManagerCompat.from(context).apply {

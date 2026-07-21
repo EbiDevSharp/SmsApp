@@ -10,7 +10,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -21,11 +25,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.petro.smsapp.data.ContactInfo
+import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.ConversationListScreen
 import com.petro.smsapp.ui.NewMessageScreen
+import com.petro.smsapp.ui.PlaceholderScreen
+import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
 import com.petro.smsapp.ui.ThreadScreen
 import com.petro.smsapp.viewmodel.SmsViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -135,6 +143,9 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val pickedContact by viewModel.pickedContact.collectAsState()
     val sims by viewModel.sims.collectAsState()
 
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
     // وقتی از صفحه پیام جدید، پیام ارسال و thread ساخته/پیدا شد، برو صفحه چت همون thread با آدرس درست
     LaunchedEffect(newTarget) {
         val target = newTarget
@@ -148,56 +159,87 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         }
     }
 
-    NavHost(navController = navController, startDestination = "list") {
-        composable("list") {
-            ConversationListScreen(
-                conversations = conversations,
-                onConversationClick = { conversation ->
-                    viewModel.loadThread(conversation.threadId)
-                    navController.navigate("thread/${conversation.threadId}/${conversation.address}/${conversation.displayName}")
-                },
-                onComposeClick = {
-                    viewModel.searchContacts("")
-                    navController.navigate("new")
-                }
-            )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                AppDrawerContent(onItemClick = { route ->
+                    scope.launch { drawerState.close() }
+                    navController.navigate(route)
+                })
+            }
         }
-        composable("new") {
-            NewMessageScreen(
-                contacts = contacts,
-                sims = sims,
-                pickedContact = pickedContact,
-                onPickedContactConsumed = { viewModel.consumePickedContact() },
-                onPickFromContactsClick = onPickContactClick,
-                onSearchChange = { query -> viewModel.searchContacts(query) },
-                onSend = { address, displayName, body, subId ->
-                    viewModel.sendNewMessage(address, displayName, body, subId)
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = "thread/{threadId}/{address}/{displayName}",
-            arguments = listOf(
-                navArgument("threadId") { type = NavType.LongType },
-                navArgument("address") { type = NavType.StringType },
-                navArgument("displayName") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val threadId = backStackEntry.arguments?.getLong("threadId") ?: 0L
-            val address = backStackEntry.arguments?.getString("address") ?: ""
-            val displayName = backStackEntry.arguments?.getString("displayName") ?: address
+    ) {
+        NavHost(navController = navController, startDestination = "list") {
+            composable("list") {
+                ConversationListScreen(
+                    conversations = conversations,
+                    onConversationClick = { conversation ->
+                        viewModel.loadThread(conversation.threadId)
+                        navController.navigate("thread/${conversation.threadId}/${conversation.address}/${conversation.displayName}")
+                    },
+                    onComposeClick = {
+                        viewModel.searchContacts("")
+                        navController.navigate("new")
+                    },
+                    onMenuClick = { scope.launch { drawerState.open() } }
+                )
+            }
+            composable("new") {
+                NewMessageScreen(
+                    contacts = contacts,
+                    sims = sims,
+                    pickedContact = pickedContact,
+                    onPickedContactConsumed = { viewModel.consumePickedContact() },
+                    onPickFromContactsClick = onPickContactClick,
+                    onSearchChange = { query -> viewModel.searchContacts(query) },
+                    onSend = { address, displayName, body, subId ->
+                        viewModel.sendNewMessage(address, displayName, body, subId)
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "thread/{threadId}/{address}/{displayName}",
+                arguments = listOf(
+                    navArgument("threadId") { type = NavType.LongType },
+                    navArgument("address") { type = NavType.StringType },
+                    navArgument("displayName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val threadId = backStackEntry.arguments?.getLong("threadId") ?: 0L
+                val address = backStackEntry.arguments?.getString("address") ?: ""
+                val displayName = backStackEntry.arguments?.getString("displayName") ?: address
 
-            ThreadScreen(
-                displayName = displayName,
-                messages = messages,
-                sims = sims,
-                onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
-                onBack = {
-                    viewModel.clearOpenThread()
-                    navController.popBackStack()
-                }
-            )
+                ThreadScreen(
+                    displayName = displayName,
+                    messages = messages,
+                    sims = sims,
+                    onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
+                    onBack = {
+                        viewModel.clearOpenThread()
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable("settings") {
+                SettingsScreen(onBack = { navController.popBackStack() })
+            }
+            composable("favorites") {
+                PlaceholderScreen(title = "علاقه‌مندی‌ها", onBack = { navController.popBackStack() })
+            }
+            composable("trash") {
+                PlaceholderScreen(title = "سطل زباله", onBack = { navController.popBackStack() })
+            }
+            composable("scheduled") {
+                PlaceholderScreen(title = "زمان‌بندی‌شده", onBack = { navController.popBackStack() })
+            }
+            composable("blocked") {
+                PlaceholderScreen(title = "مسدودشده‌ها", onBack = { navController.popBackStack() })
+            }
+            composable("private") {
+                PlaceholderScreen(title = "خصوصی", onBack = { navController.popBackStack() })
+            }
         }
     }
 }

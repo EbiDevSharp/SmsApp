@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,17 +18,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.Conversation
-import java.text.SimpleDateFormat
-import java.util.*
+import com.petro.smsapp.util.DateFormatter
 
 @Composable
 fun ConversationListScreen(
     conversations: List<Conversation>,
     onConversationClick: (Conversation) -> Unit,
-    onComposeClick: () -> Unit
+    onComposeClick: () -> Unit,
+    onMenuClick: () -> Unit
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("پیام‌ها", fontWeight = FontWeight.Bold) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("پیام‌ها", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onMenuClick) {
+                        Icon(Icons.Filled.Menu, contentDescription = "منو")
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onComposeClick) {
                 Icon(Icons.Filled.Edit, contentDescription = "پیام جدید")
@@ -85,7 +95,7 @@ private fun ConversationRow(conversation: Conversation, onClick: () -> Unit) {
 
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = formatDate(conversation.date),
+                text = DateFormatter.formatSmart(conversation.date),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
@@ -123,8 +133,3 @@ private fun Avatar(name: String) {
     }
 }
 
-private fun formatDate(millis: Long): String {
-    if (millis == 0L) return ""
-    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return sdf.format(Date(millis))
-}

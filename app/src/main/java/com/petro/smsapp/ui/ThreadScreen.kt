@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
+import com.petro.smsapp.util.DateFormatter
 
 @Composable
 fun ThreadScreen(
@@ -57,14 +58,7 @@ fun ThreadScreen(
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("پیام...") },
-                        maxLines = 5
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    // دکمه ارسال اول میاد تا توی چیدمان راست‌به‌چپ سمت راست کادر بشینه
                     Button(onClick = {
                         if (input.isNotBlank()) {
                             onSend(input, selectedSimId)
@@ -73,6 +67,16 @@ fun ThreadScreen(
                     }) {
                         Text("ارسال")
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("پیام...") },
+                        maxLines = 5,
+                        // متن انگلیسی/اعداد از چپ نوشته بشن، حتی داخل کانتینر راست‌به‌چپ
+                        textStyle = LocalTextStyle.current.copy(textDirection = androidx.compose.ui.text.style.TextDirection.ContentOrLtr)
+                    )
                 }
             }
         }
@@ -96,22 +100,30 @@ private fun MessageBubble(message: SmsMessage) {
     val bubbleColor = if (message.isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFFE5E5EA)
     val textColor = if (message.isOutgoing) Color.White else Color.Black
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        contentAlignment = alignment
+        horizontalAlignment = if (message.isOutgoing) Alignment.End else Alignment.Start
     ) {
-        Surface(
-            color = bubbleColor,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.padding(4.dp)
-        ) {
-            Text(
-                text = message.body,
-                color = textColor,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+        Box(contentAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                color = bubbleColor,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.padding(4.dp)
+            ) {
+                Text(
+                    text = message.body,
+                    color = textColor,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
         }
+        Text(
+            text = DateFormatter.formatSmart(message.date),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Gray,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
     }
 }

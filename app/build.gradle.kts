@@ -12,7 +12,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 2
-        versionName = "1.3.0"
+        versionName = "1.6.0"
     }
 
     buildFeatures {
@@ -41,4 +41,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.core:core-ktx:1.13.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.material:material-icons-extended")
 }
