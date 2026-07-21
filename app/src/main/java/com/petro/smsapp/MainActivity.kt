@@ -28,6 +28,7 @@ import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.ConversationListScreen
 import com.petro.smsapp.ui.NewMessageScreen
+import com.petro.smsapp.ui.NoteScreen
 import com.petro.smsapp.ui.PlaceholderScreen
 import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
@@ -142,6 +143,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val newTarget by viewModel.newConversationTarget.collectAsState()
     val pickedContact by viewModel.pickedContact.collectAsState()
     val sims by viewModel.sims.collectAsState()
+    val noteText by viewModel.noteText.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -217,6 +219,10 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     sims = sims,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
+                    onOpenNote = { text ->
+                        viewModel.openNote(text)
+                        navController.navigate("note")
+                    },
                     onBack = {
                         viewModel.clearOpenThread()
                         navController.popBackStack()
@@ -225,6 +231,15 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
             }
             composable("settings") {
                 SettingsScreen(onBack = { navController.popBackStack() })
+            }
+            composable("note") {
+                NoteScreen(
+                    text = noteText ?: "",
+                    onBack = {
+                        viewModel.consumeNote()
+                        navController.popBackStack()
+                    }
+                )
             }
             composable("favorites") {
                 PlaceholderScreen(title = "علاقه‌مندی‌ها", onBack = { navController.popBackStack() })

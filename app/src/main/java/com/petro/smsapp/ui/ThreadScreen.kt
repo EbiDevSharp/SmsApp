@@ -1,6 +1,7 @@
 package com.petro.smsapp.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,7 @@ fun ThreadScreen(
     sims: List<SimInfo>,
     onSend: (body: String, subscriptionId: Int?) -> Unit,
     onDeleteMessage: (messageId: Long) -> Unit,
+    onOpenNote: (text: String) -> Unit,
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
@@ -41,13 +43,19 @@ fun ThreadScreen(
 
     // اسکرول خودکار به آخرین پیام داخل BoxWithConstraints هندل میشه (هم برای پیام جدید، هم برای تغییر فضا با کیبورد)
 
-    if (selectedMessage != null) {
+    val currentSelectedMessage = selectedMessage
+    if (currentSelectedMessage != null) {
         MessageActionsSheet(
-            message = selectedMessage!!,
+            message = currentSelectedMessage,
             contactDisplayName = displayName,
             onDismiss = { selectedMessage = null },
+            // با یه val جدا (currentSelectedMessage) کار می‌کنیم نه با selectedMessage!!،
+            // چون توی MessageActionsSheet آیتم «باز کردن در نوت» اول onDismiss (که selectedMessage
+            // رو null می‌کنه) و بعد onOpenNote رو صدا می‌زنه؛ اگه اینجا هم selectedMessage!! می‌خوندیم
+            // تا اون لحظه دیگه null شده بود و NPE می‌داد.
+            onOpenNote = { onOpenNote(currentSelectedMessage.body) },
             onDeleteConfirmed = {
-                onDeleteMessage(selectedMessage!!.id)
+                onDeleteMessage(currentSelectedMessage.id)
                 selectedMessage = null
             }
         )
@@ -125,15 +133,20 @@ fun ThreadScreen(
                     .padding(horizontal = 8.dp)
             ) {
                 items(messages.reversed(), key = { it.id }) { message ->
-                    MessageBubble(message = message, onClick = { selectedMessage = message })
+                    MessageBubble(
+                        message = message,
+                        onClick = { selectedMessage = message },
+                        onDoubleClick = { onOpenNote(message.body) }
+                    )
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: SmsMessage, onClick: () -> Unit) {
+private fun MessageBubble(message: SmsMessage, onClick: () -> Unit, onDoubleClick: () -> Unit) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (message.isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFFE5E5EA)
     val textColor = if (message.isOutgoing) Color.White else Color.Black
@@ -150,7 +163,8 @@ private fun MessageBubble(message: SmsMessage, onClick: () -> Unit) {
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .padding(4.dp)
-                    .clickable(onClick = onClick)
+                    // تک‌کلیک: منوی اکشن‌های پیام - دابل‌کلیک: مستقیم باز شدن متن پیام توی صفحه‌ی نوت
+                    .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick)
             ) {
                 Text(
                     text = message.body,

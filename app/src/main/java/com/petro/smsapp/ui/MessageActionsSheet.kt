@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -19,7 +20,7 @@ import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 
 /**
- * منوی کلیک روی پیام: «جزئیات پیام» و «حذف پیام» (با تائید کاربر).
+ * منوی کلیک روی پیام: «جزئیات پیام»، «باز کردن در نوت» و «حذف پیام» (با تائید کاربر).
  * آیتم‌های بعدی (کپی، پاسخ، فوروارد و ...) به لیست‌آیتم‌های داخل بخش منو اضافه میشن.
  */
 @Composable
@@ -27,6 +28,7 @@ fun MessageActionsSheet(
     message: SmsMessage,
     contactDisplayName: String,
     onDismiss: () -> Unit,
+    onOpenNote: () -> Unit,
     onDeleteConfirmed: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -61,6 +63,14 @@ fun MessageActionsSheet(
                     icon = Icons.Filled.Info,
                     label = "جزئیات پیام",
                     onClick = { showDetails = true }
+                )
+                MenuRow(
+                    icon = Icons.Filled.Notes,
+                    label = "باز کردن در نوت",
+                    onClick = {
+                        onDismiss()
+                        onOpenNote()
+                    }
                 )
                 MenuRow(
                     icon = Icons.Filled.Delete,

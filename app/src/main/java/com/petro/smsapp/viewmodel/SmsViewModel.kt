@@ -47,6 +47,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _newConversationTarget = MutableStateFlow<NewConversationTarget?>(null)
     val newConversationTarget: StateFlow<NewConversationTarget?> = _newConversationTarget.asStateFlow()
 
+    // متن پیامی که کاربر برای باز کردن توی صفحه‌ی «نوت پیام» انتخاب کرده (دابل‌کلیک یا از منو)
+    private val _noteText = MutableStateFlow<String?>(null)
+    val noteText: StateFlow<String?> = _noteText.asStateFlow()
+
     // threadId مکالمه‌ای که الان روی صفحه چت بازه، تا وقتی پیامک جدید میاد بدونیم کدوم thread رو دوباره لود کنیم
     private var openThreadId: Long? = null
 
@@ -174,6 +178,16 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeNewConversationTarget() {
         _newConversationTarget.value = null
+    }
+
+    /** باز کردن متن یه پیام توی صفحه‌ی نوت (از دابل‌کلیک روی حباب پیام یا از منوی کلیک روی پیام) */
+    fun openNote(text: String) {
+        _noteText.value = text
+    }
+
+    /** وقتی از صفحه‌ی نوت با دکمه‌ی برگشت خارج میشیم */
+    fun consumeNote() {
+        _noteText.value = null
     }
 }
 
