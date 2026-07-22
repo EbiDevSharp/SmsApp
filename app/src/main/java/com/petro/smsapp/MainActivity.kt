@@ -254,7 +254,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         viewModel.prepareNewMessage()
                         navController.navigate("new")
                     },
-                    onMenuClick = { scope.launch { drawerState.open() } }
+                    onMenuClick = { scope.launch { drawerState.open() } },
+                    onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) }
                 )
             }
             composable("new") {

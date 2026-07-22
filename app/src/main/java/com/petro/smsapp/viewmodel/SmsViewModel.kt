@@ -214,6 +214,31 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         _operationMessage.value = null
     }
 
+    /**
+     * حذف دسته‌جمعی چند مکالمه با هم - از حالت «انتخاب چندتایی» توی صفحه‌ی اصلی لیست پیام‌ها
+     * (بعد از تائید کاربر توی دیالوگ حذف). نتیجه رو به‌صورت یه پیام کوتاه به کاربر نشون میده:
+     * اینکه به سطل زباله رفتن یا واقعاً حذف شدن، و اگه چندتا پیام فیوریت (قفل) بودن که دست
+     * نخوردن، اونم اضافه میشه.
+     */
+    fun deleteConversations(threadIds: Set<Long>) {
+        if (threadIds.isEmpty()) return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.deleteThreads(threadIds) }
+            val base = if (result.movedToTrash) {
+                "مکالمه‌های انتخاب‌شده به سطل زباله منتقل شدن"
+            } else {
+                "مکالمه‌های انتخاب‌شده حذف شدن"
+            }
+            _operationMessage.value = if (result.blockedFavoriteCount > 0) {
+                "$base (${result.blockedFavoriteCount} پیام فیوریت‌شده به‌خاطر قفل بودن دست‌نخورده موند)"
+            } else {
+                base
+            }
+            loadConversations()
+            openThreadId?.let { refreshMessages(it) }
+        }
+    }
+
     /** لود کردن لیست فیوریت‌ها - برای صفحه‌ی «علاقه‌مندی‌ها» */
     fun loadFavorites() {
         viewModelScope.launch {

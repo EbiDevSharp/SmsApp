@@ -236,6 +236,54 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
+     * حذف دسته‌جمعی چند مکالمه با هم - برای حالت «انتخاب چندتایی» توی صفحه‌ی اصلی لیست پیام‌ها.
+     *
+     * دقیقاً همون قانونِ حذف تکی (deleteMessage) رو برای تک‌تکِ پیام‌های هر مکالمه‌ی انتخاب‌شده
+     * رعایت می‌کنه: پیام‌های فیوریت‌شده قفلن و دست‌نخورده می‌مونن (شمارش میشن تا بعداً به کاربر
+     * اطلاع داده بشه)، و بسته به تنظیم «سطل زباله»، بقیه‌ی پیام‌ها یا مخفی/قابل‌بازیابی میشن یا
+     * فیزیکی حذف. اگه یه مکالمه فقط پیام فیوریت داشته باشه، عملاً هیچی ازش حذف نمیشه و توی
+     * لیست باقی می‌مونه - دقیقاً همون رفتار محافظتی‌ای که برای حذف تکی هم داریم.
+     */
+    fun deleteThreads(threadIds: Set<Long>): BulkDeleteResult {
+        if (!requireDefaultSmsApp("حذف دسته‌جمعی مکالمه‌ها")) {
+            return BulkDeleteResult(movedToTrash = false, blockedFavoriteCount = 0)
+        }
+        val trashEnabled = AppSettings.isTrashEnabled(context)
+        var blockedCount = 0
+        threadIds.forEach { threadId ->
+            getMessageIdsForThread(threadId).forEach { messageId ->
+                if (FavoriteStore.isFavorite(context, messageId)) {
+                    blockedCount++
+                    return@forEach
+                }
+                if (trashEnabled) {
+                    TrashStore.moveToTrash(context, messageId)
+                } else {
+                    context.contentResolver.delete(
+                        ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                        null,
+                        null
+                    )
+                    DeliveryStore.clear(context, messageId)
+                }
+            }
+        }
+        return BulkDeleteResult(movedToTrash = trashEnabled, blockedFavoriteCount = blockedCount)
+    }
+
+    private fun getMessageIdsForThread(threadId: Long): List<Long> {
+        val ids = mutableListOf<Long>()
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI, arrayOf(Telephony.Sms._ID),
+            "${Telephony.Sms.THREAD_ID} = ?", arrayOf(threadId.toString()), null
+        )?.use { cursor ->
+            val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
+            while (cursor.moveToNext()) ids.add(cursor.getLong(idIdx))
+        }
+        return ids
+    }
+
+    /**
      * حذف فقط یک پیام مشخص (برای اکشن «حذف» روی نوتیفیکیشن و منوی داخل مکالمه)
      *
      * اگه پیام فیوریت‌شده باشه، اصلاً حذف نمیشه (نقش قفل/لاک - طبق درخواست کاربر) و

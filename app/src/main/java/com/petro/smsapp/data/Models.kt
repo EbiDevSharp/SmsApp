@@ -38,3 +38,13 @@ data class TrashedMessage(
     val contactDisplayName: String,
     val trashedAt: Long
 )
+
+/**
+ * نتیجه‌ی حذف دسته‌جمعیِ چند مکالمه از صفحه‌ی اصلی (بعد از انتخاب چندتایی).
+ * movedToTrash یعنی بر اساس تنظیمات، پیام‌ها به‌جای حذف فیزیکی به سطل زباله منتقل شدن.
+ * blockedFavoriteCount یعنی چند تا از پیام‌ها به‌خاطر فیوریت‌بودن (قفل) دست‌نخورده موندن.
+ */
+data class BulkDeleteResult(
+    val movedToTrash: Boolean,
+    val blockedFavoriteCount: Int
+)
