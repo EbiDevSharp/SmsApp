@@ -28,6 +28,9 @@ import androidx.navigation.navArgument
 import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
+import com.petro.smsapp.ui.BlockScreen
+import com.petro.smsapp.ui.BlockedMessagesScreen
+import com.petro.smsapp.ui.BlockedNumbersScreen
 import com.petro.smsapp.ui.ConversationListScreen
 import com.petro.smsapp.ui.FavoritesScreen
 import com.petro.smsapp.ui.NewMessageScreen
@@ -199,15 +202,19 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val favorites by viewModel.favorites.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val trash by viewModel.trash.collectAsState()
+    val blockedNumbers by viewModel.blockedNumbers.collectAsState()
+    val blockedMessages by viewModel.blockedMessages.collectAsState()
     val operationMessage by viewModel.operationMessage.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // لود اولیه‌ی لیست فیوریت‌ها - همون اول که برنامه بالا میاد
+    // لود اولیه‌ی لیست فیوریت‌ها و بلاک‌ها - همون اول که برنامه بالا میاد (برای بج‌های شمارنده)
     LaunchedEffect(Unit) {
         viewModel.loadFavorites()
+        viewModel.loadBlockedNumbers()
+        viewModel.loadBlockedMessages()
     }
 
     // پیام‌های یک‌بارمصرف (مثل «این پیام قفله») به‌صورت Toast نشون داده میشن
@@ -255,7 +262,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         navController.navigate("new")
                     },
                     onMenuClick = { scope.launch { drawerState.open() } },
-                    onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) }
+                    onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
+                    onBlockConversations = { selectedConversations -> viewModel.blockConversations(selectedConversations) }
                 )
             }
             composable("new") {
@@ -345,7 +353,26 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 PlaceholderScreen(title = "زمان‌بندی‌شده", onBack = { navController.popBackStack() })
             }
             composable("blocked") {
-                PlaceholderScreen(title = "مسدودشده‌ها", onBack = { navController.popBackStack() })
+                BlockScreen(
+                    blockedMessageCount = blockedMessages.size,
+                    blockedNumberCount = blockedNumbers.size,
+                    onBack = { navController.popBackStack() },
+                    onOpenBlockedMessages = { navController.navigate("blocked_messages") },
+                    onOpenBlockedNumbers = { navController.navigate("blocked_numbers") }
+                )
+            }
+            composable("blocked_messages") {
+                BlockedMessagesScreen(
+                    blockedMessages = blockedMessages,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("blocked_numbers") {
+                BlockedNumbersScreen(
+                    blockedNumbers = blockedNumbers,
+                    onBack = { navController.popBackStack() },
+                    onUnblock = { threadId -> viewModel.unblockNumber(threadId) }
+                )
             }
             composable("private") {
                 PlaceholderScreen(title = "خصوصی", onBack = { navController.popBackStack() })

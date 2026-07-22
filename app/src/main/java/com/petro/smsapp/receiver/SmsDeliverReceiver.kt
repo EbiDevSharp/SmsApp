@@ -11,6 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
+import com.petro.smsapp.data.BlockStore
 import com.petro.smsapp.data.ContactsCache
 
 /**
@@ -44,6 +45,13 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)?.let { insertedUri ->
             val messageId = android.content.ContentUris.parseId(insertedUri)
             val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
+
+            // شماره‌ی بلاک‌شده: پیام همچنان ذخیره میشه (تا توی صفحه‌ی «پیامک‌های بلاک‌شده»
+            // قابل دیدن باشه) ولی هیچ نوتیف و هیچ صدایی نمیده، و از لیست اصلی هم مخفیه
+            // (فیلترش توی SmsRepository.getConversations انجام میشه).
+            if (BlockStore.isThreadBlocked(context, threadId)) {
+                return
+            }
 
             // اگه کاربر همین الان (توی فورگراند) داخل همین مکالمه‌ست، لازم نیست نوتیف/صدا بدیم -
             // چون ContentObserver توی ViewModel خودش صفحه‌ی چت رو زنده آپدیت می‌کنه و کاربر

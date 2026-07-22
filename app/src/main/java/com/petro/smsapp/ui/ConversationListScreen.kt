@@ -50,7 +50,8 @@ fun ConversationListScreen(
     onConversationClick: (Conversation) -> Unit,
     onComposeClick: () -> Unit,
     onMenuClick: () -> Unit,
-    onDeleteConversations: (Set<Long>) -> Unit
+    onDeleteConversations: (Set<Long>) -> Unit,
+    onBlockConversations: (List<Conversation>) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -124,11 +125,20 @@ fun ConversationListScreen(
                                 Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
                             }
                             DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
-                                // این چهارتا فعلاً فقط اسکلت‌بندی‌شدن - قابلیت واقعیشون بعداً اضافه میشه
+                                // این سه‌تا فعلاً فقط اسکلت‌بندی‌شدن - قابلیت واقعیشون بعداً اضافه میشه
                                 ComingSoonMenuItem(Icons.Filled.PushPin, "پین کردن") { showMoreMenu = false }
                                 ComingSoonMenuItem(Icons.Filled.ContentCopy, "کپی کردن") { showMoreMenu = false }
                                 ComingSoonMenuItem(Icons.Filled.Share, "اشتراک‌گذاری") { showMoreMenu = false }
-                                ComingSoonMenuItem(Icons.Filled.Block, "مسدود کردن") { showMoreMenu = false }
+                                DropdownMenuItem(
+                                    text = { Text("بلاک کردن") },
+                                    leadingIcon = { Icon(Icons.Filled.Block, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        val selectedConversations = conversations.filter { it.threadId in selectedIds }
+                                        onBlockConversations(selectedConversations)
+                                        selectedIds = emptySet()
+                                    }
+                                )
                             }
                         }
                     }

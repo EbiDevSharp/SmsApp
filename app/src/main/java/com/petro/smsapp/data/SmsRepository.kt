@@ -41,18 +41,21 @@ class SmsRepository(private val context: Context) {
      * جدیدترین پیامِ غیر-سطل‌زباله‌ای می‌سازیم - هم دقیق‌تره هم یه کوئری کمتر.
      */
     fun getConversations(): List<Conversation> {
+        val blockedThreadIds = BlockStore.getBlockedThreadIds(context)
         val threadMeta = getAllThreadsMeta()
-        val conversations = threadMeta.map { (threadId, meta) ->
-            val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
-            Conversation(
-                threadId = threadId,
-                address = meta.address,
-                displayName = displayName,
-                snippet = meta.snippet,
-                date = meta.date,
-                unreadCount = meta.unreadCount
-            )
-        }
+        val conversations = threadMeta
+            .filterKeys { it !in blockedThreadIds }
+            .map { (threadId, meta) ->
+                val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
+                Conversation(
+                    threadId = threadId,
+                    address = meta.address,
+                    displayName = displayName,
+                    snippet = meta.snippet,
+                    date = meta.date,
+                    unreadCount = meta.unreadCount
+                )
+            }
         return conversations.sortedByDescending { it.date }
     }
 
@@ -127,6 +130,19 @@ class SmsRepository(private val context: Context) {
             }
         }
         return messages
+    }
+
+    /**
+     * همه‌ی پیام‌های همه‌ی thread های بلاک‌شده رو با هم برمی‌گردونه (جدیدترین بالا)، به‌همراه
+     * اسمی که موقع بلاک‌کردن ذخیره شده بود - برای صفحه‌ی «پیامک‌های بلاک‌شده».
+     */
+    fun getMessagesForBlockedThreads(): List<BlockedMessageEntry> {
+        val blockedNumbers = BlockStore.getAllBlockedNumbers(context)
+        val nameByThread = blockedNumbers.associate { it.threadId to it.displayName }
+        return blockedNumbers
+            .flatMap { blocked -> getMessagesForThread(blocked.threadId) }
+            .map { message -> BlockedMessageEntry(message, nameByThread[message.threadId] ?: message.address) }
+            .sortedByDescending { it.message.date }
     }
 
     /**

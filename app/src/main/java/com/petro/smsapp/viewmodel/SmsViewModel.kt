@@ -8,6 +8,9 @@ import android.provider.Telephony
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.ActiveThreadTracker
+import com.petro.smsapp.data.BlockStore
+import com.petro.smsapp.data.BlockedMessageEntry
+import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
@@ -68,6 +71,14 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // لیست پیام‌های توی سطل زباله - برای صفحه‌ی «سطل زباله»
     private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
     val trash: StateFlow<List<TrashedMessage>> = _trash.asStateFlow()
+
+    // لیست شماره‌های بلاک‌شده - برای صفحه‌ی «شماره‌های بلاک‌شده»
+    private val _blockedNumbers = MutableStateFlow<List<BlockedNumber>>(emptyList())
+    val blockedNumbers: StateFlow<List<BlockedNumber>> = _blockedNumbers.asStateFlow()
+
+    // همه‌ی پیام‌های thread های بلاک‌شده با هم - برای صفحه‌ی «پیامک‌های بلاک‌شده»
+    private val _blockedMessages = MutableStateFlow<List<BlockedMessageEntry>>(emptyList())
+    val blockedMessages: StateFlow<List<BlockedMessageEntry>> = _blockedMessages.asStateFlow()
 
     // پیام یک‌بارمصرف برای اطلاع‌رسانی به کاربر (مثلاً «این پیام قفله و قابل حذف نیست»)
     private val _operationMessage = MutableStateFlow<String?>(null)
@@ -325,6 +336,61 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.permanentlyDelete(messageId) }
             loadTrash()
+        }
+    }
+
+    /**
+     * بلاک‌کردن دسته‌جمعی چند مکالمه - از حالت «انتخاب چندتایی» توی لیست اصلی پیام‌ها،
+     * گزینه‌ی «بلاک کردن». هر مکالمه‌ی انتخاب‌شده به BlockStore اضافه میشه (که خودش باعث
+     * میشه دفعه‌ی بعد getConversations دیگه نشونش نده)، و لیست اصلی + شمارنده‌های بلاک
+     * دوباره لود میشن.
+     */
+    fun blockConversations(conversations: List<Conversation>) {
+        if (conversations.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                conversations.forEach { conversation ->
+                    BlockStore.blockThread(
+                        getApplication(),
+                        conversation.threadId,
+                        conversation.address,
+                        conversation.displayName
+                    )
+                }
+            }
+            _operationMessage.value = if (conversations.size == 1) {
+                "${conversations.first().displayName} بلاک شد"
+            } else {
+                "${conversations.size} مخاطب بلاک شدن"
+            }
+            loadConversations()
+            loadBlockedNumbers()
+        }
+    }
+
+    /** آنبلاک‌کردن یه شماره از داخل صفحه‌ی «شماره‌های بلاک‌شده» - دوباره تو لیست اصلی برمی‌گرده */
+    fun unblockNumber(threadId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { BlockStore.unblockThread(getApplication(), threadId) }
+            loadBlockedNumbers()
+            loadBlockedMessages()
+            loadConversations()
+        }
+    }
+
+    /** لود کردن لیست شماره‌های بلاک‌شده - برای صفحه‌ی «شماره‌های بلاک‌شده» و بج شمارنده */
+    fun loadBlockedNumbers() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { BlockStore.getAllBlockedNumbers(getApplication()) }
+            _blockedNumbers.value = result
+        }
+    }
+
+    /** لود کردن همه‌ی پیام‌های بلاک‌شده - برای صفحه‌ی «پیامک‌های بلاک‌شده» و بج شمارنده */
+    fun loadBlockedMessages() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.getMessagesForBlockedThreads() }
+            _blockedMessages.value = result
         }
     }
 
