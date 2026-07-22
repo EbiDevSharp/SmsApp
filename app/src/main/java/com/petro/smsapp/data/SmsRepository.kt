@@ -284,6 +284,36 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
+     * حذف دسته‌جمعی چند پیامِ تکی از داخل یه مکالمه (برای حالت «انتخاب چندتایی» داخل چت،
+     * برخلاف deleteThreads که کل مکالمه رو حذف می‌کنه). همون قانون‌های deleteMessage
+     * (قفل فیوریت + احترام به تنظیم سطل زباله) برای تک‌تک پیام‌ها رعایت میشه.
+     */
+    fun deleteMessages(messageIds: Set<Long>): BulkDeleteResult {
+        if (!requireDefaultSmsApp("حذف دسته‌جمعی پیام‌ها")) {
+            return BulkDeleteResult(movedToTrash = false, blockedFavoriteCount = 0)
+        }
+        val trashEnabled = AppSettings.isTrashEnabled(context)
+        var blockedCount = 0
+        messageIds.forEach { messageId ->
+            if (FavoriteStore.isFavorite(context, messageId)) {
+                blockedCount++
+                return@forEach
+            }
+            if (trashEnabled) {
+                TrashStore.moveToTrash(context, messageId)
+            } else {
+                context.contentResolver.delete(
+                    ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                    null,
+                    null
+                )
+                DeliveryStore.clear(context, messageId)
+            }
+        }
+        return BulkDeleteResult(movedToTrash = trashEnabled, blockedFavoriteCount = blockedCount)
+    }
+
+    /**
      * حذف فقط یک پیام مشخص (برای اکشن «حذف» روی نوتیفیکیشن و منوی داخل مکالمه)
      *
      * اگه پیام فیوریت‌شده باشه، اصلاً حذف نمیشه (نقش قفل/لاک - طبق درخواست کاربر) و

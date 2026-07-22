@@ -297,6 +297,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     favoriteIds = favoriteIds,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
+                    onDeleteMessages = { messageIds -> viewModel.deleteMessages(threadId, messageIds) },
                     onOpenNote = { text ->
                         viewModel.openNote(text)
                         navController.navigate("note")
