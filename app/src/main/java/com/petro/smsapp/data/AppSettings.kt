@@ -27,11 +27,15 @@ object AppSettings {
     private const val KEY_TRASH_ENABLED = "trash_enabled"
     private const val KEY_CALENDAR_TYPE = "calendar_type"
     private const val KEY_CLOCK_FORMAT = "clock_format"
+    private const val KEY_DELIVERY_NOTIFICATIONS = "delivery_notifications_enabled"
 
     data class State(
         val trashEnabled: Boolean = false,
         val calendarType: CalendarType = CalendarType.GREGORIAN,
-        val clockFormat: ClockFormat = ClockFormat.H24
+        val clockFormat: ClockFormat = ClockFormat.H24,
+        // پیش‌فرض خاموش: اگه کاربر ۲۰ تا پیام بفرسته و همه دلیور بشن، ۲۰ تا نوتیف جدا
+        // اسپم حساب میشه. تیک دلیوری زیر خود پیام (توی چت) کافیه؛ نوتیف اختیاریه.
+        val deliveryNotificationsEnabled: Boolean = false
     )
 
     private val _state = MutableStateFlow(State())
@@ -51,7 +55,8 @@ object AppSettings {
                 ClockFormat.H12
             } else {
                 ClockFormat.H24
-            }
+            },
+            deliveryNotificationsEnabled = p.getBoolean(KEY_DELIVERY_NOTIFICATIONS, false)
         )
     }
 
@@ -74,6 +79,13 @@ object AppSettings {
     fun setClockFormat(context: Context, format: ClockFormat) {
         prefs(context).edit().putString(KEY_CLOCK_FORMAT, format.name).apply()
         _state.value = _state.value.copy(clockFormat = format)
+    }
+
+    fun isDeliveryNotificationsEnabled(context: Context): Boolean = _state.value.deliveryNotificationsEnabled
+
+    fun setDeliveryNotificationsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DELIVERY_NOTIFICATIONS, enabled).apply()
+        _state.value = _state.value.copy(deliveryNotificationsEnabled = enabled)
     }
 
     private fun prefs(context: Context) =

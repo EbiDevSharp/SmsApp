@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
-import android.provider.ContactsContract
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.util.Log
@@ -63,11 +62,11 @@ class SmsRepository(private val context: Context) {
 
         // یه بار همه‌ی متادیتای لازم (آخرین آدرس/تاریخ هر thread + تعداد نخونده) رو با یه کوئری می‌گیریم
         val threadMeta = getAllThreadsMeta()
-        val contactNameCache = mutableMapOf<String, String?>()
 
         for ((threadId, snippet) in snippetByThread) {
             val meta = threadMeta[threadId] ?: continue
-            val displayName = contactNameCache.getOrPut(meta.address) { getContactName(meta.address) } ?: meta.address
+            // دیگه query جدا به Contacts نمی‌زنیم - از کش مشترک (یه بار برای کل مخاطبین) می‌خونیم
+            val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
 
             conversations.add(
                 Conversation(
@@ -294,23 +293,6 @@ class SmsRepository(private val context: Context) {
             "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
             arrayOf(threadId.toString())
         )
-    }
-
-    private fun getContactName(address: String): String? {
-        if (address.isBlank()) return null
-        val uri = Uri.withAppendedPath(
-            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-            Uri.encode(address)
-        )
-        context.contentResolver.query(
-            uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
-            null, null, null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return cursor.getStringOrNull(0)
-            }
-        }
-        return null
     }
 
     private fun cursorToMessage(cursor: Cursor): SmsMessage {

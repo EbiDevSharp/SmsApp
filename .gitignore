@@ -5,3 +5,8 @@ build/
 
 local.properties
 *.iml
+/app/release/app-release.apk
+/app/release/baselineProfiles/0/app-release.dm
+/app/release/baselineProfiles/1/app-release.dm
+/key
+/app/release/output-metadata.json

@@ -54,7 +54,9 @@ class SmsStatusReceiver : BroadcastReceiver() {
         repository.updateDeliveryStatus(messageId, delivered, now)
 
         if (delivered) {
-            showDeliveredNotification(context, messageId)
+            if (com.petro.smsapp.data.AppSettings.isDeliveryNotificationsEnabled(context)) {
+                showDeliveredNotification(context, messageId)
+            }
         }
     }
 

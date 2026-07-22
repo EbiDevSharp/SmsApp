@@ -104,9 +104,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
             Divider()
 
+            // نوتیف جدا برای دلیوری هر پیام - پیش‌فرض خاموش چون برای ارسال چندتا پیام
+            // پشت‌سرهم می‌تونه اسپم بشه؛ تیک دلیوری زیر خود پیام همیشه هست
             ListItem(
-                headlineContent = { Text("اعلان‌ها") },
-                supportingContent = { Text("فعال") }
+                headlineContent = { Text("اعلان دلیوری پیام‌ها") },
+                supportingContent = { Text("وقتی پیامت به گیرنده رسید، یه نوتیف جدا هم نشون بده") },
+                trailingContent = {
+                    Switch(
+                        checked = settings.deliveryNotificationsEnabled,
+                        onCheckedChange = { enabled -> AppSettings.setDeliveryNotificationsEnabled(context, enabled) }
+                    )
+                }
             )
             Divider()
         }

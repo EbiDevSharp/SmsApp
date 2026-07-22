@@ -17,6 +17,8 @@ import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.data.SmsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,14 +70,28 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // threadId مکالمه‌ای که الان روی صفحه چت بازه، تا وقتی پیامک جدید میاد بدونیم کدوم thread رو دوباره لود کنیم
     private var openThreadId: Long? = null
 
+    private var observerDebounceJob: Job? = null
+
     /**
      * وقتی پیامکی وارد یا ارسال میشه (چه از این اپ، چه از بیرون)، سیستم به این آبزرور خبر میده
      * و بدون نیاز به بستن/بازکردن اپ، لیست مکالمات و مکالمه‌ی بازشده به‌روز میشن.
+     *
+     * یه نکته‌ی مهم: تغییرات content provider فقط «پیام جدید» نیستن؛ ارسال، دلیوری،
+     * خوانده‌شدن، حذف و تغییر STATUS هم همین observer رو صدا می‌زنن. برای یه اتفاق منطقی
+     * واحد (مثلاً ارسال یه پیام که چند میلی‌ثانیه بعد وضعیتش به COMPLETE آپدیت میشه) ممکنه
+     * onChange چندبار پشت‌سرهم صدا زده بشه. به‌جای اینکه هر بار جدا loadConversations کامل
+     * رو صدا بزنیم (که برای هر پیامک/دلیوری یه Query سنگین به کل جدول sms میزنه)، چند
+     * میلی‌ثانیه صبر می‌کنیم و اگه توی این فاصله دوباره onChange اومد، تایمر رو ریست می‌کنیم -
+     * یعنی فقط وقتی تغییرات «آروم» گرفتن، یه بار لود انجام میشه.
      */
     private val smsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
-            loadConversations()
-            openThreadId?.let { refreshMessages(it) }
+            observerDebounceJob?.cancel()
+            observerDebounceJob = viewModelScope.launch {
+                delay(150)
+                loadConversations()
+                openThreadId?.let { refreshMessages(it) }
+            }
         }
     }
 
