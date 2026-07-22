@@ -14,8 +14,21 @@ import android.provider.Telephony
  */
 object DefaultSmsAppHelper {
 
+    /**
+     * قبلاً همیشه از روش قدیمی (Telephony.Sms.getDefaultSmsPackage) استفاده می‌شد.
+     * روی اندروید 10 (API 29) به بعد، نقش «اپ پیش‌فرض پیامک» از طریق RoleManager گرفته
+     * میشه (تابع getRequestRoleIntent پایین هم دقیقاً همینو صدا می‌زنه)، ولی روش قدیمی
+     * چک کردن همیشه دقیق با RoleManager هماهنگ نیست - خصوصاً روی نسخه‌های جدیدتر اندروید
+     * می‌تونه false برگردونه با اینکه نقش واقعاً گرفته شده. برای همین الان از همون
+     * RoleManager هم برای چک کردن استفاده می‌کنیم، نه فقط برای درخواستش.
+     */
     fun isDefaultSmsApp(context: Context): Boolean {
-        return Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            roleManager?.isRoleHeld(RoleManager.ROLE_SMS) == true
+        } else {
+            Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+        }
     }
 
     /**

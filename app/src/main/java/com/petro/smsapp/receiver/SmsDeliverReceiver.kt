@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
+import com.petro.smsapp.data.ContactsCache
 
 /**
  * وقتی اپ ما "پیش‌فرض پیامک" باشه، این ریسیور به جای سیستم پیام رو دریافت می‌کنه
@@ -58,7 +59,9 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("thread_address", sender)
+            putExtra(MainActivity.EXTRA_THREAD_ID, threadId)
+            putExtra(MainActivity.EXTRA_ADDRESS, sender)
+            putExtra(MainActivity.EXTRA_DISPLAY_NAME, ContactsCache.getName(context, sender) ?: sender)
         }
         val contentPendingIntent = PendingIntent.getActivity(
             context, notificationId, openIntent,

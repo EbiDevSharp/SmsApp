@@ -92,6 +92,35 @@ class MainActivity : ComponentActivity() {
         } else {
             checkPermissionsAndLoad()
         }
+
+        // اگه اپ از طریق کلیک روی نوتیف پیامک باز شده، مستقیم برو صفحه چت همون مخاطب
+        handleNotificationIntent(intent)
+    }
+
+    /**
+     * وقتی اپ از قبل باز باشه (launchMode="singleTop") و کاربر روی یه نوتیف دیگه بزنه،
+     * onCreate دوباره صدا زده نمیشه - این تابع همون کار رو برای اون حالت انجام میده.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        intent ?: return
+
+        val threadId = intent.getLongExtra(EXTRA_THREAD_ID, -1L)
+        if (threadId == -1L) return
+
+        val address = intent.getStringExtra(EXTRA_ADDRESS) ?: return
+        val displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME) ?: address
+
+        viewModel.openThreadFromNotification(
+            threadId = threadId,
+            address = address,
+            displayName = displayName
+        )
     }
 
     private fun checkPermissionsAndLoad() {
@@ -133,6 +162,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_THREAD_ID = "extra_thread_id"
+        const val EXTRA_ADDRESS = "extra_address"
+        const val EXTRA_DISPLAY_NAME = "extra_display_name"
     }
 }
 

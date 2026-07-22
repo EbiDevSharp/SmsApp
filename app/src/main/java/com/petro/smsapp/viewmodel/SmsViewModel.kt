@@ -118,8 +118,20 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     fun loadThread(threadId: Long) {
         openThreadId = threadId
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
-            refreshMessages(threadId)
+            // اول پیام‌ها لود و روی صفحه نمایش داده میشن، بعد خوانده‌شده علامت می‌خورن.
+            // اگه برعکس بود (که قبلاً بود) و لود با خطا مواجه می‌شد، پیامی که کاربر
+            // واقعاً ندیده بود به‌اشتباه خوانده‌شده ثبت می‌شد.
+            val result = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
+            _messages.value = result
+
+            val marked = withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
+            if (!marked) {
+                // اگه اپ الان پیش‌فرض پیامک نباشه، markThreadAsRead سایلنت رد میشه و بج خوانده‌نشده
+                // هیچ‌وقت پاک نمیشه؛ این پیام دقیقاً همین حالت رو به کاربر نشون میده
+                _operationMessage.value = "اپ الان پیش‌فرض پیامک نیست، برای همین علامت «خوانده‌شده» ثبت نشد."
+            } else {
+                loadConversations()
+            }
         }
     }
 
@@ -262,6 +274,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeNewConversationTarget() {
         _newConversationTarget.value = null
+    }
+
+    /** وقتی کاربر روی نوتیف پیامک کلیک می‌کنه، مستقیم بره صفحه چت همون مخاطب (لود پیام‌ها رو
+     *  خودِ LaunchedEffect(newTarget) توی AppNavigation انجام میده) */
+    fun openThreadFromNotification(threadId: Long, address: String, displayName: String) {
+        _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
     }
 
     /** باز کردن متن یه پیام توی صفحه‌ی نوت (از دابل‌کلیک روی حباب پیام یا از منوی کلیک روی پیام) */

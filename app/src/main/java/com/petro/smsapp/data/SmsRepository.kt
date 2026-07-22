@@ -285,14 +285,15 @@ class SmsRepository(private val context: Context) {
         return Telephony.Threads.getOrCreateThreadId(context, setOf(address))
     }
 
-    fun markThreadAsRead(threadId: Long) {
-        if (!requireDefaultSmsApp("علامت‌گذاری مکالمه به‌عنوان خونده‌شده")) return
+    fun markThreadAsRead(threadId: Long): Boolean {
+        if (!requireDefaultSmsApp("علامت‌گذاری مکالمه به‌عنوان خونده‌شده")) return false
         val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
         context.contentResolver.update(
             Telephony.Sms.CONTENT_URI, values,
             "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
             arrayOf(threadId.toString())
         )
+        return true
     }
 
     private fun cursorToMessage(cursor: Cursor): SmsMessage {
