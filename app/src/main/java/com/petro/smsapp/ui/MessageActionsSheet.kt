@@ -1,8 +1,10 @@
 package com.petro.smsapp.ui
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Info
@@ -10,6 +12,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
@@ -18,13 +21,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 
 /**
- * منوی کلیک روی پیام: «جزئیات پیام»، «باز کردن در نوت» و «حذف پیام» (با تائید کاربر).
- * آیتم‌های بعدی (کپی، پاسخ، فوروارد و ...) به لیست‌آیتم‌های داخل بخش منو اضافه میشن.
+ * منوی کلیک روی پیام: «جزئیات پیام»، «باز کردن در نوت»، «کپی»، «اشتراک‌گذاری»،
+ * «افزودن/حذف از علاقه‌مندی‌ها» و «حذف پیام» (با تائید کاربر).
+ * آیتم‌های بعدی (پاسخ، فوروارد و ...) به لیست‌آیتم‌های داخل بخش منو اضافه میشن.
  */
 @Composable
 fun MessageActionsSheet(
@@ -37,6 +44,8 @@ fun MessageActionsSheet(
     onToggleFavorite: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     var showDetails by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showLockedInfo by remember { mutableStateOf(false) }
@@ -92,6 +101,26 @@ fun MessageActionsSheet(
                     }
                 )
                 MenuRow(
+                    icon = Icons.Filled.ContentCopy,
+                    label = "کپی",
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(message.body))
+                        onDismiss()
+                    }
+                )
+                MenuRow(
+                    icon = Icons.Filled.Share,
+                    label = "اشتراک‌گذاری",
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, message.body)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, null))
+                        onDismiss()
+                    }
+                )
+                MenuRow(
                     icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     label = if (isFavorite) "حذف از علاقه‌مندی‌ها" else "افزودن به علاقه‌مندی‌ها",
                     onClick = {
@@ -106,7 +135,7 @@ fun MessageActionsSheet(
                         if (isFavorite) showLockedInfo = true else showDeleteConfirm = true
                     }
                 )
-                // آیتم‌های بعدی (کپی، پاسخ، فوروارد و ...) اینجا اضافه میشن
+                // آیتم‌های بعدی (پاسخ، فوروارد و ...) اینجا اضافه میشن
             }
         } else {
             MessageDetailsContent(message = message, contactDisplayName = contactDisplayName)

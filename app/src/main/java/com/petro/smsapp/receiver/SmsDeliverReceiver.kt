@@ -8,6 +8,7 @@ import android.content.Intent
 import android.provider.Telephony
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
 import com.petro.smsapp.data.ContactsCache
@@ -43,6 +44,14 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)?.let { insertedUri ->
             val messageId = android.content.ContentUris.parseId(insertedUri)
             val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
+
+            // اگه کاربر همین الان (توی فورگراند) داخل همین مکالمه‌ست، لازم نیست نوتیف/صدا بدیم -
+            // چون ContentObserver توی ViewModel خودش صفحه‌ی چت رو زنده آپدیت می‌کنه و کاربر
+            // همون لحظه پیام رو روی صفحه می‌بینه.
+            if (ActiveThreadTracker.activeThreadId == threadId) {
+                return
+            }
+
             showNotification(context, sender, fullBody, threadId, messageId)
         }
     }

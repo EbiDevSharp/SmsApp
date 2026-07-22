@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.ConversationListScreen
@@ -95,6 +96,19 @@ class MainActivity : ComponentActivity() {
 
         // اگه اپ از طریق کلیک روی نوتیف پیامک باز شده، مستقیم برو صفحه چت همون مخاطب
         handleNotificationIntent(intent)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // اپ رفت بک‌گراند - حتی اگه هنوز روی صفحه‌ی چت باشیم، دیگه کاربر واقعاً نمی‌بینتش،
+        // پس نوتیف پیام‌های بعدی باید دوباره نشون داده بشه
+        viewModel.onAppBackgrounded()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // برگشتیم فورگراند - اگه هنوز همون thread باز بود، دوباره ساکتش کن
+        viewModel.onAppForegrounded()
     }
 
     /**
@@ -266,6 +280,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 val threadId = backStackEntry.arguments?.getLong("threadId") ?: 0L
                 val address = backStackEntry.arguments?.getString("address") ?: ""
                 val displayName = backStackEntry.arguments?.getString("displayName") ?: address
+
+                // اگه نوتیف این مخاطب هنوز بالاست (کاربر کنارش نزده)، با ورود به همین چت پاکش کن -
+                // notificationId توی SmsDeliverReceiver همون address.hashCode() هست
+                LaunchedEffect(threadId, address) {
+                    NotificationManagerCompat.from(context).cancel(address.hashCode())
+                }
 
                 ThreadScreen(
                     displayName = displayName,

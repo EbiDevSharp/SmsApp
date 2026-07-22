@@ -7,6 +7,7 @@ import android.os.Looper
 import android.provider.Telephony
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
@@ -117,6 +118,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadThread(threadId: Long) {
         openThreadId = threadId
+        ActiveThreadTracker.activeThreadId = threadId
         viewModelScope.launch {
             // اول پیام‌ها لود و روی صفحه نمایش داده میشن، بعد خوانده‌شده علامت می‌خورن.
             // اگه برعکس بود (که قبلاً بود) و لود با خطا مواجه می‌شد، پیامی که کاربر
@@ -157,6 +159,20 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     /** وقتی از صفحه چت خارج میشیم، دیگه لازم نیست observer اون thread رو رفرش کنه */
     fun clearOpenThread() {
         openThreadId = null
+        ActiveThreadTracker.activeThreadId = null
+    }
+
+    /**
+     * وقتی اپ میره بک‌گراند (Activity.onPause)، حتی اگه هنوز روی صفحه‌ی چت باشیم، دیگه
+     * کاربر واقعاً «داره می‌بینه» حساب نمیشه - پس نوتیف پیام‌های جدید باید دوباره نشون داده بشه.
+     */
+    fun onAppBackgrounded() {
+        ActiveThreadTracker.activeThreadId = null
+    }
+
+    /** وقتی اپ برمی‌گرده فورگراند (Activity.onResume) و هنوز همون thread بازه، دوباره ساکت کن */
+    fun onAppForegrounded() {
+        ActiveThreadTracker.activeThreadId = openThreadId
     }
 
     fun loadSims() {
