@@ -36,6 +36,7 @@ import com.petro.smsapp.ui.PlaceholderScreen
 import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
 import com.petro.smsapp.ui.ThreadScreen
+import com.petro.smsapp.ui.TrashScreen
 import com.petro.smsapp.viewmodel.SmsViewModel
 import kotlinx.coroutines.launch
 
@@ -197,6 +198,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val noteText by viewModel.noteText.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
+    val trash by viewModel.trash.collectAsState()
     val operationMessage by viewModel.operationMessage.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -329,7 +331,13 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("trash") {
-                PlaceholderScreen(title = "سطل زباله", onBack = { navController.popBackStack() })
+                LaunchedEffect(Unit) { viewModel.loadTrash() }
+                TrashScreen(
+                    trashedMessages = trash,
+                    onBack = { navController.popBackStack() },
+                    onRestore = { messageId -> viewModel.restoreFromTrash(messageId) },
+                    onPermanentDelete = { messageId -> viewModel.permanentlyDeleteFromTrash(messageId) }
+                )
             }
             composable("scheduled") {
                 PlaceholderScreen(title = "زمان‌بندی‌شده", onBack = { navController.popBackStack() })

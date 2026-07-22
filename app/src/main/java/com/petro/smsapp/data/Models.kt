@@ -27,3 +27,14 @@ data class SmsMessage(
 ) {
     val isDelivered: Boolean get() = isOutgoing && status == 0
 }
+
+/**
+ * یه پیامِ توی سطل زباله، به‌همراه نام/شماره‌ی طرف مکالمه و زمان دقیق حذف‌شدن -
+ * برای نمایش توی صفحه‌ی «سطل زباله». خودِ SmsMessage همچنان واقعیه (ردیف اصلی
+ * توی Sms provider پاک نشده)، فقط از لیست‌های عادی (مکالمات/پیام‌های یک مکالمه) فیلتر شده.
+ */
+data class TrashedMessage(
+    val message: SmsMessage,
+    val contactDisplayName: String,
+    val trashedAt: Long
+)

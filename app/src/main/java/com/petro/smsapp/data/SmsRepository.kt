@@ -32,86 +32,72 @@ class SmsRepository(private val context: Context) {
 
     /**
      * خواندن لیست مکالمات، گروه‌بندی‌شده بر اساس thread_id
-     * از Telephony.Sms.Conversations برای خلاصه استفاده می‌کنیم
      *
-     * قبلاً اینجا برای هر مکالمه (N مکالمه) دو تا کوئری اضافه هم زده می‌شد
-     * (getAddressForThread و getThreadMeta) که هرکدوم کل جدول sms رو برای اون thread
-     * می‌خوند - یعنی در مجموع تقریباً 1 + 2N کوئری روی جدول sms. با تعداد مکالمه‌ی
-     * زیاد (یا تاریخچه‌ی پیامک زیاد) همین باعث کند شدن/هنگ کردن بازشدن لیست می‌شد.
-     * الان به‌جاش فقط یه کوئری روی کل sms (مرتب‌شده بر اساس تاریخ، نزولی) می‌زنیم و
-     * توی یه پاس، آخرین آدرس/تاریخ و تعداد نخونده‌ی هر thread رو حساب می‌کنیم.
+     * قبلاً اینجا یه کوئری جدا به Telephony.Sms.Conversations می‌زدیم فقط برای گرفتن
+     * snippet (خلاصه‌ی آخرین پیام)، که مشکلش این بود: اون جدول از مفهوم «سطل زباله»ی
+     * ما خبر نداره - یعنی اگه آخرین پیام یه مکالمه تو سطل زباله بود، snippet همچنان
+     * متن همون پیام حذف‌شده رو نشون می‌داد. الان به‌جاش توی همون یه پاسِ بالک روی
+     * جدول sms (که برای آدرس/تاریخ/تعداد نخونده هم می‌زدیم) snippet رو هم از روی
+     * جدیدترین پیامِ غیر-سطل‌زباله‌ای می‌سازیم - هم دقیق‌تره هم یه کوئری کمتر.
      */
     fun getConversations(): List<Conversation> {
-        val conversations = mutableListOf<Conversation>()
-        val uri = Telephony.Sms.Conversations.CONTENT_URI
-        val projection = arrayOf(
-            Telephony.Sms.Conversations.THREAD_ID,
-            Telephony.Sms.Conversations.SNIPPET,
-            Telephony.Sms.Conversations.MESSAGE_COUNT
-        )
-
-        val snippetByThread = mutableMapOf<Long, String>()
-        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val threadId = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.Conversations.THREAD_ID))
-                val snippet = cursor.getStringOrNull(cursor.getColumnIndex(Telephony.Sms.Conversations.SNIPPET)) ?: ""
-                snippetByThread[threadId] = snippet
-            }
-        }
-        if (snippetByThread.isEmpty()) return conversations
-
-        // یه بار همه‌ی متادیتای لازم (آخرین آدرس/تاریخ هر thread + تعداد نخونده) رو با یه کوئری می‌گیریم
         val threadMeta = getAllThreadsMeta()
-
-        for ((threadId, snippet) in snippetByThread) {
-            val meta = threadMeta[threadId] ?: continue
-            // دیگه query جدا به Contacts نمی‌زنیم - از کش مشترک (یه بار برای کل مخاطبین) می‌خونیم
+        val conversations = threadMeta.map { (threadId, meta) ->
             val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
-
-            conversations.add(
-                Conversation(
-                    threadId = threadId,
-                    address = meta.address,
-                    displayName = displayName,
-                    snippet = snippet,
-                    date = meta.date,
-                    unreadCount = meta.unreadCount
-                )
+            Conversation(
+                threadId = threadId,
+                address = meta.address,
+                displayName = displayName,
+                snippet = meta.snippet,
+                date = meta.date,
+                unreadCount = meta.unreadCount
             )
         }
         return conversations.sortedByDescending { it.date }
     }
 
-    private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int)
+    private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val snippet: String)
 
     /**
-     * یه پاس روی کل جدول sms (مرتب‌شده بر اساس DATE نزولی) تا برای هر thread، آخرین آدرس
-     * و تاریخ (اولین ردیفی که برای اون thread می‌بینیم چون نزولیه) و تعداد پیام نخونده رو بسازیم.
+     * یه پاس روی کل جدول sms (مرتب‌شده بر اساس DATE نزولی) تا برای هر thread، آخرین آدرس/
+     * تاریخ/متن (اولین ردیفی که برای اون thread می‌بینیم چون نزولیه) و تعداد پیام نخونده رو
+     * بسازیم. پیام‌های توی سطل زباله (TrashStore) کاملاً نادیده گرفته میشن - نه تو محاسبه‌ی
+     * جدیدترین پیام دخیلن، نه تو شمارش نخونده‌ها؛ اگه یه thread فقط پیام سطل‌زباله‌ای داشته
+     * باشه، اصلاً توی نتیجه نمیاد (یعنی از لیست مکالمات ناپدید میشه، درست مثل حذف واقعی).
      */
     private fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
+        val trashedIds = TrashStore.getTrashedIds(context)
         context.contentResolver.query(
             Telephony.Sms.CONTENT_URI,
-            arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.DATE, Telephony.Sms.READ),
+            arrayOf(
+                Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
+                Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY
+            ),
             null, null,
             "${Telephony.Sms.DATE} DESC"
         )?.use { cursor ->
+            val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
             val threadIdIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
             val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
             val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
             val readIdx = cursor.getColumnIndex(Telephony.Sms.READ)
+            val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
             while (cursor.moveToNext()) {
+                if (cursor.getLong(idIdx) in trashedIds) continue
+
                 val threadId = cursor.getLong(threadIdIdx)
                 if (cursor.getInt(readIdx) == 0) {
                     unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
                 }
-                // چون نزولیه، اولین باری که یه threadId رو می‌بینیم همون جدیدترین پیامشه
+                // چون نزولیه، اولین باری که یه threadId رو می‌بینیم همون جدیدترین پیام غیر-سطل‌زباله‌ایشه
                 if (!result.containsKey(threadId)) {
                     result[threadId] = ThreadMeta(
                         address = cursor.getStringOrNull(addressIdx) ?: "",
                         date = cursor.getLong(dateIdx),
-                        unreadCount = 0 // بعداً از unreadCounts پر میشه
+                        unreadCount = 0, // بعداً از unreadCounts پر میشه
+                        snippet = cursor.getStringOrNull(bodyIdx) ?: ""
                     )
                 }
             }
@@ -120,10 +106,12 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
-     * خواندن همه پیام‌های یک مکالمه (thread) به ترتیب زمانی
+     * خواندن همه پیام‌های یک مکالمه (thread) به ترتیب زمانی - پیام‌های توی سطل زباله
+     * فیلتر میشن، همون‌طور که تو getConversations هم فیلتر میشن.
      */
     fun getMessagesForThread(threadId: Long): List<SmsMessage> {
         val messages = mutableListOf<SmsMessage>()
+        val trashedIds = TrashStore.getTrashedIds(context)
         val uri = Telephony.Sms.CONTENT_URI
         val selection = "${Telephony.Sms.THREAD_ID} = ?"
         val selectionArgs = arrayOf(threadId.toString())
@@ -133,7 +121,9 @@ class SmsRepository(private val context: Context) {
             "${Telephony.Sms.DATE} ASC"
         )?.use { cursor ->
             while (cursor.moveToNext()) {
-                messages.add(cursorToMessage(cursor))
+                val message = cursorToMessage(cursor)
+                if (message.id in trashedIds) continue
+                messages.add(message)
             }
         }
         return messages
@@ -252,13 +242,11 @@ class SmsRepository(private val context: Context) {
      * false برگردونده میشه؛ برای برداشتن این قفل، اول باید از صفحه‌ی «علاقه‌مندی‌ها»
      * از فیوریت خارج بشه.
      *
-     * نکته برای آینده: وقتی صفحه‌ی «سطل زباله» ساخته بشه، اینجا نقطه‌ی درستیه که چک کنیم
-     * AppSettings.isTrashEnabled() - اگه فعال بود، به‌جای delete واقعی، پیام رو با یه فلگ
-     * (مثلاً توی یه جدول/ستون جدا چون Sms provider خودش سطل زباله نداره) به‌عنوان «توی سطل زباله»
-     * علامت بزنیم و از نتیجه‌ی کوئری‌های عادی مخفیش کنیم، تا کاربر بتونه بعداً بازیابیش کنه.
-     * فعلاً چون اون بخش ساخته نشده، همیشه حذف واقعی انجام میشه.
+     * اگه تیک «سطل زباله» توی تنظیمات فعال باشه، به‌جای حذف فیزیکی، پیام فقط با
+     * TrashStore.moveToTrash مخفی میشه (خودِ ردیف دست‌نخورده می‌مونه) تا از صفحه‌ی
+     * «سطل زباله» قابل ری‌استور باشه. اگه غیرفعال باشه، رفتار قبلی (حذف واقعی) ادامه داره.
      *
-     * @return true اگه واقعاً حذف شد، false اگه به‌خاطر قفل‌بودن (فیوریت) رد شد
+     * @return true اگه حذف/انتقال به سطل زباله انجام شد، false اگه به‌خاطر قفل‌بودن (فیوریت) رد شد
      */
     fun deleteMessage(messageId: Long): Boolean {
         if (!requireDefaultSmsApp("حذف پیام")) return false
@@ -266,7 +254,8 @@ class SmsRepository(private val context: Context) {
             return false
         }
         if (AppSettings.isTrashEnabled(context)) {
-            // TODO: وقتی UI سطل زباله ساخته شد، اینجا به‌جای delete واقعی moveToTrash(messageId) صدا زده بشه
+            TrashStore.moveToTrash(context, messageId)
+            return true
         }
         context.contentResolver.delete(
             ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
@@ -274,6 +263,50 @@ class SmsRepository(private val context: Context) {
             null
         )
         DeliveryStore.clear(context, messageId)
+        return true
+    }
+
+    /**
+     * خواندن همه‌ی پیام‌های توی سطل زباله، به‌همراه نام/شماره‌ی طرف مکالمه، مرتب‌شده
+     * از جدیدترین‌حذف‌شده به قدیمی‌ترین. چون خودِ ردیف‌ها هنوز واقعاً توی Sms provider
+     * هستن (TrashStore فقط مخفی‌شون می‌کنه)، مستقیم با _ID IN (...) می‌خونیمشون.
+     */
+    fun getTrashedMessages(): List<TrashedMessage> {
+        val trashedIds = TrashStore.getTrashedIds(context)
+        if (trashedIds.isEmpty()) return emptyList()
+
+        val placeholders = trashedIds.joinToString(",") { "?" }
+        val selection = "${Telephony.Sms._ID} IN ($placeholders)"
+        val selectionArgs = trashedIds.map { it.toString() }.toTypedArray()
+
+        val result = mutableListOf<TrashedMessage>()
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI, null, selection, selectionArgs, null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val message = cursorToMessage(cursor)
+                val displayName = ContactsCache.getName(context, message.address) ?: message.address
+                result.add(TrashedMessage(message, displayName, TrashStore.getTrashedAt(context, message.id)))
+            }
+        }
+        return result.sortedByDescending { it.trashedAt }
+    }
+
+    /** بازگردوندن یه پیام از سطل زباله - چون ردیف اصلی همیشه واقعی بوده، فقط از ایندکس مخفی‌سازی درش میاریم */
+    fun restoreFromTrash(messageId: Long) {
+        TrashStore.restore(context, messageId)
+    }
+
+    /** حذف همیشگی از داخل خودِ صفحه‌ی سطل زباله - این دیگه واقعاً فیزیکیه و برگشت نداره */
+    fun permanentlyDelete(messageId: Long): Boolean {
+        if (!requireDefaultSmsApp("حذف همیشگی از سطل زباله")) return false
+        context.contentResolver.delete(
+            ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+            null,
+            null
+        )
+        DeliveryStore.clear(context, messageId)
+        TrashStore.restore(context, messageId) // دیگه ردیفی نیست، ایندکس سطل زباله رو هم پاک کن
         return true
     }
 

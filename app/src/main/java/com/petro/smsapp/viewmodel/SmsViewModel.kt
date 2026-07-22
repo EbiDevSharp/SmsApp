@@ -17,6 +17,7 @@ import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.data.SmsRepository
+import com.petro.smsapp.data.TrashedMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -63,6 +64,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // فقط id پیام‌های فیوریت‌شده - برای اینکه توی صفحه‌ی چت سریع بشه چک کرد پیامی فیوریته یا نه
     private val _favoriteIds = MutableStateFlow<Set<Long>>(emptySet())
     val favoriteIds: StateFlow<Set<Long>> = _favoriteIds.asStateFlow()
+
+    // لیست پیام‌های توی سطل زباله - برای صفحه‌ی «سطل زباله»
+    private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
+    val trash: StateFlow<List<TrashedMessage>> = _trash.asStateFlow()
 
     // پیام یک‌بارمصرف برای اطلاع‌رسانی به کاربر (مثلاً «این پیام قفله و قابل حذف نیست»)
     private val _operationMessage = MutableStateFlow<String?>(null)
@@ -250,6 +255,32 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { FavoriteStore.removeFavorite(getApplication<Application>(), messageId) }
             loadFavorites()
+        }
+    }
+
+    /** لود کردن لیست پیام‌های سطل زباله - برای صفحه‌ی «سطل زباله» */
+    fun loadTrash() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.getTrashedMessages() }
+            _trash.value = result
+        }
+    }
+
+    /** بازگردوندن یه پیام از سطل زباله - چون خودِ ردیف پاک نشده، دوباره تو لیست/چت نمایش داده میشه */
+    fun restoreFromTrash(messageId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.restoreFromTrash(messageId) }
+            loadTrash()
+            loadConversations()
+            openThreadId?.let { refreshMessages(it) }
+        }
+    }
+
+    /** حذف همیشگی از داخل صفحه‌ی سطل زباله (بعد از تائید کاربر) - این دیگه واقعاً فیزیکیه */
+    fun permanentlyDeleteFromTrash(messageId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.permanentlyDelete(messageId) }
+            loadTrash()
         }
     }
 
