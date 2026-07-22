@@ -10,13 +10,37 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.Telephony
 import android.telephony.SmsManager
+import android.util.Log
+import com.petro.smsapp.DefaultSmsAppHelper
 import com.petro.smsapp.receiver.SmsStatusReceiver
 
 class SmsRepository(private val context: Context) {
 
     /**
+     * فقط اپ پیش‌فرض پیامک اجازه‌ی نوشتن (ارسال/حذف/آپدیت) روی Telephony.Sms رو داره.
+     * قبلاً این چک فقط موقع باز شدن اپ (MainActivity) انجام می‌شد؛ ولی اگه بعداً کاربر
+     * اپ پیش‌فرض رو عوض کنه (یا هیچ‌وقت قبول نکنه) و دوباره سراغ ارسال/حذف بره،
+     * contentResolver با SecurityException کرش می‌کرد. این تابع قبل از هر نوشتن صدا زده
+     * میشه؛ اگه پیش‌فرض نبودیم، به‌جای کرش، فقط لاگ می‌کنیم و عملیات رو انجام نمی‌دیم.
+     */
+    private fun requireDefaultSmsApp(operation: String): Boolean {
+        val isDefault = DefaultSmsAppHelper.isDefaultSmsApp(context)
+        if (!isDefault) {
+            Log.w("SmsRepository", "عملیات «$operation» انجام نشد چون اپ در حال حاضر پیش‌فرض پیامک نیست")
+        }
+        return isDefault
+    }
+
+    /**
      * خواندن لیست مکالمات، گروه‌بندی‌شده بر اساس thread_id
      * از Telephony.Sms.Conversations برای خلاصه استفاده می‌کنیم
+     *
+     * قبلاً اینجا برای هر مکالمه (N مکالمه) دو تا کوئری اضافه هم زده می‌شد
+     * (getAddressForThread و getThreadMeta) که هرکدوم کل جدول sms رو برای اون thread
+     * می‌خوند - یعنی در مجموع تقریباً 1 + 2N کوئری روی جدول sms. با تعداد مکالمه‌ی
+     * زیاد (یا تاریخچه‌ی پیامک زیاد) همین باعث کند شدن/هنگ کردن بازشدن لیست می‌شد.
+     * الان به‌جاش فقط یه کوئری روی کل sms (مرتب‌شده بر اساس تاریخ، نزولی) می‌زنیم و
+     * توی یه پاس، آخرین آدرس/تاریخ و تعداد نخونده‌ی هر thread رو حساب می‌کنیم.
      */
     fun getConversations(): List<Conversation> {
         val conversations = mutableListOf<Conversation>()
@@ -27,28 +51,73 @@ class SmsRepository(private val context: Context) {
             Telephony.Sms.Conversations.MESSAGE_COUNT
         )
 
+        val snippetByThread = mutableMapOf<Long, String>()
         context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
             while (cursor.moveToNext()) {
                 val threadId = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.Conversations.THREAD_ID))
                 val snippet = cursor.getStringOrNull(cursor.getColumnIndex(Telephony.Sms.Conversations.SNIPPET)) ?: ""
-
-                val address = getAddressForThread(threadId)
-                val displayName = getContactName(address) ?: address
-                val (date, unread) = getThreadMeta(threadId)
-
-                conversations.add(
-                    Conversation(
-                        threadId = threadId,
-                        address = address,
-                        displayName = displayName,
-                        snippet = snippet,
-                        date = date,
-                        unreadCount = unread
-                    )
-                )
+                snippetByThread[threadId] = snippet
             }
         }
+        if (snippetByThread.isEmpty()) return conversations
+
+        // یه بار همه‌ی متادیتای لازم (آخرین آدرس/تاریخ هر thread + تعداد نخونده) رو با یه کوئری می‌گیریم
+        val threadMeta = getAllThreadsMeta()
+        val contactNameCache = mutableMapOf<String, String?>()
+
+        for ((threadId, snippet) in snippetByThread) {
+            val meta = threadMeta[threadId] ?: continue
+            val displayName = contactNameCache.getOrPut(meta.address) { getContactName(meta.address) } ?: meta.address
+
+            conversations.add(
+                Conversation(
+                    threadId = threadId,
+                    address = meta.address,
+                    displayName = displayName,
+                    snippet = snippet,
+                    date = meta.date,
+                    unreadCount = meta.unreadCount
+                )
+            )
+        }
         return conversations.sortedByDescending { it.date }
+    }
+
+    private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int)
+
+    /**
+     * یه پاس روی کل جدول sms (مرتب‌شده بر اساس DATE نزولی) تا برای هر thread، آخرین آدرس
+     * و تاریخ (اولین ردیفی که برای اون thread می‌بینیم چون نزولیه) و تعداد پیام نخونده رو بسازیم.
+     */
+    private fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
+        val result = mutableMapOf<Long, ThreadMeta>()
+        val unreadCounts = mutableMapOf<Long, Int>()
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.DATE, Telephony.Sms.READ),
+            null, null,
+            "${Telephony.Sms.DATE} DESC"
+        )?.use { cursor ->
+            val threadIdIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
+            val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
+            val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
+            val readIdx = cursor.getColumnIndex(Telephony.Sms.READ)
+            while (cursor.moveToNext()) {
+                val threadId = cursor.getLong(threadIdIdx)
+                if (cursor.getInt(readIdx) == 0) {
+                    unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
+                }
+                // چون نزولیه، اولین باری که یه threadId رو می‌بینیم همون جدیدترین پیامشه
+                if (!result.containsKey(threadId)) {
+                    result[threadId] = ThreadMeta(
+                        address = cursor.getStringOrNull(addressIdx) ?: "",
+                        date = cursor.getLong(dateIdx),
+                        unreadCount = 0 // بعداً از unreadCounts پر میشه
+                    )
+                }
+            }
+        }
+        return result.mapValues { (threadId, meta) -> meta.copy(unreadCount = unreadCounts[threadId] ?: 0) }
     }
 
     /**
@@ -76,19 +145,27 @@ class SmsRepository(private val context: Context) {
      * subscriptionId: برای گوشی‌های دو سیم‌کارت، مشخص می‌کنه از کدوم سیم ارسال بشه (null = پیش‌فرض سیستم)
      *
      * برای نمایش «تیک دلیوری» زیر پیام ارسالی، اول ردیف رو با STATUS_PENDING توی
-     * sent box ذخیره می‌کنیم تا messageId رو داشته باشیم، بعد با همون id یه
-     * deliveryIntent به SmsStatusReceiver می‌سازیم. وقتی گزارش دلیوری از شبکه
-     * برسه، همون ریسیور STATUS همین ردیف رو آپدیت می‌کنه.
+     * sent box ذخیره می‌کنیم تا messageId رو داشته باشیم، بعد با همون id یه sentIntent
+     * (برای فهمیدن اینکه خودِ ارسال موفق بوده یا نه - مثلاً آنتن نبودن/رادیو خاموش) و یه
+     * deliveryIntent (برای فهمیدن اینکه گیرنده تحویل گرفته یا نه) به SmsStatusReceiver می‌سازیم.
+     *
+     * نکته: برای پیامک چندپارتی، فقط به آخرین پارت PendingIntent می‌دیم (بقیه null)،
+     * وگرنه به‌ازای هر پارت یه گزارش جدا می‌رسید و هم وضعیت چندبار آپدیت می‌شد هم
+     * نوتیف «تحویل داده شد» چندبار نشون داده می‌شد.
      */
     fun sendSms(address: String, body: String, subscriptionId: Int? = null) {
-        val smsManager = if (subscriptionId != null && subscriptionId != -1) {
+        if (!requireDefaultSmsApp("ارسال پیامک")) return
+
+        val smsManager: SmsManager = if (subscriptionId != null && subscriptionId != -1) {
             SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
         } else {
             context.getSystemService(SmsManager::class.java)
+                ?: @Suppress("DEPRECATION") SmsManager.getDefault()
         }
         val parts = smsManager.divideMessage(body)
 
-        // ذخیره توی sent box (برای وقتی که اپ پیش‌فرض هستیم) - قبل از ارسال، تا id رو داشته باشیم
+        // ذخیره توی sent box (اپ پیش‌فرض پیامک خودش مسئول این کاره - سیستم دیگه این کار رو خودکار انجام نمیده)
+        // قبل از ارسال، تا id رو داشته باشیم
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address)
@@ -102,22 +179,40 @@ class SmsRepository(private val context: Context) {
         val insertedUri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
         val messageId = insertedUri?.let { ContentUris.parseId(it) }
 
-        val deliveryIntents = if (messageId != null) {
-            val deliveryIntent = Intent(context, SmsStatusReceiver::class.java).apply {
-                action = SmsStatusReceiver.ACTION_SMS_DELIVERED
-                data = Uri.parse("smsapp://delivery/$messageId")
-                putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
-            }
-            // هر پارت پیام یه deliveryIntent جدا لازم داره؛ همه‌شون همون messageId رو حمل می‌کنن
-            // چون توی sent box فقط یه ردیف برای کل پیام (بعد از ترکیب پارت‌ها) ذخیره کردیم
-            val pending = PendingIntent.getBroadcast(
-                context, messageId.toInt(), deliveryIntent,
+        var sentIntents: ArrayList<PendingIntent?>? = null
+        var deliveryIntents: ArrayList<PendingIntent?>? = null
+
+        if (messageId != null) {
+            val sentPending = PendingIntent.getBroadcast(
+                context, messageId.toInt(),
+                Intent(context, SmsStatusReceiver::class.java).apply {
+                    action = SmsStatusReceiver.ACTION_SMS_SENT
+                    data = Uri.parse("smsapp://sent/$messageId")
+                    putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
+                },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            ArrayList<PendingIntent>().apply { repeat(parts.size) { add(pending) } }
-        } else null
+            val deliveryPending = PendingIntent.getBroadcast(
+                context, messageId.toInt(),
+                Intent(context, SmsStatusReceiver::class.java).apply {
+                    action = SmsStatusReceiver.ACTION_SMS_DELIVERED
+                    data = Uri.parse("smsapp://delivery/$messageId")
+                    putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            // فقط آخرین پارت PendingIntent می‌گیره، بقیه null
+            sentIntents = ArrayList<PendingIntent?>(parts.size).apply {
+                repeat(parts.size - 1) { add(null) }
+                add(sentPending)
+            }
+            deliveryIntents = ArrayList<PendingIntent?>(parts.size).apply {
+                repeat(parts.size - 1) { add(null) }
+                add(deliveryPending)
+            }
+        }
 
-        smsManager.sendMultipartTextMessage(address, null, parts, null, deliveryIntents)
+        smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, deliveryIntents)
     }
 
     /**
@@ -126,6 +221,7 @@ class SmsRepository(private val context: Context) {
      * چون Sms provider ستونی برای اون نداره.
      */
     fun updateDeliveryStatus(messageId: Long, delivered: Boolean, deliveredAtMillis: Long) {
+        if (!requireDefaultSmsApp("آپدیت وضعیت دلیوری")) return
         val values = ContentValues().apply {
             put(Telephony.Sms.STATUS, if (delivered) Telephony.Sms.STATUS_COMPLETE else Telephony.Sms.STATUS_FAILED)
         }
@@ -142,6 +238,7 @@ class SmsRepository(private val context: Context) {
      * حذف کل مکالمه (اگه لازم بشه - فعلاً جایی صداش نمی‌زنیم چون خیلی مخرب بود برای اکشن نوتیف)
      */
     fun deleteThread(threadId: Long) {
+        if (!requireDefaultSmsApp("حذف مکالمه")) return
         context.contentResolver.delete(
             Telephony.Sms.CONTENT_URI,
             "${Telephony.Sms.THREAD_ID} = ?",
@@ -165,6 +262,7 @@ class SmsRepository(private val context: Context) {
      * @return true اگه واقعاً حذف شد، false اگه به‌خاطر قفل‌بودن (فیوریت) رد شد
      */
     fun deleteMessage(messageId: Long): Boolean {
+        if (!requireDefaultSmsApp("حذف پیام")) return false
         if (FavoriteStore.isFavorite(context, messageId)) {
             return false
         }
@@ -189,45 +287,13 @@ class SmsRepository(private val context: Context) {
     }
 
     fun markThreadAsRead(threadId: Long) {
+        if (!requireDefaultSmsApp("علامت‌گذاری مکالمه به‌عنوان خونده‌شده")) return
         val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
         context.contentResolver.update(
             Telephony.Sms.CONTENT_URI, values,
             "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
             arrayOf(threadId.toString())
         )
-    }
-
-    private fun getAddressForThread(threadId: Long): String {
-        context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI, arrayOf(Telephony.Sms.ADDRESS),
-            "${Telephony.Sms.THREAD_ID} = ?", arrayOf(threadId.toString()),
-            "${Telephony.Sms.DATE} DESC LIMIT 1"
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return cursor.getStringOrNull(0) ?: ""
-            }
-        }
-        return ""
-    }
-
-    private fun getThreadMeta(threadId: Long): Pair<Long, Int> {
-        var date = 0L
-        var unread = 0
-        context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI, arrayOf(Telephony.Sms.DATE, Telephony.Sms.READ),
-            "${Telephony.Sms.THREAD_ID} = ?", arrayOf(threadId.toString()),
-            "${Telephony.Sms.DATE} DESC"
-        )?.use { cursor ->
-            var first = true
-            while (cursor.moveToNext()) {
-                if (first) {
-                    date = cursor.getLong(0)
-                    first = false
-                }
-                if (cursor.getInt(1) == 0) unread++
-            }
-        }
-        return date to unread
     }
 
     private fun getContactName(address: String): String? {
