@@ -36,6 +36,10 @@ import com.petro.smsapp.ui.FavoritesScreen
 import com.petro.smsapp.ui.NewMessageScreen
 import com.petro.smsapp.ui.NoteScreen
 import com.petro.smsapp.ui.PlaceholderScreen
+import com.petro.smsapp.ui.PrivateMessagesScreen
+import com.petro.smsapp.ui.PrivateNumbersScreen
+import com.petro.smsapp.ui.PrivatePinScreen
+import com.petro.smsapp.ui.PrivateScreen
 import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
 import com.petro.smsapp.ui.ThreadScreen
@@ -204,6 +208,9 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val trash by viewModel.trash.collectAsState()
     val blockedNumbers by viewModel.blockedNumbers.collectAsState()
     val blockedMessages by viewModel.blockedMessages.collectAsState()
+    val privateNumbers by viewModel.privateNumbers.collectAsState()
+    val privateMessages by viewModel.privateMessages.collectAsState()
+    val privateUnlocked by viewModel.privateUnlocked.collectAsState()
     val operationMessage by viewModel.operationMessage.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -263,7 +270,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     },
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
-                    onBlockConversations = { selectedConversations -> viewModel.blockConversations(selectedConversations) }
+                    onBlockConversations = { selectedConversations -> viewModel.blockConversations(selectedConversations) },
+                    onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) }
                 )
             }
             composable("new") {
@@ -330,6 +338,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("favorites") {
+                LaunchedEffect(Unit) { viewModel.loadFavorites() }
                 FavoritesScreen(
                     favorites = favorites,
                     onBack = { navController.popBackStack() },
@@ -353,6 +362,13 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 PlaceholderScreen(title = "زمان‌بندی‌شده", onBack = { navController.popBackStack() })
             }
             composable("blocked") {
+                // باگ قبلی: این لیست‌ها فقط یه‌بار موقع بالا اومدن کل اپ لود می‌شدن، پس تا
+                // اپ رو کامل نمی‌بستی و دوباره باز نمی‌کردی، عدد بج‌ها/لیست‌ها آپدیت نمی‌شد.
+                // حالا هر بار که وارد این صفحه میشیم، دوباره از نو لود میشه.
+                LaunchedEffect(Unit) {
+                    viewModel.loadBlockedNumbers()
+                    viewModel.loadBlockedMessages()
+                }
                 BlockScreen(
                     blockedMessageCount = blockedMessages.size,
                     blockedNumberCount = blockedNumbers.size,
@@ -362,12 +378,14 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("blocked_messages") {
+                LaunchedEffect(Unit) { viewModel.loadBlockedMessages() }
                 BlockedMessagesScreen(
                     blockedMessages = blockedMessages,
                     onBack = { navController.popBackStack() }
                 )
             }
             composable("blocked_numbers") {
+                LaunchedEffect(Unit) { viewModel.loadBlockedNumbers() }
                 BlockedNumbersScreen(
                     blockedNumbers = blockedNumbers,
                     onBack = { navController.popBackStack() },
@@ -375,7 +393,63 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("private") {
-                PlaceholderScreen(title = "خصوصی", onBack = { navController.popBackStack() })
+                // درست مثل بلاک: تا اینجا بودیم قفل نشده، رمز خواسته میشه (اولین بار: ساخت رمز)
+                if (privateUnlocked) {
+                    LaunchedEffect(Unit) {
+                        viewModel.loadPrivateNumbers()
+                        viewModel.loadPrivateMessages()
+                    }
+                    PrivateScreen(
+                        privateMessageCount = privateMessages.size,
+                        privateNumberCount = privateNumbers.size,
+                        onBack = {
+                            viewModel.lockPrivate() // با خروج کامل از بخش خصوصی، دفعه‌ی بعد دوباره رمز بخواد
+                            navController.popBackStack()
+                        },
+                        onOpenPrivateMessages = { navController.navigate("private_messages") },
+                        onOpenPrivateNumbers = { navController.navigate("private_numbers") }
+                    )
+                } else {
+                    PrivatePinScreen(
+                        hasExistingPin = viewModel.hasPrivatePin(),
+                        onVerifyPin = { pin -> viewModel.verifyPrivatePin(pin) },
+                        onSetPin = { pin -> viewModel.setPrivatePin(pin) },
+                        onUnlocked = { viewModel.unlockPrivate() },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("private_messages") {
+                // مسیر مستقیم بدون رد شدن از هاب - محافظت اضافه، اگه قفل بود برگرد عقب
+                LaunchedEffect(privateUnlocked) {
+                    if (!privateUnlocked) {
+                        navController.popBackStack()
+                    } else {
+                        viewModel.loadPrivateMessages()
+                    }
+                }
+                if (privateUnlocked) {
+                    PrivateMessagesScreen(
+                        privateMessages = privateMessages,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("private_numbers") {
+                LaunchedEffect(privateUnlocked) {
+                    if (!privateUnlocked) {
+                        navController.popBackStack()
+                    } else {
+                        viewModel.loadPrivateNumbers()
+                    }
+                }
+                if (privateUnlocked) {
+                    PrivateNumbersScreen(
+                        privateNumbers = privateNumbers,
+                        onBack = { navController.popBackStack() },
+                        onRemovePrivate = { threadId -> viewModel.removePrivate(threadId) }
+                    )
+                }
             }
         }
     }

@@ -31,6 +31,21 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
+     * لایه‌ی دفاعی برای عملیات‌های خواندن. اپ می‌تونه پیش‌فرض پیامک باشه ولی کاربر بعداً
+     * از تنظیمات سیستم مجوز READ_SMS رو دستی برداشته باشه - در اون حالت
+     * requireDefaultSmsApp چیزی نمی‌گیره چون همچنان پیش‌فرضیم، ولی contentResolver.query
+     * با SecurityException کرش می‌کنه. این تابع قبل از هر خوندن صدا زده میشه؛ اگه مجوز
+     * نبود، به‌جای کرش، فقط لاگ می‌کنیم و لیست خالی برمی‌گردونیم.
+     */
+    private fun requireReadSmsPermission(operation: String): Boolean {
+        val hasPermission = PermissionHelper.hasReadSmsPermission(context)
+        if (!hasPermission) {
+            Log.w("SmsRepository", "عملیات «$operation» انجام نشد چون مجوز READ_SMS نیست")
+        }
+        return hasPermission
+    }
+
+    /**
      * خواندن لیست مکالمات، گروه‌بندی‌شده بر اساس thread_id
      *
      * قبلاً اینجا یه کوئری جدا به Telephony.Sms.Conversations می‌زدیم فقط برای گرفتن
@@ -41,10 +56,12 @@ class SmsRepository(private val context: Context) {
      * جدیدترین پیامِ غیر-سطل‌زباله‌ای می‌سازیم - هم دقیق‌تره هم یه کوئری کمتر.
      */
     fun getConversations(): List<Conversation> {
+        if (!requireReadSmsPermission("خواندن لیست مکالمات")) return emptyList()
         val blockedThreadIds = BlockStore.getBlockedThreadIds(context)
+        val privateThreadIds = PrivateStore.getPrivateThreadIds(context)
         val threadMeta = getAllThreadsMeta()
         val conversations = threadMeta
-            .filterKeys { it !in blockedThreadIds }
+            .filterKeys { it !in blockedThreadIds && it !in privateThreadIds }
             .map { (threadId, meta) ->
                 val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
                 Conversation(
@@ -72,38 +89,43 @@ class SmsRepository(private val context: Context) {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
         val trashedIds = TrashStore.getTrashedIds(context)
-        context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            arrayOf(
-                Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
-                Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY
-            ),
-            null, null,
-            "${Telephony.Sms.DATE} DESC"
-        )?.use { cursor ->
-            val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
-            val threadIdIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
-            val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
-            val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
-            val readIdx = cursor.getColumnIndex(Telephony.Sms.READ)
-            val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
-            while (cursor.moveToNext()) {
-                if (cursor.getLong(idIdx) in trashedIds) continue
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
+                    Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY
+                ),
+                null, null,
+                "${Telephony.Sms.DATE} DESC"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
+                val threadIdIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
+                val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
+                val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
+                val readIdx = cursor.getColumnIndex(Telephony.Sms.READ)
+                val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
+                while (cursor.moveToNext()) {
+                    if (cursor.getLong(idIdx) in trashedIds) continue
 
-                val threadId = cursor.getLong(threadIdIdx)
-                if (cursor.getInt(readIdx) == 0) {
-                    unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
-                }
-                // چون نزولیه، اولین باری که یه threadId رو می‌بینیم همون جدیدترین پیام غیر-سطل‌زباله‌ایشه
-                if (!result.containsKey(threadId)) {
-                    result[threadId] = ThreadMeta(
-                        address = cursor.getStringOrNull(addressIdx) ?: "",
-                        date = cursor.getLong(dateIdx),
-                        unreadCount = 0, // بعداً از unreadCounts پر میشه
-                        snippet = cursor.getStringOrNull(bodyIdx) ?: ""
-                    )
+                    val threadId = cursor.getLong(threadIdIdx)
+                    if (cursor.getInt(readIdx) == 0) {
+                        unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
+                    }
+                    // چون نزولیه، اولین باری که یه threadId رو می‌بینیم همون جدیدترین پیام غیر-سطل‌زباله‌ایشه
+                    if (!result.containsKey(threadId)) {
+                        result[threadId] = ThreadMeta(
+                            address = cursor.getStringOrNull(addressIdx) ?: "",
+                            date = cursor.getLong(dateIdx),
+                            unreadCount = 0, // بعداً از unreadCounts پر میشه
+                            snippet = cursor.getStringOrNull(bodyIdx) ?: ""
+                        )
+                    }
                 }
             }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن لیست مکالمات - مجوز احتمالاً همین لحظه برداشته شده", e)
+            return emptyMap()
         }
         return result.mapValues { (threadId, meta) -> meta.copy(unreadCount = unreadCounts[threadId] ?: 0) }
     }
@@ -113,21 +135,27 @@ class SmsRepository(private val context: Context) {
      * فیلتر میشن، همون‌طور که تو getConversations هم فیلتر میشن.
      */
     fun getMessagesForThread(threadId: Long): List<SmsMessage> {
+        if (!requireReadSmsPermission("خواندن پیام‌های یک مکالمه")) return emptyList()
         val messages = mutableListOf<SmsMessage>()
         val trashedIds = TrashStore.getTrashedIds(context)
         val uri = Telephony.Sms.CONTENT_URI
         val selection = "${Telephony.Sms.THREAD_ID} = ?"
         val selectionArgs = arrayOf(threadId.toString())
 
-        context.contentResolver.query(
-            uri, null, selection, selectionArgs,
-            "${Telephony.Sms.DATE} ASC"
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val message = cursorToMessage(cursor)
-                if (message.id in trashedIds) continue
-                messages.add(message)
+        try {
+            context.contentResolver.query(
+                uri, null, selection, selectionArgs,
+                "${Telephony.Sms.DATE} ASC"
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val message = cursorToMessage(cursor)
+                    if (message.id in trashedIds) continue
+                    messages.add(message)
+                }
             }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیام‌های مکالمه - مجوز احتمالاً همین لحظه برداشته شده", e)
+            return emptyList()
         }
         return messages
     }
@@ -142,6 +170,19 @@ class SmsRepository(private val context: Context) {
         return blockedNumbers
             .flatMap { blocked -> getMessagesForThread(blocked.threadId) }
             .map { message -> BlockedMessageEntry(message, nameByThread[message.threadId] ?: message.address) }
+            .sortedByDescending { it.message.date }
+    }
+
+    /**
+     * همه‌ی پیام‌های همه‌ی thread های خصوصی‌شده رو با هم برمی‌گردونه (جدیدترین بالا) -
+     * برای صفحه‌ی «پیامک‌های خصوصی» (پشتِ رمز ۴ رقمی).
+     */
+    fun getMessagesForPrivateThreads(): List<PrivateMessageEntry> {
+        val privateNumbers = PrivateStore.getAllPrivateNumbers(context)
+        val nameByThread = privateNumbers.associate { it.threadId to it.displayName }
+        return privateNumbers
+            .flatMap { private -> getMessagesForThread(private.threadId) }
+            .map { message -> PrivateMessageEntry(message, nameByThread[message.threadId] ?: message.address) }
             .sortedByDescending { it.message.date }
     }
 
@@ -181,7 +222,12 @@ class SmsRepository(private val context: Context) {
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
             put(Telephony.Sms.STATUS, Telephony.Sms.STATUS_PENDING)
         }
-        val insertedUri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+        val insertedUri = try {
+            context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع ذخیره‌ی پیام ارسالی توی sent box", e)
+            null
+        }
         val messageId = insertedUri?.let { ContentUris.parseId(it) }
 
         var sentIntents: ArrayList<PendingIntent?>? = null
@@ -230,10 +276,15 @@ class SmsRepository(private val context: Context) {
         val values = ContentValues().apply {
             put(Telephony.Sms.STATUS, if (delivered) Telephony.Sms.STATUS_COMPLETE else Telephony.Sms.STATUS_FAILED)
         }
-        context.contentResolver.update(
-            ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
-            values, null, null
-        )
+        try {
+            context.contentResolver.update(
+                ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                values, null, null
+            )
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع آپدیت وضعیت دلیوری", e)
+            return
+        }
         if (delivered) {
             DeliveryStore.setDeliveredAt(context, messageId, deliveredAtMillis)
         }
@@ -244,11 +295,15 @@ class SmsRepository(private val context: Context) {
      */
     fun deleteThread(threadId: Long) {
         if (!requireDefaultSmsApp("حذف مکالمه")) return
-        context.contentResolver.delete(
-            Telephony.Sms.CONTENT_URI,
-            "${Telephony.Sms.THREAD_ID} = ?",
-            arrayOf(threadId.toString())
-        )
+        try {
+            context.contentResolver.delete(
+                Telephony.Sms.CONTENT_URI,
+                "${Telephony.Sms.THREAD_ID} = ?",
+                arrayOf(threadId.toString())
+            )
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع حذف مکالمه", e)
+        }
     }
 
     /**
@@ -275,12 +330,16 @@ class SmsRepository(private val context: Context) {
                 if (trashEnabled) {
                     TrashStore.moveToTrash(context, messageId)
                 } else {
-                    context.contentResolver.delete(
-                        ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
-                        null,
-                        null
-                    )
-                    DeliveryStore.clear(context, messageId)
+                    try {
+                        context.contentResolver.delete(
+                            ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                            null,
+                            null
+                        )
+                        DeliveryStore.clear(context, messageId)
+                    } catch (e: SecurityException) {
+                        Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی مکالمه‌ها", e)
+                    }
                 }
             }
         }
@@ -289,12 +348,16 @@ class SmsRepository(private val context: Context) {
 
     private fun getMessageIdsForThread(threadId: Long): List<Long> {
         val ids = mutableListOf<Long>()
-        context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI, arrayOf(Telephony.Sms._ID),
-            "${Telephony.Sms.THREAD_ID} = ?", arrayOf(threadId.toString()), null
-        )?.use { cursor ->
-            val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
-            while (cursor.moveToNext()) ids.add(cursor.getLong(idIdx))
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI, arrayOf(Telephony.Sms._ID),
+                "${Telephony.Sms.THREAD_ID} = ?", arrayOf(threadId.toString()), null
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
+                while (cursor.moveToNext()) ids.add(cursor.getLong(idIdx))
+            }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن id های یک مکالمه", e)
         }
         return ids
     }
@@ -318,12 +381,16 @@ class SmsRepository(private val context: Context) {
             if (trashEnabled) {
                 TrashStore.moveToTrash(context, messageId)
             } else {
-                context.contentResolver.delete(
-                    ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
-                    null,
-                    null
-                )
-                DeliveryStore.clear(context, messageId)
+                try {
+                    context.contentResolver.delete(
+                        ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                        null,
+                        null
+                    )
+                    DeliveryStore.clear(context, messageId)
+                } catch (e: SecurityException) {
+                    Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی پیام‌ها", e)
+                }
             }
         }
         return BulkDeleteResult(movedToTrash = trashEnabled, blockedFavoriteCount = blockedCount)
@@ -351,11 +418,16 @@ class SmsRepository(private val context: Context) {
             TrashStore.moveToTrash(context, messageId)
             return true
         }
-        context.contentResolver.delete(
-            ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
-            null,
-            null
-        )
+        try {
+            context.contentResolver.delete(
+                ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                null,
+                null
+            )
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع حذف پیام", e)
+            return false
+        }
         DeliveryStore.clear(context, messageId)
         return true
     }
@@ -366,6 +438,7 @@ class SmsRepository(private val context: Context) {
      * هستن (TrashStore فقط مخفی‌شون می‌کنه)، مستقیم با _ID IN (...) می‌خونیمشون.
      */
     fun getTrashedMessages(): List<TrashedMessage> {
+        if (!requireReadSmsPermission("خواندن سطل زباله")) return emptyList()
         val trashedIds = TrashStore.getTrashedIds(context)
         if (trashedIds.isEmpty()) return emptyList()
 
@@ -374,14 +447,19 @@ class SmsRepository(private val context: Context) {
         val selectionArgs = trashedIds.map { it.toString() }.toTypedArray()
 
         val result = mutableListOf<TrashedMessage>()
-        context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI, null, selection, selectionArgs, null
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val message = cursorToMessage(cursor)
-                val displayName = ContactsCache.getName(context, message.address) ?: message.address
-                result.add(TrashedMessage(message, displayName, TrashStore.getTrashedAt(context, message.id)))
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI, null, selection, selectionArgs, null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val message = cursorToMessage(cursor)
+                    val displayName = ContactsCache.getName(context, message.address) ?: message.address
+                    result.add(TrashedMessage(message, displayName, TrashStore.getTrashedAt(context, message.id)))
+                }
             }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن سطل زباله - مجوز احتمالاً همین لحظه برداشته شده", e)
+            return emptyList()
         }
         return result.sortedByDescending { it.trashedAt }
     }
@@ -394,11 +472,16 @@ class SmsRepository(private val context: Context) {
     /** حذف همیشگی از داخل خودِ صفحه‌ی سطل زباله - این دیگه واقعاً فیزیکیه و برگشت نداره */
     fun permanentlyDelete(messageId: Long): Boolean {
         if (!requireDefaultSmsApp("حذف همیشگی از سطل زباله")) return false
-        context.contentResolver.delete(
-            ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
-            null,
-            null
-        )
+        try {
+            context.contentResolver.delete(
+                ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                null,
+                null
+            )
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع حذف همیشگی از سطل زباله", e)
+            return false
+        }
         DeliveryStore.clear(context, messageId)
         TrashStore.restore(context, messageId) // دیگه ردیفی نیست، ایندکس سطل زباله رو هم پاک کن
         return true
@@ -415,11 +498,16 @@ class SmsRepository(private val context: Context) {
     fun markThreadAsRead(threadId: Long): Boolean {
         if (!requireDefaultSmsApp("علامت‌گذاری مکالمه به‌عنوان خونده‌شده")) return false
         val values = ContentValues().apply { put(Telephony.Sms.READ, 1) }
-        context.contentResolver.update(
-            Telephony.Sms.CONTENT_URI, values,
-            "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
-            arrayOf(threadId.toString())
-        )
+        try {
+            context.contentResolver.update(
+                Telephony.Sms.CONTENT_URI, values,
+                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
+                arrayOf(threadId.toString())
+            )
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خونده‌شده‌کردن مکالمه", e)
+            return false
+        }
         return true
     }
 

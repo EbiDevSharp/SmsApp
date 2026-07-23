@@ -16,6 +16,9 @@ import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
 import com.petro.smsapp.data.FavoriteMessage
 import com.petro.smsapp.data.FavoriteStore
+import com.petro.smsapp.data.PrivateMessageEntry
+import com.petro.smsapp.data.PrivateNumber
+import com.petro.smsapp.data.PrivateStore
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
@@ -79,6 +82,19 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // همه‌ی پیام‌های thread های بلاک‌شده با هم - برای صفحه‌ی «پیامک‌های بلاک‌شده»
     private val _blockedMessages = MutableStateFlow<List<BlockedMessageEntry>>(emptyList())
     val blockedMessages: StateFlow<List<BlockedMessageEntry>> = _blockedMessages.asStateFlow()
+
+    // لیست شماره‌های خصوصی - برای صفحه‌ی «شماره‌های خصوصی»
+    private val _privateNumbers = MutableStateFlow<List<PrivateNumber>>(emptyList())
+    val privateNumbers: StateFlow<List<PrivateNumber>> = _privateNumbers.asStateFlow()
+
+    // همه‌ی پیام‌های thread های خصوصی با هم - برای صفحه‌ی «پیامک‌های خصوصی»
+    private val _privateMessages = MutableStateFlow<List<PrivateMessageEntry>>(emptyList())
+    val privateMessages: StateFlow<List<PrivateMessageEntry>> = _privateMessages.asStateFlow()
+
+    // آیا کاربر همین الان (توی همین session) رمز بخش خصوصی رو درست وارد کرده - با خروج
+    // کامل از بخش خصوصی (دکمه‌ی برگشتِ خودِ هاب) دوباره false میشه، پس دفعه‌ی بعد رمز می‌خواد
+    private val _privateUnlocked = MutableStateFlow(false)
+    val privateUnlocked: StateFlow<Boolean> = _privateUnlocked.asStateFlow()
 
     // پیام یک‌بارمصرف برای اطلاع‌رسانی به کاربر (مثلاً «این پیام قفله و قابل حذف نیست»)
     private val _operationMessage = MutableStateFlow<String?>(null)
@@ -344,27 +360,44 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
      * گزینه‌ی «بلاک کردن». هر مکالمه‌ی انتخاب‌شده به BlockStore اضافه میشه (که خودش باعث
      * میشه دفعه‌ی بعد getConversations دیگه نشونش نده)، و لیست اصلی + شمارنده‌های بلاک
      * دوباره لود میشن.
+     *
+     * یه شماره‌ی خصوصی نمی‌تونه هم‌زمان بلاک هم بشه (طبق درخواست کاربر) - قبل از بلاک‌کردن
+     * چک می‌کنیم؛ اگه از قبل خصوصی بود، رد میشه و توی پیام نتیجه بهش اشاره میشه.
      */
     fun blockConversations(conversations: List<Conversation>) {
         if (conversations.isEmpty()) return
         viewModelScope.launch {
+            val app = getApplication<Application>()
+            val blocked = mutableListOf<Conversation>()
+            var skippedCount = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
+                    if (PrivateStore.isThreadPrivate(app, conversation.threadId)) {
+                        skippedCount++
+                        return@forEach
+                    }
                     BlockStore.blockThread(
-                        getApplication(),
+                        app,
                         conversation.threadId,
                         conversation.address,
                         conversation.displayName
                     )
+                    blocked.add(conversation)
                 }
             }
-            _operationMessage.value = if (conversations.size == 1) {
-                "${conversations.first().displayName} بلاک شد"
+            val base = if (blocked.size == 1) {
+                "${blocked.first().displayName} بلاک شد"
             } else {
-                "${conversations.size} مخاطب بلاک شدن"
+                "${blocked.size} مخاطب بلاک شدن"
+            }
+            _operationMessage.value = if (skippedCount > 0) {
+                "$base ($skippedCount مخاطب چون خصوصی بودن رد شدن)"
+            } else {
+                base
             }
             loadConversations()
             loadBlockedNumbers()
+            loadBlockedMessages()
         }
     }
 
@@ -392,6 +425,94 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForBlockedThreads() }
             _blockedMessages.value = result
         }
+    }
+
+    /**
+     * خصوصی‌کردن دسته‌جمعی چند مکالمه - دقیقاً مثل blockConversations ولی با PrivateStore.
+     * یه شماره‌ی بلاک‌شده نمی‌تونه هم‌زمان خصوصی هم بشه - قبل از خصوصی‌کردن چک میشه.
+     */
+    fun makeConversationsPrivate(conversations: List<Conversation>) {
+        if (conversations.isEmpty()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val madePrivate = mutableListOf<Conversation>()
+            var skippedCount = 0
+            withContext(Dispatchers.IO) {
+                conversations.forEach { conversation ->
+                    if (BlockStore.isThreadBlocked(app, conversation.threadId)) {
+                        skippedCount++
+                        return@forEach
+                    }
+                    PrivateStore.makePrivate(
+                        app,
+                        conversation.threadId,
+                        conversation.address,
+                        conversation.displayName
+                    )
+                    madePrivate.add(conversation)
+                }
+            }
+            val base = if (madePrivate.size == 1) {
+                "${madePrivate.first().displayName} خصوصی شد"
+            } else {
+                "${madePrivate.size} مخاطب خصوصی شدن"
+            }
+            _operationMessage.value = if (skippedCount > 0) {
+                "$base ($skippedCount مخاطب چون بلاک بودن رد شدن)"
+            } else {
+                base
+            }
+            loadConversations()
+            loadPrivateNumbers()
+            loadPrivateMessages()
+        }
+    }
+
+    /** خارج کردن یه شماره از حالت خصوصی از داخل صفحه‌ی «شماره‌های خصوصی» - دوباره تو لیست اصلی برمی‌گرده */
+    fun removePrivate(threadId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { PrivateStore.removePrivate(getApplication(), threadId) }
+            loadPrivateNumbers()
+            loadPrivateMessages()
+            loadConversations()
+        }
+    }
+
+    /** لود کردن لیست شماره‌های خصوصی - برای صفحه‌ی «شماره‌های خصوصی» و بج شمارنده */
+    fun loadPrivateNumbers() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { PrivateStore.getAllPrivateNumbers(getApplication()) }
+            _privateNumbers.value = result
+        }
+    }
+
+    /** لود کردن همه‌ی پیام‌های خصوصی - برای صفحه‌ی «پیامک‌های خصوصی» و بج شمارنده */
+    fun loadPrivateMessages() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.getMessagesForPrivateThreads() }
+            _privateMessages.value = result
+        }
+    }
+
+    /** آیا از قبل رمزی برای بخش خصوصی ساخته شده - PrivatePinScreen بر اساس این تصمیم می‌گیره اول‌بار رمز بسازه یا بخواد */
+    fun hasPrivatePin(): Boolean = PrivateStore.hasPin(getApplication())
+
+    /** ذخیره‌ی رمز جدید (هش‌شده) - فقط اولین بار که کاربر وارد بخش خصوصی میشه صدا زده میشه */
+    fun setPrivatePin(pin: String) {
+        PrivateStore.setPin(getApplication(), pin)
+    }
+
+    /** مقایسه‌ی رمز واردشده با رمز ذخیره‌شده - عملیات سریع و سبکه، نیازی به coroutine نداره */
+    fun verifyPrivatePin(pin: String): Boolean = PrivateStore.verifyPin(getApplication(), pin)
+
+    /** وقتی رمز درست وارد شد (یا تازه ساخته شد) - برای همین session بخش خصوصی باز می‌مونه */
+    fun unlockPrivate() {
+        _privateUnlocked.value = true
+    }
+
+    /** با خروج کامل از بخش خصوصی (دکمه‌ی برگشتِ هاب)، دوباره قفل میشه تا دفعه‌ی بعد رمز بخواد */
+    fun lockPrivate() {
+        _privateUnlocked.value = false
     }
 
     fun searchContacts(query: String) {

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
@@ -51,7 +52,8 @@ fun ConversationListScreen(
     onComposeClick: () -> Unit,
     onMenuClick: () -> Unit,
     onDeleteConversations: (Set<Long>) -> Unit,
-    onBlockConversations: (List<Conversation>) -> Unit
+    onBlockConversations: (List<Conversation>) -> Unit,
+    onMakeConversationsPrivate: (List<Conversation>) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -136,6 +138,16 @@ fun ConversationListScreen(
                                         showMoreMenu = false
                                         val selectedConversations = conversations.filter { it.threadId in selectedIds }
                                         onBlockConversations(selectedConversations)
+                                        selectedIds = emptySet()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("خصوصی کردن") },
+                                    leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        val selectedConversations = conversations.filter { it.threadId in selectedIds }
+                                        onMakeConversationsPrivate(selectedConversations)
                                         selectedIds = emptySet()
                                     }
                                 )
