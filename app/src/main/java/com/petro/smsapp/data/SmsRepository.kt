@@ -491,8 +491,15 @@ class SmsRepository(private val context: Context) {
      * پیدا کردن thread موجود برای یه شماره، یا ساختن یه thread جدید اگه وجود نداشته باشه
      * (لازم برای شروع مکالمه‌ی جدید از صفحه "پیام جدید")
      */
+    /** try/catch به‌جای پیش‌چک، چون این تابع از جریان «پیام جدید» صدا زده میشه و بهتره
+     *  به‌جای خالی برگردوندن، صفر برگردونه (thread نامعتبر) اگه مجوزی نبود */
     fun getOrCreateThreadId(address: String): Long {
-        return Telephony.Threads.getOrCreateThreadId(context, setOf(address))
+        return try {
+            Telephony.Threads.getOrCreateThreadId(context, setOf(address))
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع ساخت/پیدا کردن threadId", e)
+            0L
+        }
     }
 
     fun markThreadAsRead(threadId: Long): Boolean {
