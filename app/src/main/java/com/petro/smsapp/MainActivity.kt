@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -220,6 +221,11 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    // محافظ صریح: اگه دراور بازه، دکمه‌ی برگشت فقط دراور رو ببنده، نه اینکه بره از NavHost خارج بشه
+    BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
+    }
+
     // لود اولیه‌ی لیست فیوریت‌ها و بلاک‌ها - همون اول که برنامه بالا میاد (برای بج‌های شمارنده)
     LaunchedEffect(Unit) {
         viewModel.loadFavorites()
@@ -253,8 +259,16 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         drawerContent = {
             ModalDrawerSheet {
                 AppDrawerContent(onItemClick = { route ->
-                    scope.launch { drawerState.close() }
-                    navController.navigate(route)
+                    scope.launch {
+                        // مهم: باید صبر کنیم انیمیشن بسته‌شدن کامل تموم بشه، بعد navigate کنیم.
+                        // قبلاً close() توی یه launch جدا (fire-and-forget) بود و navigate بلافاصله
+                        // بعدش (بدون صبر) اجرا می‌شد - یعنی وسط انیمیشن، ناوبری اتفاق می‌افتاد و
+                        // state داخلی drawerState قاطی می‌شد (صفحه سفید میومد، back هم خراب می‌شد،
+                        // فقط با swipe دستی درست می‌شد چون swipe مستقیم state رو ست می‌کنه نه از
+                        // طریق این انیمیشن).
+                        drawerState.close()
+                        navController.navigate(route)
+                    }
                 })
             }
         }
