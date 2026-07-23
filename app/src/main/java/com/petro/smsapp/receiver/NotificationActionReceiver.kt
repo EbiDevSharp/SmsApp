@@ -8,6 +8,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.petro.smsapp.data.BlockStore
 import com.petro.smsapp.data.ContactsCache
+import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.SmsRepository
 
 /**
@@ -45,6 +46,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 if (threadId != -1L && address != null) {
                     val displayName = ContactsCache.getName(context, address) ?: address
                     BlockStore.blockThread(context, threadId, address, displayName)
+                    // چون این تغییر فقط SharedPreferences رو عوض می‌کنه (نه SMS Provider)،
+                    // ContentObserver خودکار متوجهش نمیشه - این سیگنال به ViewModel خبر میده
+                    // که لیست مکالمات رو دوباره لود کنه (وگرنه تا یه اتفاق دیگه‌ای پیش نیاد،
+                    // این مخاطب همچنان توی لیست اصلی دیده می‌شد).
+                    DataChangeSignal.notifyChanged()
                     Log.d("NotifAction", "thread $threadId بلاک شد")
                 }
             }

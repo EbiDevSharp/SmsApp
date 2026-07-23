@@ -80,9 +80,17 @@ fun ThreadScreen(
         }
     }
 
-    // دکمه‌ی برگشت سیستم: اگه توی حالت انتخابیم، فقط از انتخاب خارج شو، از چت خارج نشو
-    BackHandler(enabled = selectionMode) {
-        selectedIds = emptySet()
+    // دکمه‌ی برگشت سیستم: همیشه توسط خودمون مدیریت میشه (نه پیش‌فرض NavHost) -
+    // چون قبلاً وقتی selectionMode نبود، این BackHandler غیرفعال بود و برگشت از مسیر
+    // پیش‌فرض NavHost رد می‌شد؛ یعنی onBack (که clearOpenThread رو صدا می‌زنه) هیچ‌وقت
+    // اجرا نمی‌شد و ActiveThreadTracker/openThreadId رو یه مکالمه‌ی قدیمی گیر می‌کرد -
+    // نتیجه‌ش این بود که پیام‌های بعدیِ همون مخاطب نه نوتیف می‌گرفتن نه به‌درستی خونده‌نشده می‌موندن.
+    BackHandler(enabled = true) {
+        if (selectionMode) {
+            selectedIds = emptySet()
+        } else {
+            onBack()
+        }
     }
 
     if (showDeleteConfirm) {

@@ -5,6 +5,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.ActiveThreadTracker
@@ -14,6 +15,7 @@ import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
+import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.FavoriteMessage
 import com.petro.smsapp.data.FavoriteStore
 import com.petro.smsapp.data.PrivateMessageEntry
@@ -30,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -134,6 +137,19 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             true, // notifyForDescendants: تغییرات inbox/sent/... که زیرشاخه‌ی content://sms هستن رو هم پوشش میده
             smsObserver
         )
+
+        // تغییراتی که از بیرون ViewModel میان (مثل بلاک‌کردن از روی دکمه‌ی خودِ نوتیف) فقط
+        // SharedPreferences رو عوض می‌کنن، نه SMS Provider - پس smsObserver بالا خبردار نمیشه.
+        // این signal همون نقش رو براشون بازی می‌کنه.
+        viewModelScope.launch {
+            DataChangeSignal.tick.drop(1).collect {
+                loadConversations()
+                loadBlockedNumbers()
+                loadBlockedMessages()
+                loadPrivateNumbers()
+                loadPrivateMessages()
+            }
+        }
     }
 
     override fun onCleared() {
@@ -382,6 +398,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                         conversation.address,
                         conversation.displayName
                     )
+                    // اگه نوتیف این شماره الان روی صفحه‌ست، بلافاصله پاک بشه - قبلاً صبر می‌کرد
+                    // تا یه اتفاق دیگه (رفتن به چت دیگه) خودش پاکش کنه، که کند به‌نظر می‌رسید
+                    NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
                     blocked.add(conversation)
                 }
             }
@@ -449,6 +468,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                         conversation.address,
                         conversation.displayName
                     )
+                    NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
                     madePrivate.add(conversation)
                 }
             }
