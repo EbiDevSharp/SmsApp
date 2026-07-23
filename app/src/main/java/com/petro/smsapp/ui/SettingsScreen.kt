@@ -1,5 +1,6 @@
 package com.petro.smsapp.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +34,7 @@ import com.petro.smsapp.data.ClockFormat
  * SmsRepository هم ازش استفاده می‌کنن)، پس تغییر هر کدوم اینجا فوراً روی کل برنامه اثر می‌ذاره.
  */
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onOpenNotificationActions: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val settings by AppSettings.state.collectAsState()
 
@@ -115,6 +116,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                         onCheckedChange = { enabled -> AppSettings.setDeliveryNotificationsEnabled(context, enabled) }
                     )
                 }
+            )
+            Divider()
+
+            // دکمه‌های نوتیف پیامک (خوانده‌شد/حذف/پاسخ‌سریع/بلاک/تماس) - ترتیب و روشن/خاموش
+            // بودنشون از یه صفحه‌ی جدا قابل تنظیمه
+            ListItem(
+                headlineContent = { Text("دکمه‌های نوتیفیکیشن") },
+                supportingContent = { Text("انتخاب و ترتیب دکمه‌های روی نوتیف پیامک") },
+                modifier = Modifier.clickable(onClick = onOpenNotificationActions)
             )
             Divider()
         }

@@ -41,6 +41,8 @@ import com.petro.smsapp.ui.PrivateNumbersScreen
 import com.petro.smsapp.ui.PrivatePinScreen
 import com.petro.smsapp.ui.PrivatePinSettingsScreen
 import com.petro.smsapp.ui.PrivateScreen
+import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.ui.NotificationActionsSettingsScreen
 import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
 import com.petro.smsapp.ui.ThreadScreen
@@ -327,7 +329,18 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("settings") {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onOpenNotificationActions = { navController.navigate("notification_actions") },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("notification_actions") {
+                val settingsState by AppSettings.state.collectAsState()
+                NotificationActionsSettingsScreen(
+                    actions = settingsState.notificationActions,
+                    onSave = { updated -> AppSettings.setNotificationActionSettings(context, updated) },
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable("note") {
                 NoteScreen(
