@@ -29,6 +29,7 @@ import androidx.navigation.navArgument
 import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
+import com.petro.smsapp.ui.AddBlockedNumberScreen
 import com.petro.smsapp.ui.BlockScreen
 import com.petro.smsapp.ui.BlockedMessagesScreen
 import com.petro.smsapp.ui.BlockedNumbersScreen
@@ -417,7 +418,22 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 BlockedNumbersScreen(
                     blockedNumbers = blockedNumbers,
                     onBack = { navController.popBackStack() },
-                    onUnblock = { threadId -> viewModel.unblockNumber(threadId) }
+                    onUnblock = { threadId -> viewModel.unblockNumber(threadId) },
+                    onAddNumberClick = {
+                        viewModel.prepareNewMessage()
+                        navController.navigate("block_add_number")
+                    }
+                )
+            }
+            composable("block_add_number") {
+                AddBlockedNumberScreen(
+                    contacts = contacts,
+                    pickedContact = pickedContact,
+                    onPickedContactConsumed = { viewModel.consumePickedContact() },
+                    onPickFromContactsClick = onPickContactClick,
+                    onSearchChange = { query -> viewModel.searchContacts(query) },
+                    onBlockNumber = { address, displayName -> viewModel.blockNumber(address, displayName) },
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable("private") {

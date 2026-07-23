@@ -420,6 +420,33 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * بلاک کردن مستقیم یه شماره از صفحه‌ی «افزودن شماره‌ی بلاک» - برخلاف blockConversations
+     * که از لیست مکالمات موجود میاد، این شماره ممکنه اصلاً قبلاً باهاش مکالمه‌ای نداشته
+     * باشیم؛ برای همین اول getOrCreateThreadId یه thread براش می‌سازه (یا اگه از قبل بود،
+     * همون رو برمی‌گردونه).
+     */
+    fun blockNumber(address: String, displayName: String) {
+        if (address.isBlank()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
+            val isPrivate = withContext(Dispatchers.IO) { PrivateStore.isThreadPrivate(app, threadId) }
+            if (isPrivate) {
+                _operationMessage.value = "این شماره خصوصیه - اول باید از بخش خصوصی خارجش کنی"
+                return@launch
+            }
+            withContext(Dispatchers.IO) {
+                BlockStore.blockThread(app, threadId, address, displayName)
+            }
+            NotificationManagerCompat.from(app).cancel(address.hashCode())
+            _operationMessage.value = "$displayName بلاک شد"
+            loadConversations()
+            loadBlockedNumbers()
+            loadBlockedMessages()
+        }
+    }
+
     /** آنبلاک‌کردن یه شماره از داخل صفحه‌ی «شماره‌های بلاک‌شده» - دوباره تو لیست اصلی برمی‌گرده */
     fun unblockNumber(threadId: Long) {
         viewModelScope.launch {

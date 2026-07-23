@@ -6,14 +6,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.util.DateFormatter
@@ -22,32 +28,71 @@ import com.petro.smsapp.util.DateFormatter
 fun BlockedNumbersScreen(
     blockedNumbers: List<BlockedNumber>,
     onBack: () -> Unit,
-    onUnblock: (threadId: Long) -> Unit
+    onUnblock: (threadId: Long) -> Unit,
+    onAddNumberClick: () -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    // فیلتر سمت خودِ اپ (نه کوئری جدید) چون کل لیست شماره‌های بلاک‌شده معمولاً کوچیکه
+    // و از قبل توی حافظه‌ست - نیازی به رفت‌وبرگشت اضافه به دیتابیس نیست
+    val filteredNumbers = if (searchQuery.isBlank()) {
+        blockedNumbers
+    } else {
+        blockedNumbers.filter {
+            it.displayName.contains(searchQuery, ignoreCase = true) || it.address.contains(searchQuery)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("شماره‌های بلاک‌شده") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
+                },
+                actions = {
+                    IconButton(onClick = onAddNumberClick) {
+                        Icon(Icons.Filled.Add, contentDescription = "افزودن شماره‌ی بلاک")
+                    }
                 }
             )
         }
     ) { padding ->
-        if (blockedNumbers.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("هیچ شماره‌ای بلاک نیست", color = Color.Gray)
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (blockedNumbers.isNotEmpty()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("جستجوی نام یا شماره") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
+                )
             }
-        } else {
-            LazyColumn(modifier = Modifier.padding(padding)) {
-                items(blockedNumbers, key = { it.threadId }) { blocked ->
-                    BlockedNumberRow(blocked = blocked, onUnblock = { onUnblock(blocked.threadId) })
-                    Divider(modifier = Modifier.padding(start = 72.dp))
+
+            if (blockedNumbers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("هیچ شماره‌ای بلاک نیست", color = Color.Gray)
+                }
+            } else if (filteredNumbers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("چیزی پیدا نشد", color = Color.Gray)
+                }
+            } else {
+                LazyColumn {
+                    items(filteredNumbers, key = { it.threadId }) { blocked ->
+                        BlockedNumberRow(blocked = blocked, onUnblock = { onUnblock(blocked.threadId) })
+                        Divider(modifier = Modifier.padding(start = 72.dp))
+                    }
                 }
             }
         }

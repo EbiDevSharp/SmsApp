@@ -1,12 +1,17 @@
 package com.petro.smsapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,6 +24,8 @@ import com.petro.smsapp.util.DateFormatter
 /**
  * صفحه‌ی «پیامک‌های بلاک‌شده» - همه‌ی پیام‌های (قدیم + جدید) شماره‌های بلاک‌شده، فقط نمایشی.
  * برای برداشتن یه شماره از حالت بلاک، باید از صفحه‌ی «شماره‌های بلاک‌شده» اقدام کرد.
+ *
+ * متن پیام پیش‌فرض به ۲ خط محدوده؛ اگه بلندتر بود، با تک‌کلیک روی خودِ پیام کامل باز/بسته میشه.
  */
 @Composable
 fun BlockedMessagesScreen(
@@ -57,9 +64,12 @@ fun BlockedMessagesScreen(
 
 @Composable
 private fun BlockedMessageRow(entry: BlockedMessageEntry) {
+    var expanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { expanded = !expanded }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -75,7 +85,7 @@ private fun BlockedMessageRow(entry: BlockedMessageEntry) {
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = entry.message.body,
-                maxLines = 2,
+                maxLines = if (expanded) Int.MAX_VALUE else 2,
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodyMedium
             )
