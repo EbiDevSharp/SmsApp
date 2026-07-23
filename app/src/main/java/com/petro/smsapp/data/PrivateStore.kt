@@ -105,6 +105,14 @@ object PrivateStore {
         return hashPin(pin, salt) == storedHash
     }
 
+    /** حذف کامل رمز - دفعه‌ی بعد که کاربر وارد بخش خصوصی بشه، دوباره از اول یه رمز جدید می‌سازه */
+    fun removePin(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_PIN_HASH)
+            .remove(KEY_PIN_SALT)
+            .apply()
+    }
+
     private fun generateSalt(): String {
         val bytes = ByteArray(16)
         SecureRandom().nextBytes(bytes)

@@ -515,6 +515,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         _privateUnlocked.value = false
     }
 
+    /** حذف کامل رمز از صفحه‌ی تنظیمات رمز - بعدش خودکار قفل میشه (دفعه‌ی بعد باید رمز جدید بسازه) */
+    fun removePrivatePin() {
+        PrivateStore.removePin(getApplication())
+        lockPrivate()
+    }
+
     fun searchContacts(query: String) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { contactsRepository.searchContacts(query) }

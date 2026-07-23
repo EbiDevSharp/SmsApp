@@ -39,6 +39,7 @@ import com.petro.smsapp.ui.PlaceholderScreen
 import com.petro.smsapp.ui.PrivateMessagesScreen
 import com.petro.smsapp.ui.PrivateNumbersScreen
 import com.petro.smsapp.ui.PrivatePinScreen
+import com.petro.smsapp.ui.PrivatePinSettingsScreen
 import com.petro.smsapp.ui.PrivateScreen
 import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
@@ -407,7 +408,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                             navController.popBackStack()
                         },
                         onOpenPrivateMessages = { navController.navigate("private_messages") },
-                        onOpenPrivateNumbers = { navController.navigate("private_numbers") }
+                        onOpenPrivateNumbers = { navController.navigate("private_numbers") },
+                        onOpenPinSettings = { navController.navigate("private_pin_settings") }
                     )
                 } else {
                     PrivatePinScreen(
@@ -415,6 +417,20 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         onVerifyPin = { pin -> viewModel.verifyPrivatePin(pin) },
                         onSetPin = { pin -> viewModel.setPrivatePin(pin) },
                         onUnlocked = { viewModel.unlockPrivate() },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("private_pin_settings") {
+                // مسیر مستقیم بدون رد شدن از هاب - محافظت اضافه، اگه قفل بود برگرد عقب
+                LaunchedEffect(privateUnlocked) {
+                    if (!privateUnlocked) navController.popBackStack()
+                }
+                if (privateUnlocked) {
+                    PrivatePinSettingsScreen(
+                        onVerifyPin = { pin -> viewModel.verifyPrivatePin(pin) },
+                        onChangePin = { newPin -> viewModel.setPrivatePin(newPin) },
+                        onRemovePin = { viewModel.removePrivatePin() },
                         onBack = { navController.popBackStack() }
                     )
                 }

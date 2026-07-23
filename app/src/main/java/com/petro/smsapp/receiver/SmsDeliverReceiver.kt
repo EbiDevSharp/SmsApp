@@ -13,6 +13,7 @@ import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
 import com.petro.smsapp.data.BlockStore
 import com.petro.smsapp.data.ContactsCache
+import com.petro.smsapp.data.PrivateStore
 
 /**
  * وقتی اپ ما "پیش‌فرض پیامک" باشه، این ریسیور به جای سیستم پیام رو دریافت می‌کنه
@@ -50,6 +51,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             // قابل دیدن باشه) ولی هیچ نوتیف و هیچ صدایی نمیده، و از لیست اصلی هم مخفیه
             // (فیلترش توی SmsRepository.getConversations انجام میشه).
             if (BlockStore.isThreadBlocked(context, threadId)) {
+                return
+            }
+
+            // شماره‌ی خصوصی‌شده: دقیقاً همون منطق بلاک - پیام ذخیره میشه (برای صفحه‌ی
+            // «پیامک‌های خصوصی») ولی هیچ نوتیف/صدایی نمیده و از لیست اصلی مخفیه.
+            if (PrivateStore.isThreadPrivate(context, threadId)) {
                 return
             }
 
