@@ -296,6 +296,25 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * حذف دسته‌جمعی از داخل «پیامک‌های خصوصی» - دقیقاً همون منطق deleteBlockedMessages،
+     * فقط بعدش لیست خصوصی‌ها رو دوباره لود می‌کنه (چون این پیام‌ها هم ممکنه از چند شماره‌ی
+     * خصوصی‌شده‌ی مختلف باشن، نه فقط یه thread خاص).
+     */
+    fun deletePrivateMessages(messageIds: Set<Long>) {
+        if (messageIds.isEmpty()) return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.deleteMessages(messageIds) }
+            val base = if (result.movedToTrash) "پیام‌های انتخاب‌شده به سطل زباله منتقل شدن" else "پیام‌های انتخاب‌شده حذف شدن"
+            _operationMessage.value = if (result.blockedFavoriteCount > 0) {
+                "$base (${result.blockedFavoriteCount} پیام فیوریت‌شده به‌خاطر قفل بودن دست‌نخورده موند)"
+            } else {
+                base
+            }
+            loadPrivateMessages()
+        }
+    }
+
+    /**
      * حذف دسته‌جمعی چند مکالمه با هم - از حالت «انتخاب چندتایی» توی صفحه‌ی اصلی لیست پیام‌ها
      * (بعد از تائید کاربر توی دیالوگ حذف). نتیجه رو به‌صورت یه پیام کوتاه به کاربر نشون میده:
      * اینکه به سطل زباله رفتن یا واقعاً حذف شدن، و اگه چندتا پیام فیوریت (قفل) بودن که دست
@@ -542,6 +561,36 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             if (alreadyPrivateSkipped > 0) notes.add("$alreadyPrivateSkipped مخاطب از قبل خصوصی بودن")
             _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
 
+            loadConversations()
+            loadPrivateNumbers()
+            loadPrivateMessages()
+        }
+    }
+
+    /**
+     * خصوصی‌کردن مستقیم یه شماره از صفحه‌ی «افزودن شماره‌ی خصوصی» - دقیقاً هم‌خانواده‌ی
+     * blockNumber، فقط با PrivateStore. اگه شماره از قبل بلاک بوده، رد میشه (یه شماره
+     * نمی‌تونه هم‌زمان هم بلاک باشه هم خصوصی).
+     */
+    fun makePrivateNumber(address: String, displayName: String) {
+        if (address.isBlank()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            if (withContext(Dispatchers.IO) { PrivateStore.isAddressPrivate(app, address) }) {
+                _operationMessage.value = "این شماره از قبل خصوصی بود"
+                return@launch
+            }
+            val isBlocked = withContext(Dispatchers.IO) { BlockStore.isAddressBlocked(app, address) }
+            if (isBlocked) {
+                _operationMessage.value = "این شماره بلاکه - اول باید از بخش بلاک خارجش کنی"
+                return@launch
+            }
+            val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
+            withContext(Dispatchers.IO) {
+                PrivateStore.makePrivate(app, threadId, address, displayName)
+            }
+            NotificationManagerCompat.from(app).cancel(address.hashCode())
+            _operationMessage.value = "$displayName خصوصی شد"
             loadConversations()
             loadPrivateNumbers()
             loadPrivateMessages()

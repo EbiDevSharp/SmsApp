@@ -30,6 +30,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddBlockedNumberScreen
+import com.petro.smsapp.ui.AddPrivateNumberScreen
 import com.petro.smsapp.ui.BlockScreen
 import com.petro.smsapp.ui.BlockedMessagesScreen
 import com.petro.smsapp.ui.BlockedNumbersScreen
@@ -491,7 +492,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 if (privateUnlocked) {
                     PrivateMessagesScreen(
                         privateMessages = privateMessages,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onDeleteMessages = { messageIds -> viewModel.deletePrivateMessages(messageIds) }
                     )
                 }
             }
@@ -507,7 +509,28 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     PrivateNumbersScreen(
                         privateNumbers = privateNumbers,
                         onBack = { navController.popBackStack() },
-                        onRemovePrivate = { threadId -> viewModel.removePrivate(threadId) }
+                        onRemovePrivate = { threadId -> viewModel.removePrivate(threadId) },
+                        onAddNumberClick = {
+                            viewModel.prepareNewMessage()
+                            navController.navigate("private_add_number")
+                        }
+                    )
+                }
+            }
+            composable("private_add_number") {
+                // مسیر مستقیم بدون رد شدن از هاب - محافظت اضافه، اگه قفل بود برگرد عقب
+                LaunchedEffect(privateUnlocked) {
+                    if (!privateUnlocked) navController.popBackStack()
+                }
+                if (privateUnlocked) {
+                    AddPrivateNumberScreen(
+                        contacts = contacts,
+                        pickedContact = pickedContact,
+                        onPickedContactConsumed = { viewModel.consumePickedContact() },
+                        onPickFromContactsClick = onPickContactClick,
+                        onSearchChange = { query -> viewModel.searchContacts(query) },
+                        onMakePrivate = { address, displayName -> viewModel.makePrivateNumber(address, displayName) },
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }
