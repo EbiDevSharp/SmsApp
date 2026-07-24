@@ -17,62 +17,77 @@ data class PrivateNumber(
 )
 
 /**
- * خصوصی‌کردن بر اساس thread - دقیقاً همون ساختار BlockStore (هر شماره با کلید
- * private_<threadId> به JSON، به‌علاوه‌ی یه ایندکس جدا)، به‌علاوه‌ی مدیریت رمز ۴ رقمی
- * ورودِ کل بخش «خصوصی».
- *
- * وقتی یه thread خصوصی میشه:
- * - از لیست اصلی مکالمات (SmsRepository.getConversations) حذف میشه.
- * - همه‌ی پیام‌هاش (قدیم + جدید) فقط از پشتِ رمز ۴ رقمی، توی صفحه‌ی «پیامک‌های خصوصی» دیده میشن.
+ * خصوصی‌کردن بر اساس **شماره** - دقیقاً همون دلیل و ساختار BlockStore (نگاه کن به توضیحات
+ * اونجا). قبلاً بر اساس threadId بود و همون باگ رو داشت: اگه همه‌ی پیام‌های thread حذف
+ * بشن، ربطش با شماره قطع می‌شد.
  *
  * قانون مهم (طبق درخواست کاربر): یه شماره هم‌زمان نمی‌تونه هم بلاک باشه هم خصوصی؛ این
- * قانون توی SmsViewModel.blockConversations/makeConversationsPrivate رعایت میشه - قبل
- * از اضافه‌کردن به هرکدوم، وضعیتش تو اون‌یکی چک میشه و اگه بود، رد میشه.
+ * قانون توی SmsViewModel.blockConversations/makeConversationsPrivate رعایت میشه.
  *
  * رمز به‌صورت هش‌شده (SHA-256 + salt تصادفی) ذخیره میشه، نه متن ساده.
  */
 object PrivateStore {
     private const val PREFS_NAME = "private_store"
-    private const val KEY_INDEX = "private_thread_ids"
+    private const val KEY_INDEX = "private_address_keys"
     private const val KEY_PIN_HASH = "pin_hash"
     private const val KEY_PIN_SALT = "pin_salt"
 
-    fun isThreadPrivate(context: Context, threadId: Long): Boolean {
-        return ids(prefs(context)).contains(threadId.toString())
+    fun isAddressPrivate(context: Context, address: String): Boolean {
+        val key = normalize(address)
+        if (key.isBlank()) return false
+        return ids(prefs(context)).contains(key)
     }
 
-    fun makePrivate(context: Context, threadId: Long, address: String, displayName: String) {
+    /** برای جاهایی که فقط threadId در دسترسه (مثل UI قدیمی) - جستجو بر اساس متادیتا */
+    fun isThreadPrivate(context: Context, threadId: Long): Boolean {
+        return getAllPrivateNumbers(context).any { it.threadId == threadId }
+    }
+
+    /**
+     * خصوصی‌کردن یه شماره. اگه از قبل خصوصی بوده، هیچ کاری نمی‌کنه و false برمی‌گردونه؛
+     * اگه واقعاً تازه اضافه شد، true.
+     */
+    fun makePrivate(context: Context, threadId: Long, address: String, displayName: String): Boolean {
+        val key = normalize(address)
+        if (key.isBlank()) return false
         val p = prefs(context)
+        if (ids(p).contains(key)) return false
+
         val json = JSONObject().apply {
             put("threadId", threadId)
             put("address", address)
             put("displayName", displayName)
             put("madePrivateAt", System.currentTimeMillis())
         }
-        val updatedIds = ids(p).toMutableSet().apply { add(threadId.toString()) }
+        val updatedIds = ids(p).toMutableSet().apply { add(key) }
         p.edit()
-            .putString(key(threadId), json.toString())
+            .putString(entryKey(key), json.toString())
             .putStringSet(KEY_INDEX, updatedIds)
             .apply()
+        return true
     }
 
-    fun removePrivate(context: Context, threadId: Long) {
+    fun removePrivateByAddress(context: Context, address: String) {
+        val key = normalize(address)
+        if (key.isBlank()) return
         val p = prefs(context)
-        val updatedIds = ids(p).toMutableSet().apply { remove(threadId.toString()) }
+        val updatedIds = ids(p).toMutableSet().apply { remove(key) }
         p.edit()
-            .remove(key(threadId))
+            .remove(entryKey(key))
             .putStringSet(KEY_INDEX, updatedIds)
             .apply()
     }
 
-    fun getPrivateThreadIds(context: Context): Set<Long> {
-        return ids(prefs(context)).mapNotNull { it.toLongOrNull() }.toSet()
+    /** برای دکمه‌ی «حذف از خصوصی» توی UI که فعلاً فقط threadId داره */
+    fun removePrivate(context: Context, threadId: Long) {
+        val entry = getAllPrivateNumbers(context).find { it.threadId == threadId } ?: return
+        removePrivateByAddress(context, entry.address)
     }
 
     fun getAllPrivateNumbers(context: Context): List<PrivateNumber> {
         val p = prefs(context)
-        return ids(p).mapNotNull { idStr ->
-            p.getString(key(idStr.toLong()), null)?.let { jsonStr ->
+        return ids(p).mapNotNull { key ->
+            p.getString(entryKey(key), null)?.let { jsonStr ->
                 runCatching {
                     val obj = JSONObject(jsonStr)
                     PrivateNumber(
@@ -127,8 +142,14 @@ object PrivateStore {
 
     private fun ids(p: SharedPreferences): Set<String> = p.getStringSet(KEY_INDEX, emptySet()) ?: emptySet()
 
-    private fun key(threadId: Long) = "private_$threadId"
+    private fun entryKey(normalizedKey: String) = "private_$normalizedKey"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    /** هم‌خانواده‌ی نرمال‌سازی ContactsCache/BlockStore */
+    private fun normalize(number: String): String {
+        val digitsOnly = number.filter { it.isDigit() }
+        return if (digitsOnly.length > 9) digitsOnly.takeLast(9) else digitsOnly
+    }
 }

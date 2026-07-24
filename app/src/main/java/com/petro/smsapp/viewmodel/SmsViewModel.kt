@@ -404,35 +404,40 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             val blocked = mutableListOf<Conversation>()
-            var skippedCount = 0
+            var privateSkipped = 0
+            var alreadyBlockedSkipped = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
-                    if (PrivateStore.isThreadPrivate(app, conversation.threadId)) {
-                        skippedCount++
+                    if (PrivateStore.isAddressPrivate(app, conversation.address)) {
+                        privateSkipped++
                         return@forEach
                     }
-                    BlockStore.blockThread(
+                    val newlyBlocked = BlockStore.blockNumber(
                         app,
                         conversation.threadId,
                         conversation.address,
                         conversation.displayName
                     )
+                    if (!newlyBlocked) {
+                        alreadyBlockedSkipped++
+                        return@forEach
+                    }
                     // اگه نوتیف این شماره الان روی صفحه‌ست، بلافاصله پاک بشه - قبلاً صبر می‌کرد
                     // تا یه اتفاق دیگه (رفتن به چت دیگه) خودش پاکش کنه، که کند به‌نظر می‌رسید
                     NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
                     blocked.add(conversation)
                 }
             }
-            val base = if (blocked.size == 1) {
-                "${blocked.first().displayName} بلاک شد"
-            } else {
-                "${blocked.size} مخاطب بلاک شدن"
+            val base = when {
+                blocked.size == 1 -> "${blocked.first().displayName} بلاک شد"
+                blocked.isNotEmpty() -> "${blocked.size} مخاطب بلاک شدن"
+                else -> "هیچ مخاطب جدیدی بلاک نشد"
             }
-            _operationMessage.value = if (skippedCount > 0) {
-                "$base ($skippedCount مخاطب چون خصوصی بودن رد شدن)"
-            } else {
-                base
-            }
+            val notes = mutableListOf<String>()
+            if (privateSkipped > 0) notes.add("$privateSkipped مخاطب چون خصوصی بودن رد شدن")
+            if (alreadyBlockedSkipped > 0) notes.add("$alreadyBlockedSkipped مخاطب از قبل بلاک بودن")
+            _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
+
             loadConversations()
             loadBlockedNumbers()
             loadBlockedMessages()
@@ -449,14 +454,18 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         if (address.isBlank()) return
         viewModelScope.launch {
             val app = getApplication<Application>()
+            if (withContext(Dispatchers.IO) { BlockStore.isAddressBlocked(app, address) }) {
+                _operationMessage.value = "این شماره از قبل بلاک بود"
+                return@launch
+            }
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
-            val isPrivate = withContext(Dispatchers.IO) { PrivateStore.isThreadPrivate(app, threadId) }
+            val isPrivate = withContext(Dispatchers.IO) { PrivateStore.isAddressPrivate(app, address) }
             if (isPrivate) {
                 _operationMessage.value = "این شماره خصوصیه - اول باید از بخش خصوصی خارجش کنی"
                 return@launch
             }
             withContext(Dispatchers.IO) {
-                BlockStore.blockThread(app, threadId, address, displayName)
+                BlockStore.blockNumber(app, threadId, address, displayName)
             }
             NotificationManagerCompat.from(app).cancel(address.hashCode())
             _operationMessage.value = "$displayName بلاک شد"
@@ -501,33 +510,38 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             val madePrivate = mutableListOf<Conversation>()
-            var skippedCount = 0
+            var blockedSkipped = 0
+            var alreadyPrivateSkipped = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
-                    if (BlockStore.isThreadBlocked(app, conversation.threadId)) {
-                        skippedCount++
+                    if (BlockStore.isAddressBlocked(app, conversation.address)) {
+                        blockedSkipped++
                         return@forEach
                     }
-                    PrivateStore.makePrivate(
+                    val newlyPrivate = PrivateStore.makePrivate(
                         app,
                         conversation.threadId,
                         conversation.address,
                         conversation.displayName
                     )
+                    if (!newlyPrivate) {
+                        alreadyPrivateSkipped++
+                        return@forEach
+                    }
                     NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
                     madePrivate.add(conversation)
                 }
             }
-            val base = if (madePrivate.size == 1) {
-                "${madePrivate.first().displayName} خصوصی شد"
-            } else {
-                "${madePrivate.size} مخاطب خصوصی شدن"
+            val base = when {
+                madePrivate.size == 1 -> "${madePrivate.first().displayName} خصوصی شد"
+                madePrivate.isNotEmpty() -> "${madePrivate.size} مخاطب خصوصی شدن"
+                else -> "هیچ مخاطب جدیدی خصوصی نشد"
             }
-            _operationMessage.value = if (skippedCount > 0) {
-                "$base ($skippedCount مخاطب چون بلاک بودن رد شدن)"
-            } else {
-                base
-            }
+            val notes = mutableListOf<String>()
+            if (blockedSkipped > 0) notes.add("$blockedSkipped مخاطب چون بلاک بودن رد شدن")
+            if (alreadyPrivateSkipped > 0) notes.add("$alreadyPrivateSkipped مخاطب از قبل خصوصی بودن")
+            _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
+
             loadConversations()
             loadPrivateNumbers()
             loadPrivateMessages()

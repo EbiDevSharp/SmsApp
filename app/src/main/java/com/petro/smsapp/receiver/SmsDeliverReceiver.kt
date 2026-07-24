@@ -53,15 +53,15 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
 
             // شماره‌ی بلاک‌شده: پیام همچنان ذخیره میشه (تا توی صفحه‌ی «پیامک‌های بلاک‌شده»
-            // قابل دیدن باشه) ولی هیچ نوتیف و هیچ صدایی نمیده، و از لیست اصلی هم مخفیه
-            // (فیلترش توی SmsRepository.getConversations انجام میشه).
-            if (BlockStore.isThreadBlocked(context, threadId)) {
+            // قابل دیدن باشه) ولی هیچ نوتیف و هیچ صدایی نمیده، و از لیست اصلی هم مخفیه.
+            // این چک بر اساس خودِ شماره‌ست، نه threadId - چون threadId می‌تونه با حذف پیام‌ها
+            // عوض/گم بشه ولی شماره همیشه همون شماره‌ست.
+            if (BlockStore.isAddressBlocked(context, sender)) {
                 return
             }
 
-            // شماره‌ی خصوصی‌شده: دقیقاً همون منطق بلاک - پیام ذخیره میشه (برای صفحه‌ی
-            // «پیامک‌های خصوصی») ولی هیچ نوتیف/صدایی نمیده و از لیست اصلی مخفیه.
-            if (PrivateStore.isThreadPrivate(context, threadId)) {
+            // شماره‌ی خصوصی‌شده: دقیقاً همون منطق بلاک.
+            if (PrivateStore.isAddressPrivate(context, sender)) {
                 return
             }
 

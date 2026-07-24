@@ -57,11 +57,9 @@ class SmsRepository(private val context: Context) {
      */
     fun getConversations(): List<Conversation> {
         if (!requireReadSmsPermission("خواندن لیست مکالمات")) return emptyList()
-        val blockedThreadIds = BlockStore.getBlockedThreadIds(context)
-        val privateThreadIds = PrivateStore.getPrivateThreadIds(context)
         val threadMeta = getAllThreadsMeta()
         val conversations = threadMeta
-            .filterKeys { it !in blockedThreadIds && it !in privateThreadIds }
+            .filterValues { meta -> !BlockStore.isAddressBlocked(context, meta.address) && !PrivateStore.isAddressPrivate(context, meta.address) }
             .map { (threadId, meta) ->
                 val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
                 Conversation(
@@ -161,29 +159,59 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
-     * همه‌ی پیام‌های همه‌ی thread های بلاک‌شده رو با هم برمی‌گردونه (جدیدترین بالا)، به‌همراه
-     * اسمی که موقع بلاک‌کردن ذخیره شده بود - برای صفحه‌ی «پیامک‌های بلاک‌شده».
+     * همه‌ی پیام‌های همه‌ی شماره‌های بلاک‌شده رو با هم برمی‌گردونه (جدیدترین بالا)، مستقیم
+     * بر اساس آدرس (نه threadId) - چون اگه یه thread خالی بشه (همه‌ی پیام‌هاش حذف/سطل‌زباله
+     * بشن)، اندروید ممکنه اون threadId رو دیگه نگه نداره یا برای پیام بعدی یه threadId
+     * جدید بسازه؛ ولی آدرس همیشه همون آدرسه.
      */
     fun getMessagesForBlockedThreads(): List<BlockedMessageEntry> {
         val blockedNumbers = BlockStore.getAllBlockedNumbers(context)
-        val nameByThread = blockedNumbers.associate { it.threadId to it.displayName }
-        return blockedNumbers
-            .flatMap { blocked -> getMessagesForThread(blocked.threadId) }
-            .map { message -> BlockedMessageEntry(message, nameByThread[message.threadId] ?: message.address) }
-            .sortedByDescending { it.message.date }
+        if (blockedNumbers.isEmpty()) return emptyList()
+        return getMessagesByAddresses(blockedNumbers.map { it.address })
+            .map { message ->
+                val name = blockedNumbers.find { it.address == message.address }?.displayName ?: message.address
+                BlockedMessageEntry(message, name)
+            }
     }
 
     /**
-     * همه‌ی پیام‌های همه‌ی thread های خصوصی‌شده رو با هم برمی‌گردونه (جدیدترین بالا) -
-     * برای صفحه‌ی «پیامک‌های خصوصی» (پشتِ رمز ۴ رقمی).
+     * همه‌ی پیام‌های همه‌ی شماره‌های خصوصی‌شده رو با هم برمی‌گردونه (جدیدترین بالا)، مستقیم
+     * بر اساس آدرس - برای صفحه‌ی «پیامک‌های خصوصی» (پشتِ رمز ۴ رقمی).
      */
     fun getMessagesForPrivateThreads(): List<PrivateMessageEntry> {
         val privateNumbers = PrivateStore.getAllPrivateNumbers(context)
-        val nameByThread = privateNumbers.associate { it.threadId to it.displayName }
-        return privateNumbers
-            .flatMap { private -> getMessagesForThread(private.threadId) }
-            .map { message -> PrivateMessageEntry(message, nameByThread[message.threadId] ?: message.address) }
-            .sortedByDescending { it.message.date }
+        if (privateNumbers.isEmpty()) return emptyList()
+        return getMessagesByAddresses(privateNumbers.map { it.address })
+            .map { message ->
+                val name = privateNumbers.find { it.address == message.address }?.displayName ?: message.address
+                PrivateMessageEntry(message, name)
+            }
+    }
+
+    /** خوندن مستقیم پیام‌ها بر اساس لیست آدرس (نه threadId) - سطل‌زباله همچنان فیلتر میشه */
+    private fun getMessagesByAddresses(addresses: List<String>): List<SmsMessage> {
+        if (!requireReadSmsPermission("خواندن پیامک‌های بلاک/خصوصی‌شده")) return emptyList()
+        if (addresses.isEmpty()) return emptyList()
+        val trashedIds = TrashStore.getTrashedIds(context)
+        val messages = mutableListOf<SmsMessage>()
+        val selection = addresses.joinToString(" OR ") { "${Telephony.Sms.ADDRESS} = ?" }
+        val selectionArgs = addresses.toTypedArray()
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI, null, selection, selectionArgs,
+                "${Telephony.Sms.DATE} DESC"
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val message = cursorToMessage(cursor)
+                    if (message.id in trashedIds) continue
+                    messages.add(message)
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیامک‌های بلاک/خصوصی‌شده", e)
+            return emptyList()
+        }
+        return messages
     }
 
     /**

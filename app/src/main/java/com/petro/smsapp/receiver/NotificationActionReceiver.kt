@@ -45,13 +45,17 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val address = intent.getStringExtra(EXTRA_ADDRESS)
                 if (threadId != -1L && address != null) {
                     val displayName = ContactsCache.getName(context, address) ?: address
-                    BlockStore.blockThread(context, threadId, address, displayName)
+                    val wasNewlyBlocked = BlockStore.blockNumber(context, threadId, address, displayName)
                     // چون این تغییر فقط SharedPreferences رو عوض می‌کنه (نه SMS Provider)،
                     // ContentObserver خودکار متوجهش نمیشه - این سیگنال به ViewModel خبر میده
                     // که لیست مکالمات رو دوباره لود کنه (وگرنه تا یه اتفاق دیگه‌ای پیش نیاد،
                     // این مخاطب همچنان توی لیست اصلی دیده می‌شد).
                     DataChangeSignal.notifyChanged()
-                    Log.d("NotifAction", "thread $threadId بلاک شد")
+                    if (wasNewlyBlocked) {
+                        Log.d("NotifAction", "شماره $address بلاک شد")
+                    } else {
+                        Log.d("NotifAction", "شماره $address از قبل بلاک بود، تغییری اعمال نشد")
+                    }
                 }
             }
             ACTION_REPLY -> {
