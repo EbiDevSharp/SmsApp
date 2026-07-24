@@ -48,6 +48,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _messages = MutableStateFlow<List<SmsMessage>>(emptyList())
     val messages: StateFlow<List<SmsMessage>> = _messages.asStateFlow()
 
+    // متن پیش‌نویسِ thread فعلاً بازشده - برای پرکردن خودکار کادر متن موقع ورود به چت
+    private val _draftText = MutableStateFlow("")
+    val draftText: StateFlow<String> = _draftText.asStateFlow()
+
     private val _contacts = MutableStateFlow<List<ContactInfo>>(emptyList())
     val contacts: StateFlow<List<ContactInfo>> = _contacts.asStateFlow()
 
@@ -173,6 +177,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             // واقعاً ندیده بود به‌اشتباه خوانده‌شده ثبت می‌شد.
             val result = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
             _messages.value = result
+            _draftText.value = withContext(Dispatchers.IO) { repository.getDraftText(threadId) }
 
             val marked = withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
             if (!marked) {
@@ -208,6 +213,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     fun clearOpenThread() {
         openThreadId = null
         ActiveThreadTracker.activeThreadId = null
+        _draftText.value = ""
     }
 
     /**
@@ -234,6 +240,34 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.sendSms(address, body, subscriptionId) }
             loadThread(threadId)
+            loadConversations()
+        }
+    }
+
+    /**
+     * ذخیره‌ی متنِ نوشته‌نشده‌ی صفحه‌ی چت به‌عنوان پیش‌نویس - از ThreadScreen موقع خروج از
+     * صفحه (چه با دکمه‌ی برگشت، چه با رفتن سراغ یه مکالمه‌ی دیگه) صدا زده میشه. اگه body
+     * خالی باشه (یعنی یا چیزی تایپ نشده بوده یا کاربر همین الان پیام رو فرستاده)، هر
+     * پیش‌نویس قبلیِ این thread هم پاک میشه.
+     */
+    fun saveDraft(threadId: Long, address: String, body: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.saveDraft(threadId, address, body) }
+            loadConversations()
+        }
+    }
+
+    /**
+     * ارسال دوباره‌ی یه پیامِ ناموفق (STATUS_FAILED) - ردیف قدیمی رو پاک می‌کنه و دوباره
+     * با همون آدرس/متن ارسال می‌کنه، انگار کاربر همین الان پیام رو نوشته.
+     */
+    fun resendMessage(message: SmsMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.deleteMessage(message.id)
+                repository.sendSms(message.address, message.body, null)
+            }
+            loadThread(message.threadId)
             loadConversations()
         }
     }

@@ -204,6 +204,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val navController = rememberNavController()
     val conversations by viewModel.conversations.collectAsState()
     val messages by viewModel.messages.collectAsState()
+    val draftText by viewModel.draftText.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val newTarget by viewModel.newConversationTarget.collectAsState()
     val pickedContact by viewModel.pickedContact.collectAsState()
@@ -251,7 +252,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
             navController.navigate("list") {
                 popUpTo("list") { inclusive = true }
             }
-            navController.navigate("thread/${target.threadId}/${target.address}/${target.displayName}")
+            navController.navigate("thread/${target.threadId}/${Uri.encode(target.address)}/${Uri.encode(target.displayName)}")
             viewModel.consumeNewConversationTarget()
         }
     }
@@ -280,8 +281,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 ConversationListScreen(
                     conversations = conversations,
                     onConversationClick = { conversation ->
-                        viewModel.loadThread(conversation.threadId)
-                        navController.navigate("thread/${conversation.threadId}/${conversation.address}/${conversation.displayName}")
+                        // گارد اضافه: حتی اگه یه‌جای دیگه‌ی کد یه Conversation با آدرس خالی
+                        // ساخته بشه، دیگه crash نمی‌کنیم - فقط وارد چتش نمیشیم
+                        if (conversation.address.isNotBlank()) {
+                            viewModel.loadThread(conversation.threadId)
+                            navController.navigate("thread/${conversation.threadId}/${Uri.encode(conversation.address)}/${Uri.encode(conversation.displayName)}")
+                        }
                     },
                     onComposeClick = {
                         viewModel.prepareNewMessage()
@@ -330,9 +335,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     messages = messages,
                     sims = sims,
                     favoriteIds = favoriteIds,
+                    initialDraft = draftText,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
                     onDeleteMessages = { messageIds -> viewModel.deleteMessages(threadId, messageIds) },
+                    onResend = { message -> viewModel.resendMessage(message) },
+                    onLeaveWithDraft = { text -> viewModel.saveDraft(threadId, address, text) },
                     onOpenNote = { text ->
                         viewModel.openNote(text)
                         navController.navigate("note")
@@ -374,7 +382,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onBack = { navController.popBackStack() },
                     onItemClick = { favorite ->
                         viewModel.loadThread(favorite.threadId)
-                        navController.navigate("thread/${favorite.threadId}/${favorite.address}/${favorite.displayName}")
+                        navController.navigate("thread/${favorite.threadId}/${Uri.encode(favorite.address)}/${Uri.encode(favorite.displayName)}")
                     },
                     onRemoveFavorite = { messageId -> viewModel.removeFavorite(messageId) }
                 )

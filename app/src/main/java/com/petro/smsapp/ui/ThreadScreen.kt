@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -49,14 +50,40 @@ fun ThreadScreen(
     messages: List<SmsMessage>,
     sims: List<SimInfo>,
     favoriteIds: Set<Long>,
+    // متن پیش‌نویسِ ذخیره‌شده‌ی همین مکالمه (اگه بود) - برای پرکردن خودکار کادر متن
+    initialDraft: String = "",
     onSend: (body: String, subscriptionId: Int?) -> Unit,
     onDeleteMessage: (messageId: Long) -> Unit,
     onDeleteMessages: (Set<Long>) -> Unit,
     onOpenNote: (text: String) -> Unit,
     onToggleFavorite: (message: SmsMessage) -> Unit,
+    onResend: (message: SmsMessage) -> Unit,
+    // موقع خروج از صفحه (هر دلیلی) با متنِ فعلیِ کادر صدا زده میشه - پیاده‌سازی این تابع
+    // تصمیم می‌گیره ذخیره کنه (اگه متنی بود) یا پیش‌نویس قبلی رو پاک کنه (اگه خالی بود)
+    onLeaveWithDraft: (text: String) -> Unit,
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
+    // initialDraft از دیتابیس async لود میشه، پس ممکنه دیرتر از اولین رندر برسه. این فلگ
+    // مطمئن میشه فقط یه‌بار (همون لحظه‌ای که مقدار واقعی رسید) اعمال بشه، و فقط اگه کاربر
+    // خودش قبلش چیزی تایپ نکرده باشه - وگرنه ممکنه تایپِ کاربر رو با پیش‌نویسِ قدیمی پاک کنه.
+    var draftApplied by remember { mutableStateOf(false) }
+    LaunchedEffect(initialDraft) {
+        if (!draftApplied) {
+            draftApplied = true
+            if (input.isBlank() && initialDraft.isNotBlank()) {
+                input = initialDraft
+            }
+        }
+    }
+    // موقع خروج از صفحه (به هر دلیلی: برگشت، رفتن سراغ مکالمه‌ی دیگه، بستن اپ) با آخرین
+    // متنِ کادر ذخیره میشه - rememberUpdatedState لازمه چون onDispose خودِ لامبدای اولیه رو
+    // با مقدار input در همون لحظه‌ی composition اول capture می‌کنه، نه مقدار لحظه‌ی خروج.
+    val latestInput = rememberUpdatedState(input)
+    val latestOnLeave = rememberUpdatedState(onLeaveWithDraft)
+    DisposableEffect(Unit) {
+        onDispose { latestOnLeave.value(latestInput.value) }
+    }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
     var selectedMessage by remember { mutableStateOf<SmsMessage?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
@@ -242,6 +269,7 @@ fun ThreadScreen(
                         selectionMode = selectionMode,
                         isSelected = selectedIds.contains(message.id),
                         fontScale = fontScale,
+                        onResend = { onResend(message) },
                         onClick = {
                             if (selectionMode) {
                                 selectedIds = if (selectedIds.contains(message.id)) {
@@ -274,6 +302,7 @@ private fun MessageBubble(
     selectionMode: Boolean,
     isSelected: Boolean,
     fontScale: Float,
+    onResend: () -> Unit,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onLongClick: () -> Unit
@@ -348,6 +377,29 @@ private fun MessageBubble(
                         contentDescription = "فیوریت‌شده",
                         tint = Color(0xFFFFC107),
                         modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            // نشانِ «ارسال نشد» - فقط برای پیام‌های ارسالیِ ناموفق (مثلاً به‌خاطر نبود آنتن).
+            // با زدن روش، دوباره با همون متن/آدرس فرستاده میشه.
+            if (message.isFailed) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .combinedClickable(onClick = onResend, onLongClick = {})
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ErrorOutline,
+                        contentDescription = "ارسال نشد",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "ارسال نشد - برای ارسال دوباره بزن",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }

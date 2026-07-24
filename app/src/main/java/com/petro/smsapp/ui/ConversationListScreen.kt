@@ -265,7 +265,12 @@ private fun ConversationRow(
             Text(
                 text = conversation.snippet,
                 maxLines = 1,
-                color = if (conversation.unreadCount > 0) Color.Black else Color.Gray,
+                color = when {
+                    conversation.isDraft -> MaterialTheme.colorScheme.error
+                    conversation.unreadCount > 0 -> Color.Black
+                    else -> Color.Gray
+                },
+                fontWeight = if (conversation.isDraft) FontWeight.Medium else FontWeight.Normal,
                 style = MaterialTheme.typography.bodyMedium
             )
         }

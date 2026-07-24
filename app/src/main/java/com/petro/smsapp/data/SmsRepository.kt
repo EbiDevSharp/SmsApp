@@ -58,23 +58,48 @@ class SmsRepository(private val context: Context) {
     fun getConversations(): List<Conversation> {
         if (!requireReadSmsPermission("خواندن لیست مکالمات")) return emptyList()
         val threadMeta = getAllThreadsMeta()
-        val conversations = threadMeta
-            .filterValues { meta -> !BlockStore.isAddressBlocked(context, meta.address) && !PrivateStore.isAddressPrivate(context, meta.address) }
-            .map { (threadId, meta) ->
-                val displayName = ContactsCache.getName(context, meta.address) ?: meta.address
-                Conversation(
-                    threadId = threadId,
-                    address = meta.address,
-                    displayName = displayName,
-                    snippet = meta.snippet,
-                    date = meta.date,
-                    unreadCount = meta.unreadCount
-                )
+        val drafts = getAllDrafts()
+
+        // اتحاد threadId هایی که پیام واقعی دارن + threadId هایی که فقط پیش‌نویس دارن
+        // (مثلاً مکالمه‌ی جدیدی که کاربر شروع کرده ولی هنوز چیزی نفرستاده)
+        val allThreadIds = threadMeta.keys + drafts.keys
+
+        val conversations = allThreadIds.mapNotNull { threadId ->
+            val meta = threadMeta[threadId]
+            val draft = drafts[threadId]
+
+            // آدرس رو ترجیحاً از آخرین پیام واقعی می‌گیریم؛ اگه thread فقط پیش‌نویس داره،
+            // از آدرس خودِ ردیف پیش‌نویس استفاده می‌کنیم. اگه هیچ‌کدوم آدرس معتبر نداشتن
+            // (مثلاً پیش‌نویسِ بی‌آدرس - همون موردی که قبلاً کرش می‌کرد)، این thread رو
+            // اصلاً نشون نمی‌دیم؛ چون بدون آدرس نه می‌شه مخاطب رو شناخت نه می‌شه وارد چتش شد.
+            val address = meta?.address?.takeIf { it.isNotBlank() }
+                ?: draft?.address?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+
+            if (BlockStore.isAddressBlocked(context, address) || PrivateStore.isAddressPrivate(context, address)) {
+                return@mapNotNull null
             }
+
+            val displayName = ContactsCache.getName(context, address) ?: address
+
+            Conversation(
+                threadId = threadId,
+                address = address,
+                displayName = displayName,
+                // اگه پیش‌نویس داریم، همیشه اون به‌عنوان snippet نشون داده میشه (دقیقاً رفتار
+                // گوگل مسیجز) - نه متن آخرین پیام واقعی، چون پیش‌نویس چیزیه که کاربر همین الان
+                // وسط نوشتنشه و بیشتر به کارش میاد.
+                snippet = draft?.let { "پیش‌نویس: ${it.body}" } ?: (meta?.snippet ?: ""),
+                date = maxOf(meta?.date ?: 0L, draft?.date ?: 0L),
+                unreadCount = meta?.unreadCount ?: 0,
+                isDraft = draft != null
+            )
+        }
         return conversations.sortedByDescending { it.date }
     }
 
     private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val snippet: String)
+    private data class DraftMeta(val address: String, val body: String, val date: Long)
 
     /**
      * یه پاس روی کل جدول sms (مرتب‌شده بر اساس DATE نزولی) تا برای هر thread، آخرین آدرس/
@@ -82,6 +107,11 @@ class SmsRepository(private val context: Context) {
      * بسازیم. پیام‌های توی سطل زباله (TrashStore) کاملاً نادیده گرفته میشن - نه تو محاسبه‌ی
      * جدیدترین پیام دخیلن، نه تو شمارش نخونده‌ها؛ اگه یه thread فقط پیام سطل‌زباله‌ای داشته
      * باشه، اصلاً توی نتیجه نمیاد (یعنی از لیست مکالمات ناپدید میشه، درست مثل حذف واقعی).
+     *
+     * پیام‌های نوع DRAFT هم اینجا کاملاً نادیده گرفته میشن - قبلاً نادیده گرفته نمی‌شدن و همین
+     * باعث می‌شد اگه آخرین ردیفِ یه thread پیش‌نویس بود، متنش به‌جای آخرین پیامِ واقعی نشون داده
+     * بشه (و چون ADDRESS پیش‌نویس گاهی خالیه، مکالمه «ناشناس» و باز کردنش کرش می‌کرد). پیش‌نویس‌ها
+     * الان جدا توی getAllDrafts مدیریت میشن.
      */
     private fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
         val result = mutableMapOf<Long, ThreadMeta>()
@@ -92,7 +122,7 @@ class SmsRepository(private val context: Context) {
                 Telephony.Sms.CONTENT_URI,
                 arrayOf(
                     Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
-                    Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY
+                    Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY, Telephony.Sms.TYPE
                 ),
                 null, null,
                 "${Telephony.Sms.DATE} DESC"
@@ -103,8 +133,10 @@ class SmsRepository(private val context: Context) {
                 val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
                 val readIdx = cursor.getColumnIndex(Telephony.Sms.READ)
                 val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
+                val typeIdx = cursor.getColumnIndex(Telephony.Sms.TYPE)
                 while (cursor.moveToNext()) {
                     if (cursor.getLong(idIdx) in trashedIds) continue
+                    if (typeIdx >= 0 && cursor.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT) continue
 
                     val threadId = cursor.getLong(threadIdIdx)
                     if (cursor.getInt(readIdx) == 0) {
@@ -129,6 +161,94 @@ class SmsRepository(private val context: Context) {
     }
 
     /**
+     * پیش‌نویس‌ها (Telephony.Sms.MESSAGE_TYPE_DRAFT) جدا و مستقل از پیام‌های واقعی خونده میشن -
+     * برای هر thread حداکثر یه پیش‌نویس نگه می‌داریم (جدیدترینش، اگه چندتا بود).
+     */
+    private fun getAllDrafts(): Map<Long, DraftMeta> {
+        val result = mutableMapOf<Long, DraftMeta>()
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
+                "${Telephony.Sms.TYPE} = ?",
+                arrayOf(Telephony.Sms.MESSAGE_TYPE_DRAFT.toString()),
+                "${Telephony.Sms.DATE} DESC"
+            )?.use { cursor ->
+                val threadIdIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
+                val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
+                val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
+                val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
+                while (cursor.moveToNext()) {
+                    val threadId = cursor.getLong(threadIdIdx)
+                    val body = cursor.getStringOrNull(bodyIdx) ?: ""
+                    if (body.isBlank()) continue // پیش‌نویس خالی، چیزی برای نشون‌دادن نیست
+                    if (!result.containsKey(threadId)) { // نزولیه، اولین‌بار = جدیدترین
+                        result[threadId] = DraftMeta(
+                            address = cursor.getStringOrNull(addressIdx) ?: "",
+                            body = body,
+                            date = cursor.getLong(dateIdx)
+                        )
+                    }
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیش‌نویس‌ها", e)
+            return emptyMap()
+        }
+        return result
+    }
+
+    /** خواندن متن پیش‌نویسِ یک thread مشخص - برای پرکردن خودکار کادر متن وقتی وارد چتش میشیم */
+    fun getDraftText(threadId: Long): String {
+        if (!requireReadSmsPermission("خواندن پیش‌نویس")) return ""
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms.BODY),
+                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} = ?",
+                arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_DRAFT.toString()),
+                "${Telephony.Sms.DATE} DESC"
+            )?.use { cursor ->
+                val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
+                if (cursor.moveToFirst()) return cursor.getStringOrNull(bodyIdx) ?: ""
+            }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیش‌نویسِ یک مکالمه", e)
+        }
+        return ""
+    }
+
+    /**
+     * ذخیره/آپدیت/حذفِ پیش‌نویسِ یک thread، دقیقاً هماهنگ با رفتار اپ‌های پیامک استاندارد:
+     * - اگه body خالی باشه، هر پیش‌نویس قبلی این thread پاک میشه (چیزی برای نگه‌داشتن نیست).
+     * - اگه body چیزی داشته باشه، اول پیش‌نویس(های) قبلیِ همین thread پاک میشن (تا تکراری نشه)
+     *   بعد یه ردیف DRAFT جدید با متن تازه درج میشه.
+     */
+    fun saveDraft(threadId: Long, address: String, body: String) {
+        if (!requireDefaultSmsApp("ذخیره‌ی پیش‌نویس")) return
+        try {
+            context.contentResolver.delete(
+                Telephony.Sms.CONTENT_URI,
+                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} = ?",
+                arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
+            )
+            if (body.isNotBlank()) {
+                val values = ContentValues().apply {
+                    put(Telephony.Sms.THREAD_ID, threadId)
+                    put(Telephony.Sms.ADDRESS, address)
+                    put(Telephony.Sms.BODY, body)
+                    put(Telephony.Sms.DATE, System.currentTimeMillis())
+                    put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_DRAFT)
+                    put(Telephony.Sms.READ, 1)
+                }
+                context.contentResolver.insert(Telephony.Sms.CONTENT_URI, values)
+            }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع ذخیره‌ی پیش‌نویس", e)
+        }
+    }
+
+    /**
      * خواندن همه پیام‌های یک مکالمه (thread) به ترتیب زمانی - پیام‌های توی سطل زباله
      * فیلتر میشن، همون‌طور که تو getConversations هم فیلتر میشن.
      */
@@ -137,8 +257,10 @@ class SmsRepository(private val context: Context) {
         val messages = mutableListOf<SmsMessage>()
         val trashedIds = TrashStore.getTrashedIds(context)
         val uri = Telephony.Sms.CONTENT_URI
-        val selection = "${Telephony.Sms.THREAD_ID} = ?"
-        val selectionArgs = arrayOf(threadId.toString())
+        // پیش‌نویس رو از لیست پیام‌های واقعی مکالمه کنار می‌ذاریم - پیش‌نویس حباب چت نیست،
+        // فقط توی کادر متنِ پایین صفحه (از طریق getDraftText) برمی‌گرده
+        val selection = "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} != ?"
+        val selectionArgs = arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
 
         try {
             context.contentResolver.query(

@@ -1,12 +1,17 @@
 package com.petro.smsapp.data
 
+import android.provider.Telephony
+
 data class Conversation(
     val threadId: Long,
     val address: String,
     val displayName: String,
     val snippet: String,
     val date: Long,
-    val unreadCount: Int
+    val unreadCount: Int,
+    // یعنی snippet در واقع متن یه پیش‌نویسه (نه آخرین پیام واقعی ارسال/دریافت‌شده) -
+    // برای نمایش رنگ/لیبل متفاوت توی لیست مکالمات (شبیه گوگل مسیجز)
+    val isDraft: Boolean = false
 )
 
 data class SmsMessage(
@@ -26,6 +31,9 @@ data class SmsMessage(
     val deliveredAt: Long = 0L
 ) {
     val isDelivered: Boolean get() = isOutgoing && status == 0
+    // پیام ارسالیِ ناموفق (مثلاً به‌خاطر قطعی آنتن) - SmsStatusReceiver این وضعیت رو
+    // بعد از خطای ارسال روی ردیف ست می‌کنه، اینجا فقط برای نمایش تویUI می‌خونیمش
+    val isFailed: Boolean get() = isOutgoing && status == Telephony.Sms.STATUS_FAILED
 }
 
 /**
