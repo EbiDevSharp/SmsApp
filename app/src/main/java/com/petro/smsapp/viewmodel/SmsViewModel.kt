@@ -258,14 +258,45 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * ارسال دوباره‌ی یه پیامِ ناموفق (STATUS_FAILED) - ردیف قدیمی رو پاک می‌کنه و دوباره
-     * با همون آدرس/متن ارسال می‌کنه، انگار کاربر همین الان پیام رو نوشته.
+     * ذخیره‌ی درفت موقع خروج از صفحه‌ی «پیام جدید» - برای مخاطبی که هنوز thread ای باهاش
+     * وجود نداره (تا حالا چت نکردیم). برخلاف saveDraft بالا (که threadId رو از قبل داره،
+     * چون از داخل یه چتِ موجود صدا زده میشه)، اینجا threadId رو باید همین‌جا با
+     * getOrCreateThreadId بسازیم - دقیقاً همون کاری که «پیام جدید» موقع ارسالِ واقعی هم
+     * می‌کنه. اگه body خالی باشه، کاری لازم نیست بکنیم: چون thread ای که فقط برای ذخیره‌ی
+     * یه درفتِ خالی ساخته بشه، getConversations اصلاً نشونش نمی‌ده (نه meta داره نه drafts).
+     */
+    fun saveDraftForNewConversation(address: String, displayName: String, body: String) {
+        // اگه چیزی تایپ نشده، نیازی به ساختنِ thread نیست - چیزی برای نگه‌داشتن وجود نداره
+        if (address.isBlank() || body.isBlank()) return
+        viewModelScope.launch {
+            val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
+            if (threadId == 0L) return@launch
+            withContext(Dispatchers.IO) { repository.saveDraft(threadId, address, body) }
+            loadConversations()
+        }
+    }
+
+    /**
+     * ارسال دوباره‌ی یه پیامِ ناموفق (STATUS_FAILED یا TYPE=FAILED) - ردیف قدیمی رو پاک
+     * می‌کنه و دوباره با همون آدرس/متن/سیم ارسال می‌کنه، انگار کاربر همین الان پیام رو نوشته.
+     *
+     * دو تا نکته که قبلاً رعایت نمی‌شدن:
+     * ۱) اگه پیامِ ناموفق فیوریت‌شده (قفل) باشه، deleteMessage اون رو پاک نمی‌کنه (false
+     *    برمی‌گردونه)؛ قبلاً این نتیجه چک نمی‌شد و کد بدون توجه به شکست حذف، بازم پیامِ
+     *    جدید رو می‌فرستاد - نتیجه‌ش دو تا ردیف (هم قدیمیِ فیل‌شده‌ی قفل، هم جدید) بود.
+     *    الان اگه حذف نشه، اصلاً ارسال دوباره انجام نمیشه و به کاربر اطلاع داده میشه.
+     * ۲) قبلاً همیشه subscriptionId=null (یعنی سیمِ پیش‌فرضِ سیستم) پاس داده می‌شد؛ الان از
+     *    روی همون سیمی که پیام اولش باهاش امتحان شده بود (message.subscriptionId) دوباره می‌فرسته.
      */
     fun resendMessage(message: SmsMessage) {
         viewModelScope.launch {
+            val deleted = withContext(Dispatchers.IO) { repository.deleteMessage(message.id) }
+            if (!deleted) {
+                _operationMessage.value = "این پیام به علاقه‌مندی‌ها اضافه شده و قفله. برای ارسال دوباره، اول از علاقه‌مندی‌ها بردارش."
+                return@launch
+            }
             withContext(Dispatchers.IO) {
-                repository.deleteMessage(message.id)
-                repository.sendSms(message.address, message.body, null)
+                repository.sendSms(message.address, message.body, message.subscriptionId.takeIf { it >= 0 })
             }
             loadThread(message.threadId)
             loadConversations()

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -64,14 +65,18 @@ fun ThreadScreen(
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
-    // initialDraft از دیتابیس async لود میشه، پس ممکنه دیرتر از اولین رندر برسه. این فلگ
-    // مطمئن میشه فقط یه‌بار (همون لحظه‌ای که مقدار واقعی رسید) اعمال بشه، و فقط اگه کاربر
-    // خودش قبلش چیزی تایپ نکرده باشه - وگرنه ممکنه تایپِ کاربر رو با پیش‌نویسِ قدیمی پاک کنه.
+    // initialDraft از دیتابیس async لود میشه، پس اولین باری که این Composable با این پارامتر
+    // اجرا میشه معمولاً هنوز "" (مقدار اولیه‌ی StateFlow) هست و متن واقعیِ درفت چند میلی‌ثانیه
+    // بعد می‌رسه. قبلاً draftApplied همون بار اول (با مقدار خالی) true می‌شد، پس وقتی متن
+    // واقعی می‌رسید دیگه اعمال نمی‌شد - نتیجه‌ش این بود که کادر متن خالی می‌موند، و موقع خروج
+    // از صفحه همون مقدار خالی به‌عنوان درفت جدید ذخیره می‌شد که عملاً درفت واقعی رو پاک می‌کرد.
+    // الان draftApplied فقط وقتی true میشه که واقعاً یه مقدار غیرخالی رسیده باشه، پس effect
+    // دوباره (با کلید جدید) اجرا میشه تا مقدار واقعی برسه.
     var draftApplied by remember { mutableStateOf(false) }
     LaunchedEffect(initialDraft) {
-        if (!draftApplied) {
+        if (!draftApplied && initialDraft.isNotBlank()) {
             draftApplied = true
-            if (input.isBlank() && initialDraft.isNotBlank()) {
+            if (input.isBlank()) {
                 input = initialDraft
             }
         }
@@ -400,6 +405,48 @@ private fun MessageBubble(
                         text = "ارسال نشد - برای ارسال دوباره بزن",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            // نشانِ «در حال ارسال» - سیستم موقتاً TYPE رو OUTBOX می‌ذاره تا وضعیتِ نهایی
+            // (SENT یا FAILED) مشخص بشه. قبلاً هیچ نشونه‌ای نداشت و شبیه پیامِ ارسال‌شده‌ی
+            // معمولی به‌نظر می‌رسید.
+            if (message.isSending) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(10.dp),
+                        strokeWidth = 1.5.dp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "در حال ارسال...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+            // نشانِ «در صف ارسال» - وقتی رادیو موقتاً در دسترس نیست (مثلاً حالت پرواز)،
+            // سیستم پیام رو اینجا نگه می‌داره تا بعداً خودش دوباره امتحان کنه.
+            if (message.isQueued) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Schedule,
+                        contentDescription = "در صف ارسال",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "در صف ارسال...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
                     )
                 }
             }

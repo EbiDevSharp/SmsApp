@@ -309,6 +309,9 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onSend = { address, displayName, body, subId ->
                         viewModel.sendNewMessage(address, displayName, body, subId)
                     },
+                    onLeaveWithDraft = { address, displayName, body ->
+                        viewModel.saveDraftForNewConversation(address, displayName, body)
+                    },
                     onBack = { navController.popBackStack() }
                 )
             }

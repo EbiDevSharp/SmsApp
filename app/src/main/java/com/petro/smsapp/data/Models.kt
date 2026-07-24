@@ -28,12 +28,29 @@ data class SmsMessage(
     // 0 یعنی تحویل موفق، 32/64 یعنی در حال انتظار، 128+ یعنی ناموفق (فقط برای پیام‌های ارسالی معنی داره)
     val status: Int = -1,
     // زمان دقیق تحویل به گیرنده (از DeliveryStore میاد، چون خود Sms provider همچین ستونی نداره)
-    val deliveredAt: Long = 0L
+    val deliveredAt: Long = 0L,
+    // سیمی که این پیام باهاش ارسال شده (Telephony.Sms.SUBSCRIPTION_ID) - برای گوشی‌های
+    // دوسیم‌کارته. -1 یعنی نامشخص/پیام دریافتیه. موقع «ارسال دوباره»ی یه پیام ناموفق، از
+    // همین مقدار استفاده میشه تا دقیقاً از همون سیمی که اول امتحان شده بود دوباره بره،
+    // نه سیمِ پیش‌فرض سیستم.
+    val subscriptionId: Int = -1
 ) {
     val isDelivered: Boolean get() = isOutgoing && status == 0
-    // پیام ارسالیِ ناموفق (مثلاً به‌خاطر قطعی آنتن) - SmsStatusReceiver این وضعیت رو
-    // بعد از خطای ارسال روی ردیف ست می‌کنه، اینجا فقط برای نمایش تویUI می‌خونیمش
-    val isFailed: Boolean get() = isOutgoing && status == Telephony.Sms.STATUS_FAILED
+    // پیام ارسالیِ ناموفق (مثلاً به‌خاطر قطعی آنتن) - دو مکانیزمِ کاملاً جدا و مستقلِ اندروید
+    // می‌تونن این حالت رو نشون بدن: ۱) SmsStatusReceiver خودمون بعد از خطای ارسال ستونِ
+    // STATUS رو به STATUS_FAILED آپدیت می‌کنه (رفتار عادی اپ). ۲) خودِ سیستم اندروید، مستقل
+    // از هر آپدیتی که ما بزنیم، بعضی وقت‌ها (مثلاً رادیو خاموش بوده یا مشکل سیم‌کارت) مستقیم
+    // TYPE ردیف رو به MESSAGE_TYPE_FAILED عوض می‌کنه بدون اینکه اصلاً STATUS رو دست بزنه.
+    // قبلاً فقط حالت اول چک می‌شد، پس حالت دوم (که بیشتر هم پیش میاد) اصلاً به کاربر نشون
+    // داده نمی‌شد و پیام برای همیشه بدون هیچ نشونه‌ی خطایی می‌موند.
+    val isFailed: Boolean get() = isOutgoing && (status == Telephony.Sms.STATUS_FAILED || type == Telephony.Sms.MESSAGE_TYPE_FAILED)
+    // در حال ارسال - سیستم موقتاً TYPE رو به OUTBOX می‌ذاره تا وقتی که یا موفق بشه (SENT)
+    // یا شکست بخوره (FAILED). قبلاً هیچ نشونه‌ی بصری‌ای نداشت و دقیقاً شبیه پیامِ ارسال‌شده‌ی
+    // معمولی نشون داده می‌شد.
+    val isSending: Boolean get() = isOutgoing && type == Telephony.Sms.MESSAGE_TYPE_OUTBOX
+    // در صف ارسال - سیستم وقتی رادیو موقتاً در دسترس نیست (مثلاً حالت پرواز) پیام رو اینجا
+    // نگه می‌داره تا بعداً خودش امتحان کنه. مثل isSending، قبلاً هیچ نشونه‌ای نداشت.
+    val isQueued: Boolean get() = isOutgoing && type == Telephony.Sms.MESSAGE_TYPE_QUEUED
 }
 
 /**

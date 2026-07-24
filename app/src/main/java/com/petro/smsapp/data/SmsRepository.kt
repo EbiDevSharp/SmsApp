@@ -82,17 +82,22 @@ class SmsRepository(private val context: Context) {
 
             val displayName = ContactsCache.getName(context, address) ?: address
 
+            // پیش‌نویس فقط وقتی روی snippet/isDraft تأثیر می‌ذاره که واقعاً از آخرین پیامِ
+            // واقعیِ این thread جدیدتر باشه - وگرنه (مثلاً یه پیش‌نویسِ قدیمیِ دست‌نخورده که
+            // بعدش یه پیام واقعیِ جدیدتر روی همون thread اومده) باید متن/رنگِ همون پیامِ واقعیِ
+            // جدیدتر نشون داده بشه، نه پیش‌نویسِ کهنه. قبلاً همیشه (فقط بر اساس وجودِ پیش‌نویس،
+            // بدون مقایسه‌ی تاریخ) پیش‌نویس رو نشون می‌داد که همون چیزیه که کاربر بهش می‌گفت
+            // «پیام درفت باید بر اساس تاریخ باشه».
+            val draftIsNewer = draft != null && draft.date >= (meta?.date ?: 0L)
+
             Conversation(
                 threadId = threadId,
                 address = address,
                 displayName = displayName,
-                // اگه پیش‌نویس داریم، همیشه اون به‌عنوان snippet نشون داده میشه (دقیقاً رفتار
-                // گوگل مسیجز) - نه متن آخرین پیام واقعی، چون پیش‌نویس چیزیه که کاربر همین الان
-                // وسط نوشتنشه و بیشتر به کارش میاد.
-                snippet = draft?.let { "پیش‌نویس: ${it.body}" } ?: (meta?.snippet ?: ""),
+                snippet = if (draftIsNewer) "پیش‌نویس: ${draft!!.body}" else (meta?.snippet ?: ""),
                 date = maxOf(meta?.date ?: 0L, draft?.date ?: 0L),
                 unreadCount = meta?.unreadCount ?: 0,
-                isDraft = draft != null
+                isDraft = draftIsNewer
             )
         }
         return conversations.sortedByDescending { it.date }
@@ -371,6 +376,11 @@ class SmsRepository(private val context: Context) {
             put(Telephony.Sms.READ, 1)
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
             put(Telephony.Sms.STATUS, Telephony.Sms.STATUS_PENDING)
+            // ذخیره‌ی سیمِ استفاده‌شده روی خودِ ردیف - برای این‌که «ارسال دوباره»ی یه پیامِ
+            // ناموفق بتونه دقیقاً از همون سیم دوباره امتحان کنه، نه سیمِ پیش‌فرضِ سیستم
+            if (subscriptionId != null && subscriptionId != -1) {
+                put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
+            }
         }
         val insertedUri = try {
             context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
@@ -673,6 +683,7 @@ class SmsRepository(private val context: Context) {
         val type = cursor.getInt(col(Telephony.Sms.TYPE))
         val dateSentIdx = col(Telephony.Sms.DATE_SENT)
         val statusIdx = col(Telephony.Sms.STATUS)
+        val subIdIdx = col(Telephony.Sms.SUBSCRIPTION_ID)
         val id = cursor.getLong(col(Telephony.Sms._ID))
         val status = if (statusIdx >= 0) cursor.getInt(statusIdx) else -1
         return SmsMessage(
@@ -683,10 +694,14 @@ class SmsRepository(private val context: Context) {
             date = cursor.getLong(col(Telephony.Sms.DATE)),
             dateSent = if (dateSentIdx >= 0) cursor.getLong(dateSentIdx) else 0L,
             type = type,
-            isOutgoing = type == Telephony.Sms.MESSAGE_TYPE_SENT || type == Telephony.Sms.MESSAGE_TYPE_OUTBOX,
+            isOutgoing = type == Telephony.Sms.MESSAGE_TYPE_SENT ||
+                    type == Telephony.Sms.MESSAGE_TYPE_OUTBOX ||
+                    type == Telephony.Sms.MESSAGE_TYPE_FAILED ||
+                    type == Telephony.Sms.MESSAGE_TYPE_QUEUED,
             isRead = cursor.getInt(col(Telephony.Sms.READ)) == 1,
             status = status,
-            deliveredAt = if (status == Telephony.Sms.STATUS_COMPLETE) DeliveryStore.getDeliveredAt(context, id) else 0L
+            deliveredAt = if (status == Telephony.Sms.STATUS_COMPLETE) DeliveryStore.getDeliveredAt(context, id) else 0L,
+            subscriptionId = if (subIdIdx >= 0) cursor.getInt(subIdIdx) else -1
         )
     }
 

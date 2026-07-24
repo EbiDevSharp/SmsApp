@@ -28,12 +28,32 @@ fun NewMessageScreen(
     onPickFromContactsClick: () -> Unit,
     onSearchChange: (String) -> Unit,
     onSend: (address: String, displayName: String, body: String, subscriptionId: Int?) -> Unit,
+    // موقع خروج از این صفحه (هر دلیلی: برگشت فیزیکی، منو، یا بستن اپ) با آدرس/نام/متنِ فعلیِ
+    // کادر صدا زده میشه - دقیقاً هم‌خانواده‌ی onLeaveWithDraft توی ThreadScreen. قبلاً این
+    // مکانیزم اصلاً اینجا وجود نداشت، پس برای مخاطبی که تا حالا باهاش چت نشده بود، خروج از
+    // این صفحه (بدون ارسال) هیچ پیش‌نویسی نمی‌ساخت.
+    onLeaveWithDraft: (address: String, displayName: String, body: String) -> Unit,
     onBack: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedContact by remember { mutableStateOf<ContactInfo?>(null) }
     var messageBody by remember { mutableStateOf("") }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
+
+    // موقع خروج از صفحه (به هر دلیلی) با آخرین مخاطبِ انتخاب‌شده/متنِ کادر ذخیره میشه -
+    // rememberUpdatedState لازمه چون onDispose خودِ لامبدای اولیه رو با مقدارهای همون لحظه‌ی
+    // composition اول capture می‌کنه، نه مقدار لحظه‌ی خروج.
+    val latestContact = rememberUpdatedState(selectedContact)
+    val latestBody = rememberUpdatedState(messageBody)
+    val latestOnLeave = rememberUpdatedState(onLeaveWithDraft)
+    DisposableEffect(Unit) {
+        onDispose {
+            val contact = latestContact.value
+            if (contact != null) {
+                latestOnLeave.value(contact.phoneNumber, contact.name, latestBody.value)
+            }
+        }
+    }
 
     LaunchedEffect(pickedContact) {
         if (pickedContact != null) {
@@ -85,6 +105,10 @@ fun NewMessageScreen(
                                         messageBody,
                                         selectedSimId
                                     )
+                                    // خالی می‌کنیم تا موقع خروج از صفحه (که بعد از ارسال قطعاً
+                                    // اتفاق می‌افته) onDispose متنِ همین‌الان‌فرستاده‌شده رو
+                                    // دوباره به‌عنوان پیش‌نویس ذخیره نکنه
+                                    messageBody = ""
                                 }
                             },
                             enabled = messageBody.isNotBlank()
