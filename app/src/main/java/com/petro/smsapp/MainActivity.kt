@@ -335,6 +335,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
 
                 ThreadScreen(
                     displayName = displayName,
+                    address = address,
                     messages = messages,
                     sims = sims,
                     favoriteIds = favoriteIds,

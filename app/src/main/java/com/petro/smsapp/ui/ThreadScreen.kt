@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.PhoneNumberUtils
 
 /**
  * صفحه‌ی چت یک مخاطب. دو تا قابلیت مهم علاوه بر ارسال/دریافت معمولی:
@@ -44,10 +45,17 @@ import com.petro.smsapp.util.DateFormatter
  * ۲) زوم فونت با دو انگشت (Pinch) - این یه Scale واقعی روی کل صفحه نیست؛ فقط اندازه‌ی فونت
  *    متن پیام‌ها (که حباب‌ها هم چون دور همون متن رو می‌گیرن، خودشون بزرگ/کوچیک میشن) بین
  *    16sp تا 28sp تغییر می‌کنه. کاربر حس می‌کنه صفحه رو زوم کرده، ولی فقط متنه که عوض میشه.
+ *
+ * ۳) مکالمه‌های بدون شماره‌ی واقعی (Sender ID حروفی مثل اسم اپراتورها) - این‌جور مکالمه‌ها
+ *    قابل بازکردن و خوندن هستن (پیام‌های دریافتی‌شون سرجاشونه) ولی چون address واقعاً یه
+ *    شماره نیست، کادرِ ارسال/دکمه‌ی ارسال اصلاً نشون داده نمیشه؛ به‌جاش یه پیام توضیحی میاد.
  */
 @Composable
 fun ThreadScreen(
     displayName: String,
+    // آدرس خام مکالمه (ستونِ address توی جدول اس‌ام‌اس) - برای تشخیص اینکه واقعاً شماره‌ست
+    // یا صرفاً یه Sender ID حروفی (مثلاً اسم اپراتور) که نمیشه بهش پیام فرستاد
+    address: String,
     messages: List<SmsMessage>,
     sims: List<SimInfo>,
     favoriteIds: Set<Long>,
@@ -89,6 +97,9 @@ fun ThreadScreen(
     DisposableEffect(Unit) {
         onDispose { latestOnLeave.value(latestInput.value) }
     }
+    // اگه address یه شماره‌ی واقعی نباشه (مثلاً Sender ID حروفیِ اپراتورها)، امکان ارسال
+    // پیام به این مکالمه نیست - کادر ارسال اصلاً نشون داده نمیشه
+    val canSend = remember(address) { PhoneNumberUtils.isSendableAddress(address) }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
     var selectedMessage by remember { mutableStateOf<SmsMessage?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
@@ -204,36 +215,54 @@ fun ThreadScreen(
                         .fillMaxWidth()
                         .imePadding()
                 ) {
-                    SimSelector(
-                        sims = sims,
-                        selectedSubscriptionId = selectedSimId,
-                        onSelect = { selectedSimId = it }
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // دکمه ارسال اول میاد تا توی چیدمان راست‌به‌چپ سمت راست کادر بشینه
-                        Button(onClick = {
-                            if (input.isNotBlank()) {
-                                onSend(input, selectedSimId)
-                                input = ""
-                            }
-                        }) {
-                            Text("ارسال")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = input,
-                            onValueChange = { input = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("پیام...") },
-                            maxLines = 5,
-                            // متن انگلیسی/اعداد از چپ نوشته بشن، حتی داخل کانتینر راست‌به‌چپ
-                            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
+                    if (canSend) {
+                        SimSelector(
+                            sims = sims,
+                            selectedSubscriptionId = selectedSimId,
+                            onSelect = { selectedSimId = it }
                         )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // دکمه ارسال اول میاد تا توی چیدمان راست‌به‌چپ سمت راست کادر بشینه
+                            Button(onClick = {
+                                if (input.isNotBlank()) {
+                                    onSend(input, selectedSimId)
+                                    input = ""
+                                }
+                            }) {
+                                Text("ارسال")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedTextField(
+                                value = input,
+                                onValueChange = { input = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("پیام...") },
+                                maxLines = 5,
+                                // متن انگلیسی/اعداد از چپ نوشته بشن، حتی داخل کانتینر راست‌به‌چپ
+                                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
+                            )
+                        }
+                    } else {
+                        // این مکالمه شماره‌ی واقعی نداره (Sender ID حروفیه، مثل اسم اپراتورها) -
+                        // به‌جای کادر ارسال، فقط یه توضیح نشون بده که ارسال به این مخاطب ممکن نیست
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "این مخاطب شماره ندارد و امکان ارسال پیام به آن وجود ندارد",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             }
