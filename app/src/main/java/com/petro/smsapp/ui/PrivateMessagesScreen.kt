@@ -25,22 +25,23 @@ import com.petro.smsapp.data.PrivateMessageEntry
 import com.petro.smsapp.util.DateFormatter
 
 /**
- * صفحه‌ی «پیامک‌های خصوصی» - عیناً هم‌خانواده‌ی BlockedMessagesScreen (همون درخواست کاربر:
- * «مکانیزم حذف پیام‌های پرایویت شبیه پیام‌های بلاک‌شده باشه»):
- * ۱) متن پیام پیش‌فرض به ۲ خط محدوده؛ با تک‌کلیک روی خودِ پیام کامل باز/بسته میشه (چون
- *    ممکنه متن طولانی باشه).
- * ۲) لانگ‌کلیک روی یه پیام وارد حالت «انتخاب چندتایی» میشه، نوار بالا با تعداد انتخاب‌شده +
- *    انتخاب‌همه + حذف (با تائید) عوض میشه. چون پیام‌های این صفحه از چند مکالمه‌ی مختلف
- *    جمع شدن، حذف از اینجا با همون منطق مشترک حذف (سطل زباله/قفل فیوریت) میره.
+ * صفحه‌ی «پیامک‌های خصوصی» - عیناً هم‌خانواده‌ی BlockedMessagesScreen:
+ * ۱) تک‌کلیک روی یه پیام → منوی اکشن پیام (MessageActionsSheet): جزئیات، باز کردن در
+ *    نوت (برای متن‌های طولانی)، کپی، اشتراک‌گذاری، فیوریت، حذف.
+ * ۲) لانگ‌کلیک → حالت «انتخاب چندتایی» با شمارنده + انتخاب‌همه + حذف (با تائید).
  */
 @Composable
 fun PrivateMessagesScreen(
     privateMessages: List<PrivateMessageEntry>,
+    favoriteIds: Set<Long>,
     onBack: () -> Unit,
-    onDeleteMessages: (Set<Long>) -> Unit
+    onDeleteMessages: (Set<Long>) -> Unit,
+    onOpenNote: (text: String) -> Unit,
+    onToggleFavorite: (entry: PrivateMessageEntry) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var actionSheetEntry by remember { mutableStateOf<PrivateMessageEntry?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
 
     LaunchedEffect(privateMessages) {
@@ -52,6 +53,22 @@ fun PrivateMessagesScreen(
 
     BackHandler(enabled = selectionMode) {
         selectedIds = emptySet()
+    }
+
+    val currentActionSheetEntry = actionSheetEntry
+    if (currentActionSheetEntry != null) {
+        MessageActionsSheet(
+            message = currentActionSheetEntry.message,
+            contactDisplayName = currentActionSheetEntry.contactDisplayName,
+            isFavorite = favoriteIds.contains(currentActionSheetEntry.message.id),
+            onDismiss = { actionSheetEntry = null },
+            onOpenNote = { onOpenNote(currentActionSheetEntry.message.body) },
+            onDeleteConfirmed = {
+                onDeleteMessages(setOf(currentActionSheetEntry.message.id))
+                actionSheetEntry = null
+            },
+            onToggleFavorite = { onToggleFavorite(currentActionSheetEntry) }
+        )
     }
 
     if (showDeleteConfirm) {
@@ -128,10 +145,14 @@ fun PrivateMessagesScreen(
                         selectionMode = selectionMode,
                         isSelected = selectedIds.contains(entry.message.id),
                         onClick = {
-                            selectedIds = if (selectedIds.contains(entry.message.id)) {
-                                selectedIds - entry.message.id
+                            if (selectionMode) {
+                                selectedIds = if (selectedIds.contains(entry.message.id)) {
+                                    selectedIds - entry.message.id
+                                } else {
+                                    selectedIds + entry.message.id
+                                }
                             } else {
-                                selectedIds + entry.message.id
+                                actionSheetEntry = entry
                             }
                         },
                         onLongClick = {
@@ -154,20 +175,11 @@ private fun PrivateMessageRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    // توی حالت عادی (نه انتخاب)، تک‌کلیک متن کامل رو باز/بسته می‌کنه؛ توی حالت انتخاب،
-    // تک‌کلیک فقط انتخاب/عدم‌انتخاب می‌کنه (باز/بسته کردن غیرفعاله تا با انتخاب قاطی نشه)
-    var expanded by remember { mutableStateOf(false) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
-            .combinedClickable(
-                onClick = {
-                    if (selectionMode) onClick() else expanded = !expanded
-                },
-                onLongClick = onLongClick
-            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -188,7 +200,7 @@ private fun PrivateMessageRow(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = entry.message.body,
-                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                maxLines = 2,
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodyMedium
             )

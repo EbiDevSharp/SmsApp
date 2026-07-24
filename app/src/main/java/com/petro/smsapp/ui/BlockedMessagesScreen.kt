@@ -25,11 +25,14 @@ import com.petro.smsapp.data.BlockedMessageEntry
 import com.petro.smsapp.util.DateFormatter
 
 /**
- * صفحه‌ی «پیامک‌های بلاک‌شده» - همه‌ی پیام‌های (قدیم + جدید) شماره‌های بلاک‌شده، فقط نمایشی.
+ * صفحه‌ی «پیامک‌های بلاک‌شده» - همه‌ی پیام‌های (قدیم + جدید) شماره‌های بلاک‌شده.
  * برای برداشتن یه شماره از حالت بلاک، باید از صفحه‌ی «شماره‌های بلاک‌شده» اقدام کرد.
  *
- * دو تا قابلیت اضافه، دقیقاً به همون الگوی صفحه‌ی چت اصلی:
- * ۱) متن پیام پیش‌فرض به ۲ خط محدوده؛ با تک‌کلیک روی خودِ پیام کامل باز/بسته میشه.
+ * دو تا قابلیت، دقیقاً به همون الگوی صفحه‌ی چت اصلی:
+ * ۱) تک‌کلیک روی یه پیام → همون منوی اکشن پیام (MessageActionsSheet) که تو چت داریم باز
+ *    میشه: جزئیات، باز کردن در نوت (برای متن‌های طولانی)، کپی، اشتراک‌گذاری، فیوریت،
+ *    و حذف. (قبلاً تک‌کلیک فقط متن رو ۲خطی/کامل می‌کرد؛ چون الان «باز کردن در نوت» همون
+ *    کارو بهتر انجام میده، دیگه لازم نبود و با کلیکِ منو تداخل داشت.)
  * ۲) لانگ‌کلیک روی یه پیام وارد حالت «انتخاب چندتایی» میشه (تک‌کلیک بعدی فقط انتخاب/
  *    عدم‌انتخاب می‌کنه)، نوار بالا با تعداد انتخاب‌شده + انتخاب‌همه + حذف (با تائید) عوض میشه.
  *    چون پیام‌های این صفحه از چند مکالمه‌ی مختلف جمع شدن (نه فقط یکی)، حذف از اینجا با
@@ -38,11 +41,15 @@ import com.petro.smsapp.util.DateFormatter
 @Composable
 fun BlockedMessagesScreen(
     blockedMessages: List<BlockedMessageEntry>,
+    favoriteIds: Set<Long>,
     onBack: () -> Unit,
-    onDeleteMessages: (Set<Long>) -> Unit
+    onDeleteMessages: (Set<Long>) -> Unit,
+    onOpenNote: (text: String) -> Unit,
+    onToggleFavorite: (entry: BlockedMessageEntry) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var actionSheetEntry by remember { mutableStateOf<BlockedMessageEntry?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
 
     // اگه بعد از حذف/تغییر لیست، بعضی id های انتخاب‌شده دیگه وجود نداشته باشن، از انتخاب پاک بشن
@@ -55,6 +62,22 @@ fun BlockedMessagesScreen(
 
     BackHandler(enabled = selectionMode) {
         selectedIds = emptySet()
+    }
+
+    val currentActionSheetEntry = actionSheetEntry
+    if (currentActionSheetEntry != null) {
+        MessageActionsSheet(
+            message = currentActionSheetEntry.message,
+            contactDisplayName = currentActionSheetEntry.contactDisplayName,
+            isFavorite = favoriteIds.contains(currentActionSheetEntry.message.id),
+            onDismiss = { actionSheetEntry = null },
+            onOpenNote = { onOpenNote(currentActionSheetEntry.message.body) },
+            onDeleteConfirmed = {
+                onDeleteMessages(setOf(currentActionSheetEntry.message.id))
+                actionSheetEntry = null
+            },
+            onToggleFavorite = { onToggleFavorite(currentActionSheetEntry) }
+        )
     }
 
     if (showDeleteConfirm) {
@@ -131,10 +154,14 @@ fun BlockedMessagesScreen(
                         selectionMode = selectionMode,
                         isSelected = selectedIds.contains(entry.message.id),
                         onClick = {
-                            selectedIds = if (selectedIds.contains(entry.message.id)) {
-                                selectedIds - entry.message.id
+                            if (selectionMode) {
+                                selectedIds = if (selectedIds.contains(entry.message.id)) {
+                                    selectedIds - entry.message.id
+                                } else {
+                                    selectedIds + entry.message.id
+                                }
                             } else {
-                                selectedIds + entry.message.id
+                                actionSheetEntry = entry
                             }
                         },
                         onLongClick = {
@@ -157,20 +184,11 @@ private fun BlockedMessageRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    // توی حالت عادی (نه انتخاب)، تک‌کلیک متن کامل رو باز/بسته می‌کنه؛ توی حالت انتخاب،
-    // تک‌کلیک فقط انتخاب/عدم‌انتخاب می‌کنه (باز/بسته کردن غیرفعاله تا با انتخاب قاطی نشه)
-    var expanded by remember { mutableStateOf(false) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
-            .combinedClickable(
-                onClick = {
-                    if (selectionMode) onClick() else expanded = !expanded
-                },
-                onLongClick = onLongClick
-            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -191,7 +209,7 @@ private fun BlockedMessageRow(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = entry.message.body,
-                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                maxLines = 2,
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodyMedium
             )

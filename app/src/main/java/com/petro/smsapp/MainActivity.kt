@@ -411,8 +411,14 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 LaunchedEffect(Unit) { viewModel.loadBlockedMessages() }
                 BlockedMessagesScreen(
                     blockedMessages = blockedMessages,
+                    favoriteIds = favoriteIds,
                     onBack = { navController.popBackStack() },
-                    onDeleteMessages = { messageIds -> viewModel.deleteBlockedMessages(messageIds) }
+                    onDeleteMessages = { messageIds -> viewModel.deleteBlockedMessages(messageIds) },
+                    onOpenNote = { text ->
+                        viewModel.openNote(text)
+                        navController.navigate("note")
+                    },
+                    onToggleFavorite = { entry -> viewModel.toggleFavorite(entry.message, entry.contactDisplayName) }
                 )
             }
             composable("blocked_numbers") {
@@ -492,8 +498,14 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 if (privateUnlocked) {
                     PrivateMessagesScreen(
                         privateMessages = privateMessages,
+                        favoriteIds = favoriteIds,
                         onBack = { navController.popBackStack() },
-                        onDeleteMessages = { messageIds -> viewModel.deletePrivateMessages(messageIds) }
+                        onDeleteMessages = { messageIds -> viewModel.deletePrivateMessages(messageIds) },
+                        onOpenNote = { text ->
+                            viewModel.openNote(text)
+                            navController.navigate("note")
+                        },
+                        onToggleFavorite = { entry -> viewModel.toggleFavorite(entry.message, entry.contactDisplayName) }
                     )
                 }
             }
