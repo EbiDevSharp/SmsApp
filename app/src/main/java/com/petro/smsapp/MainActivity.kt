@@ -410,7 +410,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 LaunchedEffect(Unit) { viewModel.loadBlockedMessages() }
                 BlockedMessagesScreen(
                     blockedMessages = blockedMessages,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onDeleteMessages = { messageIds -> viewModel.deleteBlockedMessages(messageIds) }
                 )
             }
             composable("blocked_numbers") {
