@@ -21,9 +21,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.app.NotificationManagerCompat
@@ -224,9 +226,22 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    // مسیر فعلیِ NavHost - برای اینکه دراور بدونه دقیقاً کدوم آیتم باید روشن/انتخاب‌شده باشه
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
+
     // محافظ صریح: اگه دراور بازه، دکمه‌ی برگشت فقط دراور رو ببنده، نه اینکه بره از NavHost خارج بشه
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
+    }
+
+    // چون فلش Back صفحه‌ی «خصوصی» برداشته شد (به‌جاش همبرگر دائمیه)، دیگه نقطه‌ی UI ای
+    // نداریم که با خروج از این صفحه viewModel.lockPrivate() رو صدا بزنه. این محافظ همون
+    // کارو برای «خروج با دکمه‌ی برگشتِ خودِ گوشی» انجام میده (خروج با کلیک آیتم دیگه‌ی
+    // دراور هم پایین‌تر، توی onItemClick خودش هندل میشه).
+    BackHandler(enabled = !drawerState.isOpen && currentRoute == "private") {
+        viewModel.lockPrivate()
+        navController.popBackStack()
     }
 
     // لود اولیه‌ی لیست فیوریت‌ها و بلاک‌ها - همون اول که برنامه بالا میاد (برای بج‌های شمارنده)
@@ -261,18 +276,40 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                AppDrawerContent(onItemClick = { route ->
-                    scope.launch {
-                        // مهم: باید صبر کنیم انیمیشن بسته‌شدن کامل تموم بشه، بعد navigate کنیم.
-                        // قبلاً close() توی یه launch جدا (fire-and-forget) بود و navigate بلافاصله
-                        // بعدش (بدون صبر) اجرا می‌شد - یعنی وسط انیمیشن، ناوبری اتفاق می‌افتاد و
-                        // state داخلی drawerState قاطی می‌شد (صفحه سفید میومد، back هم خراب می‌شد،
-                        // فقط با swipe دستی درست می‌شد چون swipe مستقیم state رو ست می‌کنه نه از
-                        // طریق این انیمیشن).
-                        drawerState.close()
-                        navController.navigate(route)
+                AppDrawerContent(
+                    currentRoute = currentRoute,
+                    onItemClick = { route ->
+                        scope.launch {
+                            // مهم: باید صبر کنیم انیمیشن بسته‌شدن کامل تموم بشه، بعد navigate کنیم.
+                            // قبلاً close() توی یه launch جدا (fire-and-forget) بود و navigate بلافاصله
+                            // بعدش (بدون صبر) اجرا می‌شد - یعنی وسط انیمیشن، ناوبری اتفاق می‌افتاد و
+                            // state داخلی drawerState قاطی می‌شد (صفحه سفید میومد، back هم خراب می‌شد،
+                            // فقط با swipe دستی درست می‌شد چون swipe مستقیم state رو ست می‌کنه نه از
+                            // طریق این انیمیشن).
+                            drawerState.close()
+                            // اگه کاربر دقیقاً روی همون آیتمی زده که همین الان توشیم، اصلاً navigate
+                            // نکن - نه چیزی دوباره ساخته میشه نه چیزی به پشته اضافه میشه.
+                            if (route != currentRoute) {
+                                // با خروج از بخش «خصوصی» (چه با کلیک آیتم دیگه‌ی دراور) قفلش برگرده -
+                                // چون فلش Back خودِ اون صفحه دیگه وجود نداره که این کارو بکنه
+                                if (currentRoute == "private") {
+                                    viewModel.lockPrivate()
+                                }
+                                navController.navigate(route) {
+                                    // الگوی استاندارد ناوبریِ «تب‌مانند»: هر بار پشته رو تا مقصدِ
+                                    // شروع (لیست مکالمات) جمع می‌کنیم تا انتخاب‌های قبلی دراور روی
+                                    // هم تلنبار نشن، ولی state هرکدوم رو نگه می‌داریم (saveState) تا
+                                    // اگه دوباره برگردیم بهش، از اول ساخته نشه.
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
                     }
-                })
+                )
             }
         }
     ) {
@@ -359,6 +396,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
             composable("settings") {
                 SettingsScreen(
                     onOpenNotificationActions = { navController.navigate("notification_actions") },
+                    onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -383,6 +421,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 LaunchedEffect(Unit) { viewModel.loadFavorites() }
                 FavoritesScreen(
                     favorites = favorites,
+                    onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
                     onItemClick = { favorite ->
                         viewModel.loadThread(favorite.threadId)
@@ -395,13 +434,18 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 LaunchedEffect(Unit) { viewModel.loadTrash() }
                 TrashScreen(
                     trashedMessages = trash,
+                    onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
                     onRestore = { messageId -> viewModel.restoreFromTrash(messageId) },
                     onPermanentDelete = { messageId -> viewModel.permanentlyDeleteFromTrash(messageId) }
                 )
             }
             composable("scheduled") {
-                PlaceholderScreen(title = "زمان‌بندی‌شده", onBack = { navController.popBackStack() })
+                PlaceholderScreen(
+                    title = "زمان‌بندی‌شده",
+                    onMenuClick = { scope.launch { drawerState.open() } },
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable("blocked") {
                 // باگ قبلی: این لیست‌ها فقط یه‌بار موقع بالا اومدن کل اپ لود می‌شدن، پس تا
@@ -414,6 +458,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 BlockScreen(
                     blockedMessageCount = blockedMessages.size,
                     blockedNumberCount = blockedNumbers.size,
+                    onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
                     onOpenBlockedMessages = { navController.navigate("blocked_messages") },
                     onOpenBlockedNumbers = { navController.navigate("blocked_numbers") }
@@ -467,6 +512,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     PrivateScreen(
                         privateMessageCount = privateMessages.size,
                         privateNumberCount = privateNumbers.size,
+                        onMenuClick = { scope.launch { drawerState.open() } },
                         onBack = {
                             viewModel.lockPrivate() // با خروج کامل از بخش خصوصی، دفعه‌ی بعد دوباره رمز بخواد
                             navController.popBackStack()
@@ -481,6 +527,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         onVerifyPin = { pin -> viewModel.verifyPrivatePin(pin) },
                         onSetPin = { pin -> viewModel.setPrivatePin(pin) },
                         onUnlocked = { viewModel.unlockPrivate() },
+                        onMenuClick = { scope.launch { drawerState.open() } },
                         onBack = { navController.popBackStack() }
                     )
                 }

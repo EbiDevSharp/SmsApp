@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +29,7 @@ import com.petro.smsapp.util.DateFormatter
 @Composable
 fun TrashScreen(
     trashedMessages: List<TrashedMessage>,
+    onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onRestore: (messageId: Long) -> Unit,
     onPermanentDelete: (messageId: Long) -> Unit
@@ -61,7 +63,7 @@ fun TrashScreen(
             TopAppBar(
                 title = { Text("سطل زباله") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 }
             )
         }

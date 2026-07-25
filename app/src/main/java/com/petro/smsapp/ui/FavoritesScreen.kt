@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +30,7 @@ import com.petro.smsapp.util.DateFormatter
 @Composable
 fun FavoritesScreen(
     favorites: List<FavoriteMessage>,
+    onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onItemClick: (FavoriteMessage) -> Unit,
     onRemoveFavorite: (messageId: Long) -> Unit
@@ -62,7 +64,7 @@ fun FavoritesScreen(
             TopAppBar(
                 title = { Text("علاقه‌مندی‌ها") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 }
             )
         }

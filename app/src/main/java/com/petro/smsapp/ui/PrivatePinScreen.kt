@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ fun PrivatePinScreen(
     onVerifyPin: (pin: String) -> Boolean,
     onSetPin: (pin: String) -> Unit,
     onUnlocked: () -> Unit,
+    onMenuClick: () -> Unit,
     onBack: () -> Unit
 ) {
     var stage by remember { mutableStateOf(if (hasExistingPin) PinStage.VERIFY else PinStage.SETUP_ENTER) }
@@ -90,7 +92,7 @@ fun PrivatePinScreen(
             TopAppBar(
                 title = { Text("خصوصی") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 }
             )
         }

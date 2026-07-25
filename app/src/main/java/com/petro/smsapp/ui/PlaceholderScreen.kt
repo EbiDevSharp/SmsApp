@@ -3,6 +3,9 @@ package com.petro.smsapp.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -18,13 +21,13 @@ import androidx.compose.ui.graphics.Color
  * وقتی هرکدوم رو واقعی پیاده‌سازی کردیم، به‌جای صدا زدن این تابع، یه فایل/Composable مخصوص خودش می‌سازیم.
  */
 @Composable
-fun PlaceholderScreen(title: String, onBack: () -> Unit) {
+fun PlaceholderScreen(title: String, onMenuClick: () -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 }
             )
         }

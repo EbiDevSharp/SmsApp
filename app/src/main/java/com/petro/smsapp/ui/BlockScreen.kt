@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.dp
 fun BlockScreen(
     blockedMessageCount: Int,
     blockedNumberCount: Int,
+    onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onOpenBlockedMessages: () -> Unit,
     onOpenBlockedNumbers: () -> Unit
@@ -34,7 +36,7 @@ fun BlockScreen(
             TopAppBar(
                 title = { Text("بلاک") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 }
             )
         }

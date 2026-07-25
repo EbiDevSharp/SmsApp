@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.*
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 fun PrivateScreen(
     privateMessageCount: Int,
     privateNumberCount: Int,
+    onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onOpenPrivateMessages: () -> Unit,
     onOpenPrivateNumbers: () -> Unit,
@@ -37,7 +39,7 @@ fun PrivateScreen(
             TopAppBar(
                 title = { Text("خصوصی") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 },
                 actions = {
                     IconButton(onClick = onOpenPinSettings) {

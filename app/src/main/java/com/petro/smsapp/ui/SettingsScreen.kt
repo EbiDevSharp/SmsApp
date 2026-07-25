@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Divider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +37,7 @@ import com.petro.smsapp.data.ClockFormat
  * SmsRepository هم ازش استفاده می‌کنن)، پس تغییر هر کدوم اینجا فوراً روی کل برنامه اثر می‌ذاره.
  */
 @Composable
-fun SettingsScreen(onOpenNotificationActions: () -> Unit, onBack: () -> Unit) {
+fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val settings by AppSettings.state.collectAsState()
 
@@ -43,7 +46,7 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("تنظیمات") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Text("←") }
+                    IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, contentDescription = "منو") }
                 }
             )
         }
