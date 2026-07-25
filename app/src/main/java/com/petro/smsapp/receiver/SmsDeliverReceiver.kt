@@ -15,8 +15,11 @@ import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
 import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.data.BlockKeywordStore
 import com.petro.smsapp.data.BlockStore
+import com.petro.smsapp.data.BlockedKeywordMessageStore
 import com.petro.smsapp.data.ContactsCache
+import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
 import com.petro.smsapp.data.PrivateStore
 
@@ -65,6 +68,19 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 return
             }
 
+            // بلاک بر اساس متنِ پیام: حتی اگه شماره‌ی فرستنده اصلاً بلاک نباشه، اگه بدنه‌ی
+            // پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده‌ی کاربر باشه، همین‌جا بلاک میشه.
+            // مثل بلاک بر اساس شماره، پیام همچنان ذخیره میشه (تا توی «پیامک‌های بلاک‌شده»
+            // قابل دیدن باشه، همراه با خودِ کلمه‌ی مچ‌شده) ولی نوتیف/صدا نمیده.
+            val matchedKeyword = BlockKeywordStore.findMatch(context, fullBody)
+            if (matchedKeyword != null) {
+                BlockedKeywordMessageStore.markBlocked(context, messageId, matchedKeyword.text)
+                // این تغییر فقط SharedPreferences رو عوض می‌کنه؛ اگه صفحه‌ی «پیامک‌های
+                // بلاک‌شده» همین الان بازه، بدون این سیگنال تا یه اتفاق دیگه پیش نیاد آپدیت نمی‌شد.
+                DataChangeSignal.notifyChanged()
+                return
+            }
+
             // اگه کاربر همین الان (توی فورگراند) داخل همین مکالمه‌ست، لازم نیست نوتیف/صدا بدیم -
             // چون ContentObserver توی ViewModel خودش صفحه‌ی چت رو زنده آپدیت می‌کنه و کاربر
             // همون لحظه پیام رو روی صفحه می‌بینه.
@@ -108,6 +124,9 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             .setSmallIcon(R.drawable.ic_message)
             .setContentTitle(sender)
             .setContentText(body)
+            // BigTextStyle باعث میشه نوتیف قابل کشیدن/expand باشه و کاربر بتونه کل متنِ
+            // پیام رو (نه فقط یک خط خلاصه‌شده) مستقیم از توی نوتیف ببینه.
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body).setBigContentTitle(sender))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)

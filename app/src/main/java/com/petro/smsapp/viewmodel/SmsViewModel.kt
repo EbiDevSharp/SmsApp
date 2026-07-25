@@ -9,7 +9,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.ActiveThreadTracker
+import com.petro.smsapp.data.BlockKeyword
+import com.petro.smsapp.data.BlockKeywordStore
 import com.petro.smsapp.data.BlockStore
+import com.petro.smsapp.data.BlockedKeywordMessageStore
 import com.petro.smsapp.data.BlockedMessageEntry
 import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.data.ContactInfo
@@ -89,6 +92,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // همه‌ی پیام‌های thread های بلاک‌شده با هم - برای صفحه‌ی «پیامک‌های بلاک‌شده»
     private val _blockedMessages = MutableStateFlow<List<BlockedMessageEntry>>(emptyList())
     val blockedMessages: StateFlow<List<BlockedMessageEntry>> = _blockedMessages.asStateFlow()
+
+    // لیست کلمات کلیدی بلاک - برای صفحه‌ی «کلمات کلیدی بلاک» و بج شمارنده
+    private val _blockKeywords = MutableStateFlow<List<BlockKeyword>>(emptyList())
+    val blockKeywords: StateFlow<List<BlockKeyword>> = _blockKeywords.asStateFlow()
 
     // لیست شماره‌های خصوصی - برای صفحه‌ی «شماره‌های خصوصی»
     private val _privateNumbers = MutableStateFlow<List<PrivateNumber>>(emptyList())
@@ -582,6 +589,37 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForBlockedThreads() }
             _blockedMessages.value = result
+        }
+    }
+
+    /** لود کردن لیست کلمات کلیدی بلاک - برای صفحه‌ی «کلمات کلیدی بلاک» و بج شمارنده */
+    fun loadBlockKeywords() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { BlockKeywordStore.getAllKeywords(getApplication()) }
+            _blockKeywords.value = result
+        }
+    }
+
+    /**
+     * افزودن یه کلمه‌ی کلیدیِ بلاک جدید - از این لحظه به بعد، هر پیام ورودیِ (از هر شماره‌ای)
+     * که شاملِ این عبارت باشه خودکار بلاک میشه. پیام‌های قبلی که قبل از افزودن این کلمه
+     * رسیده بودن، عقب‌گرد نمی‌خورن (فقط پیام‌های تازه از این به بعد رو تحت تأثیر قرار میده).
+     */
+    fun addBlockKeyword(text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val added = withContext(Dispatchers.IO) { BlockKeywordStore.addKeyword(app, text) }
+            _operationMessage.value = if (added) "کلمه‌ی «${text.trim()}» اضافه شد" else "این کلمه از قبل اضافه شده بود"
+            loadBlockKeywords()
+        }
+    }
+
+    /** حذف یه کلمه‌ی کلیدیِ بلاک - پیام‌هایی که قبلاً به‌خاطر همین کلمه بلاک شده بودن، دست‌نخورده می‌مونن */
+    fun removeBlockKeyword(id: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { BlockKeywordStore.removeKeyword(getApplication(), id) }
+            loadBlockKeywords()
         }
     }
 

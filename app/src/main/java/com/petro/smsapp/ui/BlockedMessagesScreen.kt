@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.petro.smsapp.data.BlockSource
 import com.petro.smsapp.data.BlockedMessageEntry
 import com.petro.smsapp.util.DateFormatter
 
@@ -221,8 +222,24 @@ private fun BlockedMessageRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
+            Spacer(modifier = Modifier.height(2.dp))
+            BlockSourceLabel(entry)
         }
     }
+}
+
+/** نشون میده این پیام از چه طریقی بلاک شده: بر اساس خودِ شماره یا بر اساس یه کلمه‌ی کلیدی */
+@Composable
+private fun BlockSourceLabel(entry: BlockedMessageEntry) {
+    val text = when (entry.blockSource) {
+        BlockSource.PHONE_NUMBER -> "بلاک‌شده بر اساس: شماره"
+        BlockSource.KEYWORD -> "بلاک‌شده بر اساس: کلمه‌ی «${entry.matchedKeyword ?: ""}»"
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.error
+    )
 }
 
 @Composable

@@ -122,6 +122,7 @@ class SmsRepository(private val context: Context) {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
         val trashedIds = TrashStore.getTrashedIds(context)
+        val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -141,6 +142,7 @@ class SmsRepository(private val context: Context) {
                 val typeIdx = cursor.getColumnIndex(Telephony.Sms.TYPE)
                 while (cursor.moveToNext()) {
                     if (cursor.getLong(idIdx) in trashedIds) continue
+                    if (cursor.getLong(idIdx) in keywordBlockedIds) continue
                     if (typeIdx >= 0 && cursor.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT) continue
 
                     val threadId = cursor.getLong(threadIdIdx)
@@ -261,6 +263,7 @@ class SmsRepository(private val context: Context) {
         if (!requireReadSmsPermission("خواندن پیام‌های یک مکالمه")) return emptyList()
         val messages = mutableListOf<SmsMessage>()
         val trashedIds = TrashStore.getTrashedIds(context)
+        val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
         val uri = Telephony.Sms.CONTENT_URI
         // پیش‌نویس رو از لیست پیام‌های واقعی مکالمه کنار می‌ذاریم - پیش‌نویس حباب چت نیست،
         // فقط توی کادر متنِ پایین صفحه (از طریق getDraftText) برمی‌گرده
@@ -275,6 +278,7 @@ class SmsRepository(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val message = cursorToMessage(cursor)
                     if (message.id in trashedIds) continue
+                    if (message.id in keywordBlockedIds) continue
                     messages.add(message)
                 }
             }
@@ -293,12 +297,60 @@ class SmsRepository(private val context: Context) {
      */
     fun getMessagesForBlockedThreads(): List<BlockedMessageEntry> {
         val blockedNumbers = BlockStore.getAllBlockedNumbers(context)
-        if (blockedNumbers.isEmpty()) return emptyList()
-        return getMessagesByAddresses(blockedNumbers.map { it.address })
-            .map { message ->
-                val name = blockedNumbers.find { it.address == message.address }?.displayName ?: message.address
-                BlockedMessageEntry(message, name)
+        val phoneBlockedEntries = if (blockedNumbers.isEmpty()) {
+            emptyList()
+        } else {
+            getMessagesByAddresses(blockedNumbers.map { it.address })
+                .map { message ->
+                    val name = blockedNumbers.find { it.address == message.address }?.displayName ?: message.address
+                    BlockedMessageEntry(message, name, BlockSource.PHONE_NUMBER)
+                }
+        }
+
+        // پیام‌هایی که فقط به‌خاطر کلمه‌ی کلیدی بلاک شدن (شماره‌شون بلاک نیست) - جدا از بالا،
+        // چون بر اساس id خودِ پیام مشخص میشن نه آدرس. اگه شماره‌شون هم بلاک بوده باشه، اینجا
+        // دوباره اضافه نمی‌شن (تا توی لیست تکراری نشن) - همون ردیف بالا با منبع «شماره» کافیه.
+        val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
+        val keywordBlockedEntries = if (keywordBlockedIds.isEmpty()) {
+            emptyList()
+        } else {
+            getMessagesByIds(keywordBlockedIds)
+                .filter { message -> blockedNumbers.none { it.address == message.address } }
+                .map { message ->
+                    val name = ContactsCache.getName(context, message.address) ?: message.address
+                    val keyword = BlockedKeywordMessageStore.getMatchedKeyword(context, message.id)
+                    BlockedMessageEntry(message, name, BlockSource.KEYWORD, keyword)
+                }
+        }
+
+        return (phoneBlockedEntries + keywordBlockedEntries).sortedByDescending { it.message.date }
+    }
+
+    /** خوندن مستقیم پیام‌ها بر اساس یه لیست id مشخص - هم‌خانواده‌ی الگوی getTrashedMessages */
+    private fun getMessagesByIds(ids: Set<Long>): List<SmsMessage> {
+        if (!requireReadSmsPermission("خواندن پیامک‌های بلاک‌شده بر اساس کلمه")) return emptyList()
+        if (ids.isEmpty()) return emptyList()
+        val trashedIds = TrashStore.getTrashedIds(context)
+        val placeholders = ids.joinToString(",") { "?" }
+        val selection = "${Telephony.Sms._ID} IN ($placeholders)"
+        val selectionArgs = ids.map { it.toString() }.toTypedArray()
+
+        val messages = mutableListOf<SmsMessage>()
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI, null, selection, selectionArgs, null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val message = cursorToMessage(cursor)
+                    if (message.id in trashedIds) continue
+                    messages.add(message)
+                }
             }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیامک‌های بلاک‌شده بر اساس کلمه", e)
+            return emptyList()
+        }
+        return messages
     }
 
     /**
@@ -548,6 +600,7 @@ class SmsRepository(private val context: Context) {
                         null
                     )
                     DeliveryStore.clear(context, messageId)
+                    BlockedKeywordMessageStore.clear(context, messageId)
                 } catch (e: SecurityException) {
                     Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی پیام‌ها", e)
                 }
@@ -643,6 +696,7 @@ class SmsRepository(private val context: Context) {
             return false
         }
         DeliveryStore.clear(context, messageId)
+        BlockedKeywordMessageStore.clear(context, messageId)
         TrashStore.restore(context, messageId) // دیگه ردیفی نیست، ایندکس سطل زباله رو هم پاک کن
         return true
     }

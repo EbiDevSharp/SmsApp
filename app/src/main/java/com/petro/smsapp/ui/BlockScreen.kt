@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,10 +27,12 @@ import androidx.compose.ui.unit.dp
 fun BlockScreen(
     blockedMessageCount: Int,
     blockedNumberCount: Int,
+    blockKeywordCount: Int,
     onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onOpenBlockedMessages: () -> Unit,
-    onOpenBlockedNumbers: () -> Unit
+    onOpenBlockedNumbers: () -> Unit,
+    onOpenBlockKeywords: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -61,6 +64,13 @@ fun BlockScreen(
                 label = "شماره‌های بلاک‌شده",
                 count = blockedNumberCount,
                 onClick = onOpenBlockedNumbers
+            )
+            BlockHubCard(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Filled.TextFields,
+                label = "کلمات کلیدی بلاک",
+                count = blockKeywordCount,
+                onClick = onOpenBlockKeywords
             )
         }
     }

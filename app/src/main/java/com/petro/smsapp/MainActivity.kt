@@ -34,6 +34,7 @@ import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddBlockedNumberScreen
 import com.petro.smsapp.ui.AddPrivateNumberScreen
 import com.petro.smsapp.ui.BlockScreen
+import com.petro.smsapp.ui.BlockKeywordsScreen
 import com.petro.smsapp.ui.BlockedMessagesScreen
 import com.petro.smsapp.ui.BlockedNumbersScreen
 import com.petro.smsapp.ui.ConversationListScreen
@@ -217,6 +218,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val trash by viewModel.trash.collectAsState()
     val blockedNumbers by viewModel.blockedNumbers.collectAsState()
     val blockedMessages by viewModel.blockedMessages.collectAsState()
+    val blockKeywords by viewModel.blockKeywords.collectAsState()
     val privateNumbers by viewModel.privateNumbers.collectAsState()
     val privateMessages by viewModel.privateMessages.collectAsState()
     val privateUnlocked by viewModel.privateUnlocked.collectAsState()
@@ -249,6 +251,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         viewModel.loadFavorites()
         viewModel.loadBlockedNumbers()
         viewModel.loadBlockedMessages()
+        viewModel.loadBlockKeywords()
     }
 
     // پیام‌های یک‌بارمصرف (مثل «این پیام قفله») به‌صورت Toast نشون داده میشن
@@ -454,14 +457,17 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 LaunchedEffect(Unit) {
                     viewModel.loadBlockedNumbers()
                     viewModel.loadBlockedMessages()
+                    viewModel.loadBlockKeywords()
                 }
                 BlockScreen(
                     blockedMessageCount = blockedMessages.size,
                     blockedNumberCount = blockedNumbers.size,
+                    blockKeywordCount = blockKeywords.size,
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
                     onOpenBlockedMessages = { navController.navigate("blocked_messages") },
-                    onOpenBlockedNumbers = { navController.navigate("blocked_numbers") }
+                    onOpenBlockedNumbers = { navController.navigate("blocked_numbers") },
+                    onOpenBlockKeywords = { navController.navigate("block_keywords") }
                 )
             }
             composable("blocked_messages") {
@@ -500,6 +506,15 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onSearchChange = { query -> viewModel.searchContacts(query) },
                     onBlockNumber = { address, displayName -> viewModel.blockNumber(address, displayName) },
                     onBack = { navController.popBackStack() }
+                )
+            }
+            composable("block_keywords") {
+                LaunchedEffect(Unit) { viewModel.loadBlockKeywords() }
+                BlockKeywordsScreen(
+                    keywords = blockKeywords,
+                    onBack = { navController.popBackStack() },
+                    onAddKeyword = { text -> viewModel.addBlockKeyword(text) },
+                    onRemoveKeyword = { id -> viewModel.removeBlockKeyword(id) }
                 )
             }
             composable("private") {
