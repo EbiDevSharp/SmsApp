@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -41,7 +42,8 @@ fun MessageActionsSheet(
     onDismiss: () -> Unit,
     onOpenNote: () -> Unit,
     onDeleteConfirmed: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onResend: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
     val clipboardManager = LocalClipboardManager.current
@@ -92,6 +94,18 @@ fun MessageActionsSheet(
                     label = "جزئیات پیام",
                     onClick = { showDetails = true }
                 )
+                // فقط برای پیام‌های ارسالیِ ناموفق - همون کاری که با زدن روی آیکنِ خطا کنار
+                // ساعت یا خودِ حباب هم انجام میشه، اینجا هم به‌عنوان یه آیتم منو در دسترسه
+                if (message.isFailed) {
+                    MenuRow(
+                        icon = Icons.Filled.Refresh,
+                        label = "ارسال دوباره",
+                        onClick = {
+                            onResend()
+                            onDismiss()
+                        }
+                    )
+                }
                 MenuRow(
                     icon = Icons.Filled.Notes,
                     label = "باز کردن در نوت",

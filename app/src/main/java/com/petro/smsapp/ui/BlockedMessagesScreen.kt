@@ -45,7 +45,8 @@ fun BlockedMessagesScreen(
     onBack: () -> Unit,
     onDeleteMessages: (Set<Long>) -> Unit,
     onOpenNote: (text: String) -> Unit,
-    onToggleFavorite: (entry: BlockedMessageEntry) -> Unit
+    onToggleFavorite: (entry: BlockedMessageEntry) -> Unit,
+    onResend: (entry: BlockedMessageEntry) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -76,7 +77,8 @@ fun BlockedMessagesScreen(
                 onDeleteMessages(setOf(currentActionSheetEntry.message.id))
                 actionSheetEntry = null
             },
-            onToggleFavorite = { onToggleFavorite(currentActionSheetEntry) }
+            onToggleFavorite = { onToggleFavorite(currentActionSheetEntry) },
+            onResend = { onResend(currentActionSheetEntry) }
         )
     }
 

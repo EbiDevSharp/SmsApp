@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SelectAll
@@ -170,7 +171,8 @@ fun ThreadScreen(
                 onDeleteMessage(currentSelectedMessage.id)
                 selectedMessage = null
             },
-            onToggleFavorite = { onToggleFavorite(currentSelectedMessage) }
+            onToggleFavorite = { onToggleFavorite(currentSelectedMessage) },
+            onResend = { onResend(currentSelectedMessage) }
         )
     }
 
@@ -342,8 +344,17 @@ private fun MessageBubble(
     onLongClick: () -> Unit
 ) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (message.isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFFE5E5EA)
-    val textColor = if (message.isOutgoing) Color.White else Color.Black
+    // پیام‌های ارسالیِ ناموفق زمینه‌ی قرمز کم‌رنگ می‌گیرن تا همون نگاه اول معلوم باشه مشکل داشتن
+    val bubbleColor = when {
+        message.isFailed -> Color(0xFFFFCDD2)
+        message.isOutgoing -> MaterialTheme.colorScheme.primary
+        else -> Color(0xFFE5E5EA)
+    }
+    val textColor = when {
+        message.isFailed -> Color(0xFFB71C1C)
+        message.isOutgoing -> Color.White
+        else -> Color.Black
+    }
     val fontSize = (16 * fontScale).sp
 
     Row(
@@ -369,9 +380,10 @@ private fun MessageBubble(
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .padding(4.dp)
-                        // تک‌کلیک: منوی اکشن پیام (یا انتخاب، توی حالت انتخاب) - دابل‌کلیک: نوت - لانگ‌کلیک: ورود به حالت انتخاب
+                        // تک‌کلیک: برای پیام ناموفق مستقیم دوباره می‌فرسته، وگرنه منوی اکشن پیام
+                        // (یا انتخاب، توی حالت انتخاب) - دابل‌کلیک: نوت - لانگ‌کلیک: ورود به حالت انتخاب
                         .combinedClickable(
-                            onClick = onClick,
+                            onClick = if (message.isFailed && !selectionMode) onResend else onClick,
                             onDoubleClick = onDoubleClick,
                             onLongClick = onLongClick
                         )
@@ -393,15 +405,49 @@ private fun MessageBubble(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray
                 )
-                // تیک دلیوری: فقط برای پیام‌های ارسالی که گزارش تحویل موفق براشون برگشته
-                if (message.isDelivered) {
+                // وضعیت ارسال - فقط برای پیام‌های ارسالی، دقیقاً همون‌جایی که قبلاً فقط
+                // تیکِ دلیوری بود؛ حالا هر ۴ حالت یه آیکن مشخص همینجا نشون میدن:
+                // در صف/در حال ارسال -> ساعت خاکستری، ارسال‌شده (بدون گزارش دلیوری) -> یه تیک،
+                // تحویل داده‌شده -> دو تیک سبز، ناموفق -> آیکن خطا (با کلیک، دوباره می‌فرسته)
+                if (message.isOutgoing) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Done,
-                        contentDescription = "تحویل داده شد",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
+                    when {
+                        message.isFailed -> {
+                            Icon(
+                                imageVector = Icons.Filled.ErrorOutline,
+                                contentDescription = "ارسال نشد - برای ارسال دوباره بزن",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .combinedClickable(onClick = onResend, onLongClick = {})
+                            )
+                        }
+                        message.isSending || message.isQueued -> {
+                            Icon(
+                                imageVector = Icons.Filled.Schedule,
+                                contentDescription = if (message.isQueued) "در صف ارسال" else "در حال ارسال",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        message.isDelivered -> {
+                            Icon(
+                                imageVector = Icons.Filled.DoneAll,
+                                contentDescription = "تحویل داده شد",
+                                tint = Color(0xFF34A853),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        else -> {
+                            // ارسال‌شده ولی هنوز گزارش دلیوری نرسیده (یا اصلاً درخواستش نکردیم)
+                            Icon(
+                                imageVector = Icons.Filled.Done,
+                                contentDescription = "ارسال شد",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
                 }
                 // نشان ستاره: پیام فیوریت‌شده (قفل‌شده در برابر حذف)
                 if (isFavorite) {
@@ -411,71 +457,6 @@ private fun MessageBubble(
                         contentDescription = "فیوریت‌شده",
                         tint = Color(0xFFFFC107),
                         modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-            // نشانِ «ارسال نشد» - فقط برای پیام‌های ارسالیِ ناموفق (مثلاً به‌خاطر نبود آنتن).
-            // با زدن روش، دوباره با همون متن/آدرس فرستاده میشه.
-            if (message.isFailed) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 2.dp)
-                        .combinedClickable(onClick = onResend, onLongClick = {})
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ErrorOutline,
-                        contentDescription = "ارسال نشد",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "ارسال نشد - برای ارسال دوباره بزن",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-            // نشانِ «در حال ارسال» - سیستم موقتاً TYPE رو OUTBOX می‌ذاره تا وضعیتِ نهایی
-            // (SENT یا FAILED) مشخص بشه. قبلاً هیچ نشونه‌ای نداشت و شبیه پیامِ ارسال‌شده‌ی
-            // معمولی به‌نظر می‌رسید.
-            if (message.isSending) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(10.dp),
-                        strokeWidth = 1.5.dp,
-                        color = Color.Gray
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "در حال ارسال...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
-                    )
-                }
-            }
-            // نشانِ «در صف ارسال» - وقتی رادیو موقتاً در دسترس نیست (مثلاً حالت پرواز)،
-            // سیستم پیام رو اینجا نگه می‌داره تا بعداً خودش دوباره امتحان کنه.
-            if (message.isQueued) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Schedule,
-                        contentDescription = "در صف ارسال",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "در صف ارسال...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
                     )
                 }
             }

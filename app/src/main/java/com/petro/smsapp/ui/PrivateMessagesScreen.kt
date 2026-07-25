@@ -37,7 +37,8 @@ fun PrivateMessagesScreen(
     onBack: () -> Unit,
     onDeleteMessages: (Set<Long>) -> Unit,
     onOpenNote: (text: String) -> Unit,
-    onToggleFavorite: (entry: PrivateMessageEntry) -> Unit
+    onToggleFavorite: (entry: PrivateMessageEntry) -> Unit,
+    onResend: (entry: PrivateMessageEntry) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -67,7 +68,8 @@ fun PrivateMessagesScreen(
                 onDeleteMessages(setOf(currentActionSheetEntry.message.id))
                 actionSheetEntry = null
             },
-            onToggleFavorite = { onToggleFavorite(currentActionSheetEntry) }
+            onToggleFavorite = { onToggleFavorite(currentActionSheetEntry) },
+            onResend = { onResend(currentActionSheetEntry) }
         )
     }
 

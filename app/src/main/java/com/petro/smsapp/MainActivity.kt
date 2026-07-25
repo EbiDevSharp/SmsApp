@@ -430,7 +430,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         viewModel.openNote(text)
                         navController.navigate("note")
                     },
-                    onToggleFavorite = { entry -> viewModel.toggleFavorite(entry.message, entry.contactDisplayName) }
+                    onToggleFavorite = { entry -> viewModel.toggleFavorite(entry.message, entry.contactDisplayName) },
+                    onResend = { entry -> viewModel.resendMessage(entry.message) }
                 )
             }
             composable("blocked_numbers") {
@@ -517,7 +518,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                             viewModel.openNote(text)
                             navController.navigate("note")
                         },
-                        onToggleFavorite = { entry -> viewModel.toggleFavorite(entry.message, entry.contactDisplayName) }
+                        onToggleFavorite = { entry -> viewModel.toggleFavorite(entry.message, entry.contactDisplayName) },
+                        onResend = { entry -> viewModel.resendMessage(entry.message) }
                     )
                 }
             }
