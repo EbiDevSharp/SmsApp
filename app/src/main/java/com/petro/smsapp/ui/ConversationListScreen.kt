@@ -33,6 +33,10 @@ import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.petro.smsapp.data.Conversation
 import com.petro.smsapp.util.DateFormatter
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * صفحه‌ی اصلی لیست مکالمات (پیام‌ها). علاوه بر رفتار عادی (کلیک -> باز کردن مکالمه)،
@@ -59,6 +63,8 @@ fun ConversationListScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     val selectionMode = selectedIds.isNotEmpty()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     // اگه بعد از حذف/تغییر لیست، بعضی id های انتخاب‌شده دیگه وجود نداشته باشن، از انتخاب پاک بشن
     LaunchedEffect(conversations) {
@@ -157,7 +163,14 @@ fun ConversationListScreen(
                 )
             } else {
                 TopAppBar(
-                    title = { Text("پیام‌ها", fontWeight = FontWeight.Bold) },
+                    title = {
+                        Text("پیام‌ها", fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable {
+                            scope.launch { listState.animateScrollToItem(0) }
+                        })
+
+
+                            },
                     navigationIcon = {
                         IconButton(onClick = onMenuClick) {
                             Icon(Icons.Filled.Menu, contentDescription = "منو")
@@ -184,7 +197,9 @@ fun ConversationListScreen(
                 Text("هنوز مکالمه‌ای نداری", color = Color.Gray)
             }
         } else {
-            LazyColumn(modifier = Modifier.padding(padding)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.padding(padding)) {
                 items(conversations, key = { it.threadId }) { conversation ->
                     ConversationRow(
                         conversation = conversation,

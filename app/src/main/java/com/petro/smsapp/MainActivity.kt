@@ -57,6 +57,10 @@ import com.petro.smsapp.ui.ThreadScreen
 import com.petro.smsapp.ui.TrashScreen
 import com.petro.smsapp.viewmodel.SmsViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import com.petro.smsapp.ui.SmsAppTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -100,7 +104,10 @@ class MainActivity : ComponentActivity() {
                 // اپ فعلاً فقط فارسیه، پس صرف‌نظر از زبان گوشی چیدمان رو راست‌به‌چپ می‌کنیم.
                 // اعداد (ساعت/تاریخ/شماره تلفن) به‌خاطر الگوریتم بایدای یونیکد خودشون چپ‌به‌راست می‌مونن.
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Surface(modifier = Modifier) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background)
+                    {
                         AppNavigation(
                             viewModel = viewModel,
                             onPickContactClick = {
