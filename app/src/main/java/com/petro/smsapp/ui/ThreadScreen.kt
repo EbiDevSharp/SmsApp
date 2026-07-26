@@ -3,6 +3,7 @@ package com.petro.smsapp.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -31,10 +33,27 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.petro.smsapp.data.ScheduledMessage
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
+
+/**
+ * یه ردیف واحد برای LazyColumn صفحه‌ی چت - یا یه پیام واقعی، یا یه پیام زمان‌بندی‌شده‌ی
+ * هنوز-در-انتظار (که هنوز SmsMessage واقعی نیست چون ارسال نشده). برای اینکه هردو تو یه
+ * لیستِ زمانی درست کنار هم مرتب بشن (پیام‌های زمان‌بندی‌شده معمولاً چون زمانشون تو
+ * آینده‌ست، ته لیست/پایین صفحه می‌شینن).
+ */
+private sealed class ThreadListItem {
+    abstract val sortDate: Long
+    data class Real(val message: SmsMessage) : ThreadListItem() {
+        override val sortDate get() = message.date
+    }
+    data class Pending(val scheduled: ScheduledMessage) : ThreadListItem() {
+        override val sortDate get() = scheduled.scheduledAt
+    }
+}
 
 /**
  * صفحه‌ی چت یک مخاطب. دو تا قابلیت مهم علاوه بر ارسال/دریافت معمولی:
@@ -58,6 +77,7 @@ fun ThreadScreen(
     // یا صرفاً یه Sender ID حروفی (مثلاً اسم اپراتور) که نمیشه بهش پیام فرستاد
     address: String,
     messages: List<SmsMessage>,
+    scheduledMessages: List<ScheduledMessage>,
     sims: List<SimInfo>,
     favoriteIds: Set<Long>,
     // متن پیش‌نویسِ ذخیره‌شده‌ی همین مکالمه (اگه بود) - برای پرکردن خودکار کادر متن
@@ -68,6 +88,9 @@ fun ThreadScreen(
     onOpenNote: (text: String) -> Unit,
     onToggleFavorite: (message: SmsMessage) -> Unit,
     onResend: (message: SmsMessage) -> Unit,
+    onUpdateScheduledTime: (id: Long, newTime: Long) -> Unit,
+    onSendScheduledNow: (id: Long) -> Unit,
+    onCancelScheduledMessage: (id: Long) -> Unit,
     // موقع خروج از صفحه (هر دلیلی) با متنِ فعلیِ کادر صدا زده میشه - پیاده‌سازی این تابع
     // تصمیم می‌گیره ذخیره کنه (اگه متنی بود) یا پیش‌نویس قبلی رو پاک کنه (اگه خالی بود)
     onLeaveWithDraft: (text: String) -> Unit,
@@ -103,6 +126,8 @@ fun ThreadScreen(
     val canSend = remember(address) { PhoneNumberUtils.isSendableAddress(address) }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
     var selectedMessage by remember { mutableStateOf<SmsMessage?>(null) }
+    var selectedScheduledMessage by remember { mutableStateOf<ScheduledMessage?>(null) }
+    var editingScheduledMessage by remember { mutableStateOf<ScheduledMessage?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     // 1f = فونت پایه (16sp)، 1.75f = حداکثر زوم (28sp)
@@ -173,6 +198,34 @@ fun ThreadScreen(
             },
             onToggleFavorite = { onToggleFavorite(currentSelectedMessage) },
             onResend = { onResend(currentSelectedMessage) }
+        )
+    }
+
+    val currentSelectedScheduled = selectedScheduledMessage
+    if (currentSelectedScheduled != null) {
+        ScheduledMessageActionsSheet(
+            onDismiss = { selectedScheduledMessage = null },
+            onEditTime = { editingScheduledMessage = currentSelectedScheduled },
+            onSendNow = {
+                onSendScheduledNow(currentSelectedScheduled.id)
+                selectedScheduledMessage = null
+            },
+            onCancelSchedule = {
+                onCancelScheduledMessage(currentSelectedScheduled.id)
+                selectedScheduledMessage = null
+            }
+        )
+    }
+
+    val currentEditingScheduled = editingScheduledMessage
+    if (currentEditingScheduled != null) {
+        DateTimePickerDialog(
+            initialMillis = currentEditingScheduled.scheduledAt,
+            onConfirm = {
+                onUpdateScheduledTime(currentEditingScheduled.id, it)
+                editingScheduledMessage = null
+            },
+            onDismiss = { editingScheduledMessage = null }
         )
     }
 
@@ -284,8 +337,15 @@ fun ThreadScreen(
             // هر بار فضای واقعی در دسترس عوض بشه (باز/بسته شدن کیبورد، چرخش صفحه و ...)
             // دوباره برو آخرین پیام تا زیر کادر ارسال قایم نمونه
             val availableHeight = maxHeight
-            LaunchedEffect(availableHeight, messages.size) {
-                if (messages.isNotEmpty()) {
+            // پیام‌های واقعی + پیام‌های زمان‌بندی‌شده‌ی در انتظار (که هنوز SmsMessage واقعی
+            // نیستن) با هم ترکیب و بر اساس تاریخ/زمانِ خودشون مرتب میشن - پیام‌های
+            // زمان‌بندی‌شده چون زمانشون تو آینده‌ست، معمولاً ته لیست (پایین صفحه) می‌شینن.
+            val combinedItems = remember(messages, scheduledMessages) {
+                (messages.map { ThreadListItem.Real(it) } + scheduledMessages.map { ThreadListItem.Pending(it) })
+                    .sortedBy { it.sortDate }
+            }
+            LaunchedEffect(availableHeight, combinedItems.size) {
+                if (combinedItems.isNotEmpty()) {
                     // چون reverseLayout=true هست، ایندکس ۰ = پایین‌ترین/جدیدترین پیام
                     listState.animateScrollToItem(0)
                 }
@@ -298,32 +358,51 @@ fun ThreadScreen(
                     .fillMaxSize()
                     .padding(horizontal = 8.dp)
             ) {
-                items(messages.reversed(), key = { it.id }) { message ->
-                    MessageBubble(
-                        message = message,
-                        isFavorite = favoriteIds.contains(message.id),
-                        selectionMode = selectionMode,
-                        isSelected = selectedIds.contains(message.id),
-                        fontScale = fontScale,
-                        onResend = { onResend(message) },
-                        onClick = {
-                            if (selectionMode) {
-                                selectedIds = if (selectedIds.contains(message.id)) {
-                                    selectedIds - message.id
-                                } else {
-                                    selectedIds + message.id
-                                }
-                            } else {
-                                selectedMessage = message
-                            }
-                        },
-                        onDoubleClick = {
-                            if (!selectionMode) onOpenNote(message.body)
-                        },
-                        onLongClick = {
-                            if (!selectionMode) selectedIds = setOf(message.id)
+                items(
+                    combinedItems.reversed(),
+                    key = { item ->
+                        when (item) {
+                            is ThreadListItem.Real -> "m_${item.message.id}"
+                            is ThreadListItem.Pending -> "s_${item.scheduled.id}"
                         }
-                    )
+                    }
+                ) { item ->
+                    when (item) {
+                        is ThreadListItem.Real -> {
+                            val message = item.message
+                            MessageBubble(
+                                message = message,
+                                isFavorite = favoriteIds.contains(message.id),
+                                selectionMode = selectionMode,
+                                isSelected = selectedIds.contains(message.id),
+                                fontScale = fontScale,
+                                onResend = { onResend(message) },
+                                onClick = {
+                                    if (selectionMode) {
+                                        selectedIds = if (selectedIds.contains(message.id)) {
+                                            selectedIds - message.id
+                                        } else {
+                                            selectedIds + message.id
+                                        }
+                                    } else {
+                                        selectedMessage = message
+                                    }
+                                },
+                                onDoubleClick = {
+                                    if (!selectionMode) onOpenNote(message.body)
+                                },
+                                onLongClick = {
+                                    if (!selectionMode) selectedIds = setOf(message.id)
+                                }
+                            )
+                        }
+                        is ThreadListItem.Pending -> {
+                            PendingScheduledBubble(
+                                scheduled = item.scheduled,
+                                onClick = { if (!selectionMode) selectedScheduledMessage = item.scheduled }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -483,6 +562,54 @@ private fun SelectionCheck(isSelected: Boolean) {
                 tint = Color.White,
                 modifier = Modifier.size(16.dp)
             )
+        }
+    }
+}
+
+/**
+ * حباب مجازی یه پیام زمان‌بندی‌شده‌ی هنوز-در-انتظار - شکلش شبیه حباب پیام ارسالی معمولیه
+ * (چون قراره از طرف ما فرستاده بشه)، با یه خط کوچیک بالای متن که ساعت ارسالش رو نشون میده.
+ * تک‌کلیک روش منوی «ویرایش زمان / اکنون ارسال شود / لغو زمان‌بندی» رو باز می‌کنه.
+ */
+@Composable
+private fun PendingScheduledBubble(scheduled: ScheduledMessage, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Box(contentAlignment = Alignment.CenterEnd, modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .clickable(onClick = onClick)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Alarm,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "ارسال در ${DateFormatter.formatFull(scheduled.scheduledAt)}",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Divider(color = Color.White.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = scheduled.body, color = Color.White)
+                    }
+                }
+            }
         }
     }
 }

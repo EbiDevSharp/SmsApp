@@ -9,6 +9,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.ActiveThreadTracker
+import com.petro.smsapp.data.AlarmScheduler
 import com.petro.smsapp.data.BlockKeyword
 import com.petro.smsapp.data.BlockKeywordStore
 import com.petro.smsapp.data.BlockStore
@@ -24,6 +25,8 @@ import com.petro.smsapp.data.FavoriteStore
 import com.petro.smsapp.data.PrivateMessageEntry
 import com.petro.smsapp.data.PrivateNumber
 import com.petro.smsapp.data.PrivateStore
+import com.petro.smsapp.data.ScheduledMessage
+import com.petro.smsapp.data.ScheduledMessageStore
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
@@ -50,6 +53,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _messages = MutableStateFlow<List<SmsMessage>>(emptyList())
     val messages: StateFlow<List<SmsMessage>> = _messages.asStateFlow()
+
+    // پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظارِ همین مکالمه - برای نمایش حباب مجازی «ارسال در ساعت X»
+    private val _scheduledMessages = MutableStateFlow<List<ScheduledMessage>>(emptyList())
+    val scheduledMessages: StateFlow<List<ScheduledMessage>> = _scheduledMessages.asStateFlow()
 
     // متن پیش‌نویسِ thread فعلاً بازشده - برای پرکردن خودکار کادر متن موقع ورود به چت
     private val _draftText = MutableStateFlow("")
@@ -178,6 +185,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     fun loadThread(threadId: Long) {
         openThreadId = threadId
         ActiveThreadTracker.activeThreadId = threadId
+        loadScheduledMessages(threadId)
         viewModelScope.launch {
             // اول پیام‌ها لود و روی صفحه نمایش داده میشن، بعد خوانده‌شده علامت می‌خورن.
             // اگه برعکس بود (که قبلاً بود) و لود با خطا مواجه می‌شد، پیامی که کاربر
@@ -785,6 +793,86 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             loadThread(threadId) // قبل از navigate لود میشه تا صفحه چت از همون لحظه‌ی اول پیام رو نشون بده
             loadConversations()
             _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
+        }
+    }
+
+    /**
+     * زمان‌بندی یه پیام برای ارسال بعداً (از صفحه‌ی «پیام جدید» -> گزینه‌ی «زمان‌بندی»).
+     * برخلاف sendNewMessage، اینجا واقعاً چیزی فرستاده نمیشه؛ فقط توی ScheduledMessageStore
+     * ذخیره و توی AlarmManager ثبت میشه، بعد می‌ریم صفحه‌ی چت تا حباب مجازی «ارسال در ساعت X»ـش
+     * دیده بشه. با فرارسیدن زمانش، ScheduledSmsReceiver واقعاً می‌فرستدش.
+     */
+    fun scheduleMessage(address: String, displayName: String, body: String, subscriptionId: Int?, scheduledAt: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
+            val message = ScheduledMessage(
+                id = System.currentTimeMillis(),
+                threadId = threadId,
+                address = address,
+                displayName = displayName,
+                body = body,
+                scheduledAt = scheduledAt,
+                subscriptionId = subscriptionId
+            )
+            withContext(Dispatchers.IO) {
+                ScheduledMessageStore.save(app, message)
+                AlarmScheduler.schedule(app, message)
+            }
+            loadThread(threadId)
+            loadConversations()
+            _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
+        }
+    }
+
+    /** لود کردن پیام‌های زمان‌بندی‌شده‌ی در انتظارِ یه مکالمه - برای حباب‌های مجازی توی صفحه‌ی چت */
+    fun loadScheduledMessages(threadId: Long) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { ScheduledMessageStore.getForThread(getApplication(), threadId) }
+            _scheduledMessages.value = result
+        }
+    }
+
+    /** ویرایش زمانِ یه پیام زمان‌بندی‌شده که هنوز ارسال نشده (از منوی کلیک روی حباب مجازی‌ش) */
+    fun updateScheduledTime(id: Long, threadId: Long, newScheduledAt: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                val existing = ScheduledMessageStore.get(app, id) ?: return@withContext
+                AlarmScheduler.cancel(app, id)
+                val updated = existing.copy(scheduledAt = newScheduledAt)
+                ScheduledMessageStore.save(app, updated)
+                AlarmScheduler.schedule(app, updated)
+            }
+            loadScheduledMessages(threadId)
+        }
+    }
+
+    /** «اکنون ارسال شود» - به‌جای صبر کردن تا زمانش برسه، همین الان واقعاً می‌فرستدش */
+    fun sendScheduledNow(id: Long, threadId: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                val message = ScheduledMessageStore.get(app, id) ?: return@withContext
+                AlarmScheduler.cancel(app, id)
+                repository.sendSms(message.address, message.body, message.subscriptionId)
+                ScheduledMessageStore.remove(app, id)
+            }
+            refreshMessages(threadId)
+            loadScheduledMessages(threadId)
+            loadConversations()
+        }
+    }
+
+    /** «لغو زمان‌بندی» - دیگه اصلاً ارسال نمیشه */
+    fun cancelScheduledMessage(id: Long, threadId: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                AlarmScheduler.cancel(app, id)
+                ScheduledMessageStore.remove(app, id)
+            }
+            loadScheduledMessages(threadId)
         }
     }
 

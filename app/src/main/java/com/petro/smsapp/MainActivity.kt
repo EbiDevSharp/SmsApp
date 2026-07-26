@@ -75,6 +75,13 @@ class MainActivity : ComponentActivity() {
         checkPermissionsAndLoad()
     }
 
+    // مجوز alarm دقیق (برای پیام‌های زمان‌بندی‌شده) از نوع runtime-permission معمولی نیست؛
+    // فقط با بردن کاربر به یه صفحه‌ی تنظیمات مخصوص سیستم قابل درخواسته. نتیجه‌ش برامون مهم
+    // نیست (چه بده چه نده، AlarmScheduler خودش fallback غیردقیق داره)، پس callback خالیه.
+    private val requestExactAlarmLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { }
+
     private val pickContactLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -166,6 +173,26 @@ class MainActivity : ComponentActivity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestPermissionsLauncher.launch(permissions.toTypedArray())
+        requestExactAlarmPermissionIfNeeded()
+    }
+
+    /**
+     * از اندروید ۱۲ (S) به بعد، ارسال دقیقاً سرِ همون ثانیه‌ای که کاربر برای پیام
+     * زمان‌بندی‌شده انتخاب کرده نیاز به یه مجوز جدا داره که فقط از یه صفحه‌ی تنظیمات
+     * مخصوص سیستم قابل دادنه (نه از دیالوگ معمولی مجوزها). اگه کاربر ندش، AlarmScheduler
+     * خودش با یه alarm غیردقیق (ممکنه چند دقیقه دیر برسه) fallback می‌کنه - پس رد شدن این
+     * مجوز چیزی رو خراب نمی‌کنه، فقط دقتِ زمان ارسال رو کم می‌کنه.
+     */
+    private fun requestExactAlarmPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(android.app.AlarmManager::class.java)
+            if (alarmManager?.canScheduleExactAlarms() == false) {
+                val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                requestExactAlarmLauncher.launch(intent)
+            }
+        }
     }
 
     /** خواندن نام و شماره‌ی مخاطبی که از اپ مخاطبین سیستم انتخاب شده */
@@ -207,6 +234,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val navController = rememberNavController()
     val conversations by viewModel.conversations.collectAsState()
     val messages by viewModel.messages.collectAsState()
+    val scheduledMessages by viewModel.scheduledMessages.collectAsState()
     val draftText by viewModel.draftText.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val newTarget by viewModel.newConversationTarget.collectAsState()
@@ -349,6 +377,9 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onSend = { address, displayName, body, subId ->
                         viewModel.sendNewMessage(address, displayName, body, subId)
                     },
+                    onScheduleSend = { address, displayName, body, subId, scheduledAt ->
+                        viewModel.scheduleMessage(address, displayName, body, subId, scheduledAt)
+                    },
                     onLeaveWithDraft = { address, displayName, body ->
                         viewModel.saveDraftForNewConversation(address, displayName, body)
                     },
@@ -377,6 +408,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     displayName = displayName,
                     address = address,
                     messages = messages,
+                    scheduledMessages = scheduledMessages,
                     sims = sims,
                     favoriteIds = favoriteIds,
                     initialDraft = draftText,
@@ -384,6 +416,9 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
                     onDeleteMessages = { messageIds -> viewModel.deleteMessages(threadId, messageIds) },
                     onResend = { message -> viewModel.resendMessage(message) },
+                    onUpdateScheduledTime = { id, newTime -> viewModel.updateScheduledTime(id, threadId, newTime) },
+                    onSendScheduledNow = { id -> viewModel.sendScheduledNow(id, threadId) },
+                    onCancelScheduledMessage = { id -> viewModel.cancelScheduledMessage(id, threadId) },
                     onLeaveWithDraft = { text -> viewModel.saveDraft(threadId, address, text) },
                     onOpenNote = { text ->
                         viewModel.openNote(text)

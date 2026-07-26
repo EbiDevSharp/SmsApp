@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- برای ارسال دقیقاً سرِ همون ثانیه‌ای که کاربر برای پیام زمان‌بندی‌شده انتخاب کرده -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- بعد از ریستارت گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار دوباره ثبت بشن -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature
         android:name="android.hardware.telephony"
         android:required="true" />
@@ -78,6 +83,21 @@
         <receiver
             android:name=".receiver.SmsStatusReceiver"
             android:exported="false" />
+
+        <!-- فرارسیدن زمانِ یه پیام زمان‌بندی‌شده (از طریق AlarmManager) - فقط داخلی -->
+        <receiver
+            android:name=".receiver.ScheduledSmsReceiver"
+            android:exported="false" />
+
+        <!-- بعد از روشن شدن گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار رو دوباره تو AlarmManager ثبت می‌کنه -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- پاسخ سریع بدون باز کردن اپ (Respond via Message) - اجباری -->
         <service
