@@ -19,6 +19,7 @@ import com.petro.smsapp.data.BlockKeywordStore
 import com.petro.smsapp.data.BlockPatternStore
 import com.petro.smsapp.data.BlockStore
 import com.petro.smsapp.data.BlockedKeywordMessageStore
+import com.petro.smsapp.data.BlockedNonContactMessageStore
 import com.petro.smsapp.data.BlockedPatternMessageStore
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
@@ -63,10 +64,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 return
             }
 
-            // تشخیص اینکه این پیام از نظر «بلاک» مسدوده یا نه - از هر کدوم از سه راه:
+            // تشخیص اینکه این پیام از نظر «بلاک» مسدوده یا نه - از هر کدوم از چهار راه:
             // ۱) خودِ شماره‌ی فرستنده صریحاً بلاک شده (BlockStore)
             // ۲) بدنه‌ی پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده‌ی کاربره
             // ۳) شماره‌ی فرستنده با یکی از «الگوهای بلاکِ شماره» (شروع/پایانِ شماره) مچ میشه
+            // ۴) کاربر «بلاک شماره‌های خارج از مخاطبین» رو فعال کرده و این شماره جزو
+            //    مخاطبینِ ذخیره‌شده‌ی گوشی نیست
             // پیام همیشه (چه بلاک باشه چه نه) توی SMS provider ذخیره می‌مونه؛ فقط تصمیم‌گیری
             // در مورد نوتیف/صدا و نمایش توی لیستِ اصلی جدا انجام میشه (طبق تنظیمات کاربر).
             val isNumberBlocked = BlockStore.isAddressBlocked(context, sender)
@@ -74,12 +77,20 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             // اگه هم شماره صریحاً بلاکه هم کلمه‌ی کلیدی مچ شده، شماره اولویت داره (متادیتای
             // اضافه لازم نیست) - کلمه فقط وقتی ثبت میشه که تنها دلیلِ بلاک‌شدن همینه.
             val matchedPattern = if (!isNumberBlocked) BlockPatternStore.findMatch(context, sender) else null
+            // فقط وقتی بررسی میشه که هیچ‌کدوم از سه راه دیگه دلیلِ بلاک نبوده و کاربر خودش
+            // این گزینه رو از تنظیماتِ بلاک فعال کرده باشه؛ ContactsCache.getName فقط وقتی
+            // null برمی‌گردونه که شماره جزو مخاطبینِ ذخیره‌شده‌ی گوشی نباشه.
+            val isBlockedAsNonContact = !isNumberBlocked && matchedKeyword == null && matchedPattern == null &&
+                AppSettings.isBlockNonContactsEnabled(context) &&
+                ContactsCache.getName(context, sender) == null
 
-            if (isNumberBlocked || matchedKeyword != null || matchedPattern != null) {
+            if (isNumberBlocked || matchedKeyword != null || matchedPattern != null || isBlockedAsNonContact) {
                 if (!isNumberBlocked && matchedKeyword != null) {
                     BlockedKeywordMessageStore.markBlocked(context, messageId, matchedKeyword.text)
                 } else if (!isNumberBlocked && matchedPattern != null) {
                     BlockedPatternMessageStore.markBlocked(context, messageId, matchedPattern.type, matchedPattern.value)
+                } else if (isBlockedAsNonContact) {
+                    BlockedNonContactMessageStore.markBlocked(context, messageId, sender)
                 }
                 // این تغییر فقط SharedPreferences رو عوض می‌کنه؛ اگه صفحه‌ی «پیامک‌های
                 // بلاک‌شده» یا لیست مکالمات همین الان بازه، بدون این سیگنال تا یه اتفاق

@@ -14,25 +14,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /**
- * صفحه‌ی «تنظیماتِ بلاک» - دو گزینه‌ی مستقل از هم، هرکدوم پیش‌فرض خاموش (رفتار همیشگیِ
- * قبلیِ بخش بلاک: بی‌صدا و مخفی):
+ * صفحه‌ی «تنظیماتِ بلاک» - سه گزینه‌ی مستقل از هم، هرکدوم پیش‌فرض خاموش:
  *
  * ۱) نمایش نوتیف پیام‌های بلاک‌شده: اگه فعال بشه، پیام‌هایی که به‌خاطر بلاک‌بودنِ شماره،
  *    یه کلمه‌ی کلیدی، یا یه الگوی شماره بلاک شدن، به‌جای کاملاً بی‌صدا موندن، نوتیف/صدای
  *    عادی هم میدن (ولی همچنان از لیست اصلیِ مکالمات مخفی می‌مونن، مگر گزینه‌ی دوم هم فعال باشه).
  * ۲) نمایش توی لیست پیام‌ها: اگه فعال بشه، خودِ این پیام‌ها و شماره‌های بلاک‌شده، به‌جای مخفی
  *    بودن، توی لیست اصلیِ مکالمات و داخل چت هم عادی (کنارِ بقیه‌ی پیام‌ها) نشون داده میشن.
+ * ۳) بلاک شماره‌های خارج از مخاطبین: اگه فعال بشه، پیامکِ هر شماره‌ای که جزو مخاطبینِ
+ *    ذخیره‌شده‌ی گوشی نباشه، دقیقاً مثل بلاکِ شماره/کلمه/الگو، خودکار بلاک میشه.
  *
- * توی هر دو حالت، پیام‌ها همچنان توی صفحه‌ی «پیامک‌های بلاک‌شده» هم قابل دیدنن؛ این دو گزینه
- * فقط رفتار «مخفی/بی‌صدا بودنِ پیش‌فرض» رو کنترل می‌کنن، نه خودِ منطق بلاک‌شدن رو.
+ * توی هر سه حالت، پیام‌ها همچنان توی صفحه‌ی «پیامک‌های بلاک‌شده» هم قابل دیدنن؛ این گزینه‌ها
+ * فقط رفتار «مخفی/بی‌صدا بودنِ پیش‌فرض» یا خودِ منطقِ تشخیصِ بلاک‌شدن رو کنترل می‌کنن.
  */
 @Composable
 fun BlockSettingsScreen(
     showBlockedNotificationsEnabled: Boolean,
     showBlockedInMessageListEnabled: Boolean,
+    blockNonContactsEnabled: Boolean,
     onBack: () -> Unit,
     onShowBlockedNotificationsChange: (Boolean) -> Unit,
-    onShowBlockedInMessageListChange: (Boolean) -> Unit
+    onShowBlockedInMessageListChange: (Boolean) -> Unit,
+    onBlockNonContactsChange: (Boolean) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -68,6 +71,18 @@ fun BlockSettingsScreen(
                     Switch(
                         checked = showBlockedInMessageListEnabled,
                         onCheckedChange = onShowBlockedInMessageListChange
+                    )
+                }
+            )
+            Divider()
+
+            ListItem(
+                headlineContent = { Text("بلاک شماره‌های خارج از مخاطبین") },
+                supportingContent = { Text("پیامک از هر شماره‌ای که جزو مخاطبینِ ذخیره‌شده‌ی گوشی نباشه، خودکار بلاک بشه") },
+                trailingContent = {
+                    Switch(
+                        checked = blockNonContactsEnabled,
+                        onCheckedChange = onBlockNonContactsChange
                     )
                 }
             )

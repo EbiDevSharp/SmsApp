@@ -11,7 +11,10 @@ data class Conversation(
     val unreadCount: Int,
     // یعنی snippet در واقع متن یه پیش‌نویسه (نه آخرین پیام واقعی ارسال/دریافت‌شده) -
     // برای نمایش رنگ/لیبل متفاوت توی لیست مکالمات (شبیه گوگل مسیجز)
-    val isDraft: Boolean = false
+    val isDraft: Boolean = false,
+    // یعنی این مکالمه از تنظیمات پین شده و باید بالای لیست اصلی (قبل از بقیه) نشون داده بشه -
+    // از PinStore میاد، برای همینه که getConversations لیست رو بر این اساس مرتب می‌کنه
+    val isPinned: Boolean = false
 )
 
 data class SmsMessage(
@@ -73,7 +76,10 @@ data class TrashedMessage(
 enum class BlockSource {
     PHONE_NUMBER,
     KEYWORD,
-    PATTERN
+    PATTERN,
+    // شماره‌ی فرستنده جزو مخاطبینِ ذخیره‌شده‌ی گوشی نبوده و کاربر از تنظیماتِ بلاک،
+    // «بلاک شماره‌های خارج از مخاطبین» رو فعال کرده بوده
+    NOT_IN_CONTACTS
 }
 
 /**

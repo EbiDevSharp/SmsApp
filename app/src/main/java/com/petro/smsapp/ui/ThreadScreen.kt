@@ -1,6 +1,7 @@
 package com.petro.smsapp.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
@@ -31,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.petro.smsapp.data.ScheduledMessage
@@ -38,6 +41,7 @@ import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
+import kotlinx.coroutines.launch
 
 /**
  * یه ردیف واحد برای LazyColumn صفحه‌ی چت - یا یه پیام واقعی، یا یه پیام زمان‌بندی‌شده‌ی
@@ -80,6 +84,8 @@ fun ThreadScreen(
     scheduledMessages: List<ScheduledMessage>,
     sims: List<SimInfo>,
     favoriteIds: Set<Long>,
+    // id پیام‌هایی که داخل همین چت پین شدن - برای نشون‌دادن حالت پین‌شده توی منوی کلیک پیام
+    pinnedMessageIds: Set<Long> = emptySet(),
     // متن پیش‌نویسِ ذخیره‌شده‌ی همین مکالمه (اگه بود) - برای پرکردن خودکار کادر متن
     initialDraft: String = "",
     onSend: (body: String, subscriptionId: Int?) -> Unit,
@@ -87,6 +93,7 @@ fun ThreadScreen(
     onDeleteMessages: (Set<Long>) -> Unit,
     onOpenNote: (text: String) -> Unit,
     onToggleFavorite: (message: SmsMessage) -> Unit,
+    onTogglePinMessage: (message: SmsMessage) -> Unit = {},
     onResend: (message: SmsMessage) -> Unit,
     onUpdateScheduledTime: (id: Long, newTime: Long) -> Unit,
     onSendScheduledNow: (id: Long) -> Unit,
@@ -134,6 +141,28 @@ fun ThreadScreen(
     var fontScale by remember { mutableStateOf(1f) }
     val selectionMode = selectedIds.isNotEmpty()
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // پیام‌های واقعی + پیام‌های زمان‌بندی‌شده‌ی در انتظار (که هنوز SmsMessage واقعی
+    // نیستن) با هم ترکیب و بر اساس تاریخ/زمانِ خودشون مرتب میشن - پیام‌های
+    // زمان‌بندی‌شده چون زمانشون تو آینده‌ست، معمولاً ته لیست (پایین صفحه) می‌شینن.
+    // این محاسبه بالاتر از Scaffold اومده (نه فقط داخل LazyColumn) چون نوار «پیام پین‌شده»
+    // بالای صفحه هم برای اسکرول‌کردن به ایندکسِ درست بهش نیاز داره.
+    val combinedItems = remember(messages, scheduledMessages) {
+        (messages.map { ThreadListItem.Real(it) } + scheduledMessages.map { ThreadListItem.Pending(it) })
+            .sortedBy { it.sortDate }
+    }
+
+    // پیام‌های پین‌شده‌ی همین مکالمه، از قدیمی به جدید - برای نوارِ آویزونِ بالای چت (شبیه
+    // بقیه‌ی اپ‌های پیام‌رسان) که حتی وسط اسکرولِ یه چتِ شلوغ هم گم نمیشه
+    val pinnedInThread = remember(messages, pinnedMessageIds) {
+        messages.filter { pinnedMessageIds.contains(it.id) }.sortedBy { it.date }
+    }
+    // ایندکسِ پیامِ پین‌شده‌ای که الان توی نوار نشون داده میشه - دقیقاً رفتار تلگرام: با هر
+    // کلیک روی نوار، میره سراغِ همین پیام و بعد ایندکس یکی جلو میره (وقتی به آخری رسید،
+    // دوباره از اول شروع میشه) تا کلیکِ بعدی، پیامِ پین‌شده‌ی بعدی رو نشون بده.
+    var pinnedBannerIndex by remember(pinnedInThread) { mutableStateOf(0) }
+    val currentPinnedMessage = pinnedInThread.getOrNull(pinnedBannerIndex)
 
     LaunchedEffect(sims) {
         if (selectedSimId == null && sims.isNotEmpty()) {
@@ -197,7 +226,9 @@ fun ThreadScreen(
                 selectedMessage = null
             },
             onToggleFavorite = { onToggleFavorite(currentSelectedMessage) },
-            onResend = { onResend(currentSelectedMessage) }
+            onResend = { onResend(currentSelectedMessage) },
+            isPinned = pinnedMessageIds.contains(currentSelectedMessage.id),
+            onTogglePin = { onTogglePinMessage(currentSelectedMessage) }
         )
     }
 
@@ -231,36 +262,60 @@ fun ThreadScreen(
 
     Scaffold(
         topBar = {
-            if (selectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedIds.size} انتخاب شده") },
-                    navigationIcon = {
-                        IconButton(onClick = { selectedIds = emptySet() }) {
-                            Icon(Icons.Filled.Close, contentDescription = "لغو انتخاب")
+            Column {
+                if (selectionMode) {
+                    TopAppBar(
+                        title = { Text("${selectedIds.size} انتخاب شده") },
+                        navigationIcon = {
+                            IconButton(onClick = { selectedIds = emptySet() }) {
+                                Icon(Icons.Filled.Close, contentDescription = "لغو انتخاب")
+                            }
+                        },
+                        actions = {
+                            val allSelected = selectedIds.size == messages.size && messages.isNotEmpty()
+                            IconButton(onClick = {
+                                selectedIds = if (allSelected) emptySet() else messages.map { it.id }.toSet()
+                            }) {
+                                Icon(
+                                    Icons.Filled.SelectAll,
+                                    contentDescription = if (allSelected) "از انتخاب دراوردن همه" else "انتخاب همه"
+                                )
+                            }
+                            IconButton(onClick = { showDeleteConfirm = true }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "حذف")
+                            }
                         }
-                    },
-                    actions = {
-                        val allSelected = selectedIds.size == messages.size && messages.isNotEmpty()
-                        IconButton(onClick = {
-                            selectedIds = if (allSelected) emptySet() else messages.map { it.id }.toSet()
-                        }) {
-                            Icon(
-                                Icons.Filled.SelectAll,
-                                contentDescription = if (allSelected) "از انتخاب دراوردن همه" else "انتخاب همه"
-                            )
+                    )
+                } else {
+                    TopAppBar(
+                        title = { Text(displayName) },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) { Text("←") }
                         }
-                        IconButton(onClick = { showDeleteConfirm = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "حذف")
-                        }
+                    )
+                    // نوار «پیام پین‌شده» - همیشه بالای صفحه آویزونه (زیرِ TopAppBar، جزوِ
+                    // topBar خودِ Scaffold) پس با اسکرول کردن وسط پیام‌های زیاد گم نمیشه.
+                    // با کلیک، مستقیم می‌پره روی خودِ پیام پین‌شده.
+                    if (currentPinnedMessage != null) {
+                        PinnedMessageBanner(
+                            message = currentPinnedMessage,
+                            currentIndex = pinnedBannerIndex,
+                            totalPinnedCount = pinnedInThread.size,
+                            onClick = {
+                                val index = combinedItems.reversed().indexOfFirst {
+                                    it is ThreadListItem.Real && it.message.id == currentPinnedMessage.id
+                                }
+                                if (index >= 0) {
+                                    scope.launch { listState.animateScrollToItem(index) }
+                                }
+                                // بعد از رفتن سراغِ این یکی، دفعه‌ی بعد که کاربر کلیک کرد، پیامِ
+                                // پین‌شده‌ی بعدی رو نشون بده - اگه آخری بود، دوباره از اول
+                                pinnedBannerIndex = (pinnedBannerIndex + 1) % pinnedInThread.size
+                            },
+                            onUnpin = { onTogglePinMessage(currentPinnedMessage) }
+                        )
                     }
-                )
-            } else {
-                TopAppBar(
-                    title = { Text(displayName) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) { Text("←") }
-                    }
-                )
+                }
             }
         },
         bottomBar = {
@@ -337,13 +392,6 @@ fun ThreadScreen(
             // هر بار فضای واقعی در دسترس عوض بشه (باز/بسته شدن کیبورد، چرخش صفحه و ...)
             // دوباره برو آخرین پیام تا زیر کادر ارسال قایم نمونه
             val availableHeight = maxHeight
-            // پیام‌های واقعی + پیام‌های زمان‌بندی‌شده‌ی در انتظار (که هنوز SmsMessage واقعی
-            // نیستن) با هم ترکیب و بر اساس تاریخ/زمانِ خودشون مرتب میشن - پیام‌های
-            // زمان‌بندی‌شده چون زمانشون تو آینده‌ست، معمولاً ته لیست (پایین صفحه) می‌شینن.
-            val combinedItems = remember(messages, scheduledMessages) {
-                (messages.map { ThreadListItem.Real(it) } + scheduledMessages.map { ThreadListItem.Pending(it) })
-                    .sortedBy { it.sortDate }
-            }
             LaunchedEffect(availableHeight, combinedItems.size) {
                 if (combinedItems.isNotEmpty()) {
                     // چون reverseLayout=true هست، ایندکس ۰ = پایین‌ترین/جدیدترین پیام
@@ -373,6 +421,7 @@ fun ThreadScreen(
                             MessageBubble(
                                 message = message,
                                 isFavorite = favoriteIds.contains(message.id),
+                                isPinned = pinnedMessageIds.contains(message.id),
                                 selectionMode = selectionMode,
                                 isSelected = selectedIds.contains(message.id),
                                 fontScale = fontScale,
@@ -409,11 +458,84 @@ fun ThreadScreen(
     }
 }
 
+/**
+ * نوار «پیام پین‌شده» - زیرِ TopAppBar آویزون می‌مونه (نه داخلِ لیستِ پیام‌ها)، پس با
+ * اسکرول‌کردنِ چتِ شلوغ گم نمیشه. کلیک روش می‌بره سراغِ خودِ پیام، دکمه‌ی کنارش هم
+ * مستقیم آنپینش می‌کنه بدون نیاز به رفتن سراغِ منوی پیام.
+ */
+@Composable
+private fun PinnedMessageBanner(
+    message: SmsMessage,
+    currentIndex: Int,
+    totalPinnedCount: Int,
+    onClick: () -> Unit,
+    onUnpin: () -> Unit
+) {
+    Surface(
+        color = Color(0xFFFFF3E0),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // وقتی بیش از یه پیام پین باشه، به‌جای آیکنِ ساده، یه ردیف خط‌های کوچیک (شبیه
+            // نشانگرِ داستان/پیشرفتِ تلگرام) نشون میده که کدوم پیامِ پین‌شده الان انتخابه
+            if (totalPinnedCount > 1) {
+                Row(modifier = Modifier.height(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    repeat(totalPinnedCount) { i ->
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 1.dp)
+                                .width(3.dp)
+                                .height(if (i == currentIndex) 18.dp else 10.dp)
+                                .background(
+                                    color = if (i == currentIndex) Color(0xFFFFA000) else Color(0xFFFFCC80),
+                                    shape = RoundedCornerShape(2.dp)
+                                )
+                        )
+                    }
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.PushPin,
+                    contentDescription = null,
+                    tint = Color(0xFFFFA000),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (totalPinnedCount > 1) "پیام پین‌شده (${currentIndex + 1} از $totalPinnedCount)" else "پیام پین‌شده",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFFE65100)
+                )
+                Text(
+                    text = message.body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.DarkGray,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = onUnpin) {
+                Icon(Icons.Filled.Close, contentDescription = "برداشتن پین", modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     message: SmsMessage,
     isFavorite: Boolean,
+    isPinned: Boolean,
     selectionMode: Boolean,
     isSelected: Boolean,
     fontScale: Float,
@@ -457,6 +579,9 @@ private fun MessageBubble(
                 Surface(
                     color = bubbleColor,
                     shape = RoundedCornerShape(16.dp),
+                    // پیام پین‌شده یه حاشیه‌ی نازکِ رنگی می‌گیره تا همون نگاه اول از بقیه‌ی
+                    // پیام‌ها متمایز باشه (علاوه بر آیکن پین زیرِ پیام)
+                    border = if (isPinned) BorderStroke(1.5.dp, Color(0xFFFFA000)) else null,
                     modifier = Modifier
                         .padding(4.dp)
                         // تک‌کلیک: برای پیام ناموفق مستقیم دوباره می‌فرسته، وگرنه منوی اکشن پیام
@@ -535,6 +660,16 @@ private fun MessageBubble(
                         imageVector = Icons.Filled.Star,
                         contentDescription = "فیوریت‌شده",
                         tint = Color(0xFFFFC107),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+                // نشان پین: پیام پین‌شده‌ی داخل همین چت
+                if (isPinned) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Filled.PushPin,
+                        contentDescription = "پین‌شده",
+                        tint = Color(0xFFFFA000),
                         modifier = Modifier.size(14.dp)
                     )
                 }

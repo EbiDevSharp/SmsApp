@@ -32,6 +32,11 @@ object AppSettings {
     private const val KEY_NOTIFICATION_ACTIONS = "notification_action_settings"
     private const val KEY_SHOW_BLOCKED_NOTIFICATIONS = "show_blocked_notifications_enabled"
     private const val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST = "show_blocked_in_message_list_enabled"
+    private const val KEY_BLOCK_NON_CONTACTS = "block_non_contacts_enabled"
+    private const val KEY_MAX_PINNED_CONVERSATIONS = "max_pinned_conversations"
+
+    /** پیش‌فرض حداکثر تعداد مکالمه‌ی قابل‌پین در لیست اصلی - کاربر می‌تونه از تنظیمات عوضش کنه */
+    const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
 
     /**
      * پیش‌فرض: فقط «خوانده شد» و «حذف» فعالن (همونایی که از قبل بودن)، بقیه (پاسخ سریع/
@@ -75,7 +80,12 @@ object AppSettings {
         // نشون داده میشن؛ فقط از صفحه‌ی «پیامک‌های بلاک‌شده» قابل دیدنن. این دو گزینه به کاربر
         // اجازه میده هرکدوم از این دو رفتار رو جدا جدا خاموش/روشن کنه.
         val showBlockedNotificationsEnabled: Boolean = false,
-        val showBlockedInMessageListEnabled: Boolean = false
+        val showBlockedInMessageListEnabled: Boolean = false,
+        // پیش‌فرض خاموش: اگه فعال بشه، پیامک‌های شماره‌هایی که جزو مخاطبینِ ذخیره‌شده‌ی گوشی
+        // نیستن هم مثل بقیه‌ی راه‌های بلاک (شماره/کلمه‌ی کلیدی/الگو) مسدود میشن.
+        val blockNonContactsEnabled: Boolean = false,
+        // حداکثر تعداد مکالمه‌ای که می‌شه هم‌زمان توی لیست اصلی پین کرد
+        val maxPinnedConversations: Int = DEFAULT_MAX_PINNED_CONVERSATIONS
     )
 
     private val _state = MutableStateFlow(State())
@@ -104,7 +114,9 @@ object AppSettings {
             deliveryNotificationsEnabled = p.getBoolean(KEY_DELIVERY_NOTIFICATIONS, false),
             notificationActions = loadNotificationActionSettings(p),
             showBlockedNotificationsEnabled = p.getBoolean(KEY_SHOW_BLOCKED_NOTIFICATIONS, false),
-            showBlockedInMessageListEnabled = p.getBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, false)
+            showBlockedInMessageListEnabled = p.getBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, false),
+            blockNonContactsEnabled = p.getBoolean(KEY_BLOCK_NON_CONTACTS, false),
+            maxPinnedConversations = p.getInt(KEY_MAX_PINNED_CONVERSATIONS, DEFAULT_MAX_PINNED_CONVERSATIONS)
         )
     }
 
@@ -164,6 +176,23 @@ object AppSettings {
     fun setShowBlockedInMessageListEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, enabled).apply()
         _state.value = _state.value.copy(showBlockedInMessageListEnabled = enabled)
+    }
+
+    /** آیا شماره‌هایی که جزو مخاطبینِ گوشی نیستن باید خودکار بلاک بشن؟ */
+    fun isBlockNonContactsEnabled(context: Context): Boolean = _state.value.blockNonContactsEnabled
+
+    fun setBlockNonContactsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BLOCK_NON_CONTACTS, enabled).apply()
+        _state.value = _state.value.copy(blockNonContactsEnabled = enabled)
+    }
+
+    /** حداکثر تعداد مکالمه‌ی قابل‌پین توی لیست اصلی مکالمات */
+    fun getMaxPinnedConversations(context: Context): Int = _state.value.maxPinnedConversations
+
+    fun setMaxPinnedConversations(context: Context, count: Int) {
+        val clamped = count.coerceIn(1, 20)
+        prefs(context).edit().putInt(KEY_MAX_PINNED_CONVERSATIONS, clamped).apply()
+        _state.value = _state.value.copy(maxPinnedConversations = clamped)
     }
 
     private fun prefs(context: Context) =

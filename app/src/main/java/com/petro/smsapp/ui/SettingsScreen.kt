@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -153,6 +155,38 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
                 modifier = Modifier.clickable(onClick = onOpenNotificationActions)
             )
             Divider()
+
+            // حداکثر تعداد مکالمه‌ای که میشه هم‌زمان توی لیست اصلی پین کرد (پین‌کردنِ خودِ
+            // مکالمه از منوی «انتخاب چندتایی» توی لیست اصلی انجام میشه، اینجا فقط سقفشه)
+            ListItem(
+                headlineContent = { Text("حداکثر تعداد پین در لیست اصلی") },
+                supportingContent = { Text("حداکثر چند مکالمه هم‌زمان می‌تونه بالای لیست پیام‌ها پین بشه") },
+                trailingContent = {
+                    PinCountStepper(
+                        value = settings.maxPinnedConversations,
+                        onValueChange = { newValue -> AppSettings.setMaxPinnedConversations(context, newValue) }
+                    )
+                }
+            )
+            Divider()
+        }
+    }
+}
+
+/** استپرِ ساده‌ی +/- برای تنظیمِ سقفِ تعداد پین - بین ۱ تا ۲۰ */
+@Composable
+private fun PinCountStepper(value: Int, onValueChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { if (value > 1) onValueChange(value - 1) }) {
+            Icon(Icons.Filled.Remove, contentDescription = "کم کردن")
+        }
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        IconButton(onClick = { if (value < 20) onValueChange(value + 1) }) {
+            Icon(Icons.Filled.Add, contentDescription = "زیاد کردن")
         }
     }
 }

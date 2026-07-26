@@ -253,6 +253,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val noteText by viewModel.noteText.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
+    val pinnedMessageIds by viewModel.pinnedMessageIds.collectAsState()
     val trash by viewModel.trash.collectAsState()
     val blockedNumbers by viewModel.blockedNumbers.collectAsState()
     val blockedMessages by viewModel.blockedMessages.collectAsState()
@@ -289,6 +290,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     // لود اولیه‌ی لیست فیوریت‌ها و بلاک‌ها - همون اول که برنامه بالا میاد (برای بج‌های شمارنده)
     LaunchedEffect(Unit) {
         viewModel.loadFavorites()
+        viewModel.loadPinnedMessages()
         viewModel.loadBlockedNumbers()
         viewModel.loadBlockedMessages()
         viewModel.loadBlockKeywords()
@@ -330,12 +332,26 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     currentRoute = currentRoute,
                     onItemClick = { route ->
                         scope.launch {
+                            // مهم: باید صبر کنیم انیمیشن بسته‌شدن کامل تموم بشه، بعد navigate کنیم.
+                            // قبلاً close() توی یه launch جدا (fire-and-forget) بود و navigate بلافاصله
+                            // بعدش (بدون صبر) اجرا می‌شد - یعنی وسط انیمیشن، ناوبری اتفاق می‌افتاد و
+                            // state داخلی drawerState قاطی می‌شد (صفحه سفید میومد، back هم خراب می‌شد،
+                            // فقط با swipe دستی درست می‌شد چون swipe مستقیم state رو ست می‌کنه نه از
+                            // طریق این انیمیشن).
                             drawerState.close()
+                            // اگه کاربر دقیقاً روی همون آیتمی زده که همین الان توشیم، اصلاً navigate
+                            // نکن - نه چیزی دوباره ساخته میشه نه چیزی به پشته اضافه میشه.
                             if (route != currentRoute) {
+                                // با خروج از بخش «خصوصی» (چه با کلیک آیتم دیگه‌ی دراور) قفلش برگرده -
+                                // چون فلش Back خودِ اون صفحه دیگه وجود نداره که این کارو بکنه
                                 if (currentRoute == "private") {
                                     viewModel.lockPrivate()
                                 }
                                 navController.navigate(route) {
+                                    // الگوی استاندارد ناوبریِ «تب‌مانند»: هر بار پشته رو تا مقصدِ
+                                    // شروع (لیست مکالمات) جمع می‌کنیم تا انتخاب‌های قبلی دراور روی
+                                    // هم تلنبار نشن، ولی state هرکدوم رو نگه می‌داریم (saveState) تا
+                                    // اگه دوباره برگردیم بهش، از اول ساخته نشه.
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
@@ -373,7 +389,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
                     onBlockConversations = { selectedConversations -> viewModel.blockConversations(selectedConversations) },
-                    onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) }
+                    onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },
+                    onPinConversations = { selectedConversations -> viewModel.pinConversations(selectedConversations) }
                 )
             }
             composable("new") {
@@ -421,6 +438,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     scheduledMessages = scheduledMessages,
                     sims = sims,
                     favoriteIds = favoriteIds,
+                    pinnedMessageIds = pinnedMessageIds,
                     initialDraft = draftText,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
@@ -435,6 +453,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         navController.navigate("note")
                     },
                     onToggleFavorite = { message -> viewModel.toggleFavorite(message, displayName) },
+                    onTogglePinMessage = { message -> viewModel.togglePinMessage(message) },
                     onBack = {
                         viewModel.clearOpenThread()
                         navController.popBackStack()
@@ -579,12 +598,16 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 BlockSettingsScreen(
                     showBlockedNotificationsEnabled = appSettings.showBlockedNotificationsEnabled,
                     showBlockedInMessageListEnabled = appSettings.showBlockedInMessageListEnabled,
+                    blockNonContactsEnabled = appSettings.blockNonContactsEnabled,
                     onBack = { navController.popBackStack() },
                     onShowBlockedNotificationsChange = { enabled ->
                         AppSettings.setShowBlockedNotificationsEnabled(context, enabled)
                     },
                     onShowBlockedInMessageListChange = { enabled ->
                         AppSettings.setShowBlockedInMessageListEnabled(context, enabled)
+                    },
+                    onBlockNonContactsChange = { enabled ->
+                        AppSettings.setBlockNonContactsEnabled(context, enabled)
                     }
                 )
             }

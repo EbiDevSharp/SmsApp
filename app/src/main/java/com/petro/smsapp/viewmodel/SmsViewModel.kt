@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.data.AlarmScheduler
+import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.BlockKeyword
 import com.petro.smsapp.data.BlockKeywordStore
 import com.petro.smsapp.data.BlockPattern
@@ -28,6 +29,8 @@ import com.petro.smsapp.data.FavoriteStore
 import com.petro.smsapp.data.PrivateMessageEntry
 import com.petro.smsapp.data.PrivateNumber
 import com.petro.smsapp.data.PrivateStore
+import com.petro.smsapp.data.PinStore
+import com.petro.smsapp.data.PinnedMessageStore
 import com.petro.smsapp.data.ScheduledMessage
 import com.petro.smsapp.data.ScheduledMessageStore
 import com.petro.smsapp.data.SimInfo
@@ -90,6 +93,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // فقط id پیام‌های فیوریت‌شده - برای اینکه توی صفحه‌ی چت سریع بشه چک کرد پیامی فیوریته یا نه
     private val _favoriteIds = MutableStateFlow<Set<Long>>(emptySet())
     val favoriteIds: StateFlow<Set<Long>> = _favoriteIds.asStateFlow()
+
+    // فقط id پیام‌های پین‌شده‌ی داخل چت - برای اینکه توی منوی کلیک پیام سریع بشه چک کرد پینه یا نه
+    private val _pinnedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
+    val pinnedMessageIds: StateFlow<Set<Long>> = _pinnedMessageIds.asStateFlow()
 
     // لیست پیام‌های توی سطل زباله - برای صفحه‌ی «سطل زباله»
     private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
@@ -466,6 +473,59 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { FavoriteStore.removeFavorite(getApplication<Application>(), messageId) }
             loadFavorites()
+        }
+    }
+
+    fun loadPinnedMessages() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { PinnedMessageStore.getAllPinnedIds(getApplication<Application>()) }
+            _pinnedMessageIds.value = result
+        }
+    }
+
+    /** پین‌کردن/برداشتنِ پینِ یه پیام با یک کلیک (از منوی اکشن پیام، دقیقاً هم‌خانواده‌ی toggleFavorite) */
+    fun togglePinMessage(message: SmsMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { PinnedMessageStore.togglePin(getApplication<Application>(), message.id) }
+            loadPinnedMessages()
+        }
+    }
+
+    /**
+     * پین‌کردن/برداشتنِ پینِ دسته‌جمعی چند مکالمه - از حالت «انتخاب چندتایی» توی لیست اصلی.
+     * اگه همه‌ی مکالمه‌های انتخاب‌شده از قبل پین بودن، همه رو آنپین می‌کنه؛ وگرنه سعی می‌کنه
+     * بقیه رو هم پین کنه، ولی با رعایتِ سقفِ AppSettings.getMaxPinnedConversations - از اون
+     * سقف که رد بشه، بقیه رد میشن و توی پیام نتیجه بهش اشاره میشه.
+     */
+    fun pinConversations(conversations: List<Conversation>) {
+        if (conversations.isEmpty()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val allPinned = conversations.all { it.isPinned }
+            var pinnedCount = 0
+            var limitSkipped = 0
+            withContext(Dispatchers.IO) {
+                if (allPinned) {
+                    conversations.forEach { PinStore.unpin(app, it.threadId) }
+                } else {
+                    val maxAllowed = AppSettings.getMaxPinnedConversations(app)
+                    conversations.filter { !it.isPinned }.forEach { conversation ->
+                        if (PinStore.getPinnedCount(app) >= maxAllowed) {
+                            limitSkipped++
+                            return@forEach
+                        }
+                        PinStore.pin(app, conversation.threadId)
+                        pinnedCount++
+                    }
+                }
+            }
+            _operationMessage.value = when {
+                allPinned -> "پین ${conversations.size} مکالمه برداشته شد"
+                limitSkipped > 0 && pinnedCount > 0 -> "$pinnedCount مکالمه پین شد (حداکثر تعداد پین پر شد، $limitSkipped مکالمه دیگه پین نشد)"
+                limitSkipped > 0 -> "حداکثر تعداد پین (${AppSettings.getMaxPinnedConversations(app)} مکالمه) پره"
+                else -> "$pinnedCount مکالمه پین شد"
+            }
+            loadConversations()
         }
     }
 

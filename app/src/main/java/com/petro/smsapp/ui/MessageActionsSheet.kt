@@ -11,11 +11,13 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,7 +45,9 @@ fun MessageActionsSheet(
     onOpenNote: () -> Unit,
     onDeleteConfirmed: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onResend: () -> Unit
+    onResend: () -> Unit,
+    isPinned: Boolean = false,
+    onTogglePin: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState()
     val clipboardManager = LocalClipboardManager.current
@@ -131,6 +135,14 @@ fun MessageActionsSheet(
                             putExtra(Intent.EXTRA_TEXT, message.body)
                         }
                         context.startActivity(Intent.createChooser(shareIntent, null))
+                        onDismiss()
+                    }
+                )
+                MenuRow(
+                    icon = if (isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                    label = if (isPinned) "برداشتن پین" else "پین کردن پیام",
+                    onClick = {
+                        onTogglePin()
                         onDismiss()
                     }
                 )

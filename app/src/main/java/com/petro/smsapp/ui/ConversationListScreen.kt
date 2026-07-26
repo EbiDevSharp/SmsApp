@@ -57,7 +57,8 @@ fun ConversationListScreen(
     onMenuClick: () -> Unit,
     onDeleteConversations: (Set<Long>) -> Unit,
     onBlockConversations: (List<Conversation>) -> Unit,
-    onMakeConversationsPrivate: (List<Conversation>) -> Unit
+    onMakeConversationsPrivate: (List<Conversation>) -> Unit,
+    onPinConversations: (List<Conversation>) -> Unit = {}
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -133,8 +134,22 @@ fun ConversationListScreen(
                                 Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
                             }
                             DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
-                                // این سه‌تا فعلاً فقط اسکلت‌بندی‌شدن - قابلیت واقعیشون بعداً اضافه میشه
-                                ComingSoonMenuItem(Icons.Filled.PushPin, "پین کردن") { showMoreMenu = false }
+                                // این دوتا فعلاً فقط اسکلت‌بندی‌شدن - قابلیت واقعیشون بعداً اضافه میشه
+                                run {
+                                    val selectedConversations = conversations.filter { it.threadId in selectedIds }
+                                    // اگه همه‌ی انتخاب‌شده‌ها از قبل پین بودن، این دکمه اونا رو آنپین می‌کنه؛
+                                    // وگرنه (حتی اگه بعضی‌هاشون پین بودن) بقیه رو هم پین می‌کنه.
+                                    val allPinned = selectedConversations.isNotEmpty() && selectedConversations.all { it.isPinned }
+                                    DropdownMenuItem(
+                                        text = { Text(if (allPinned) "برداشتن پین" else "پین کردن") },
+                                        leadingIcon = { Icon(Icons.Filled.PushPin, contentDescription = null) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            onPinConversations(selectedConversations)
+                                            selectedIds = emptySet()
+                                        }
+                                    )
+                                }
                                 ComingSoonMenuItem(Icons.Filled.ContentCopy, "کپی کردن") { showMoreMenu = false }
                                 ComingSoonMenuItem(Icons.Filled.Share, "اشتراک‌گذاری") { showMoreMenu = false }
                                 DropdownMenuItem(
@@ -271,11 +286,23 @@ private fun ConversationRow(
         Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = conversation.displayName,
-                fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal,
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (conversation.isPinned) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = "پین‌شده",
+                        tint = Color.Gray,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .padding(end = 4.dp)
+                    )
+                }
+                Text(
+                    text = conversation.displayName,
+                    fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = conversation.snippet,

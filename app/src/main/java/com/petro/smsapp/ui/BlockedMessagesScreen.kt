@@ -239,6 +239,7 @@ private fun BlockSourceLabel(entry: BlockedMessageEntry) {
             val label = if (entry.matchedPatternType == BlockPatternType.STARTS_WITH) "شروع شماره با" else "پایان شماره با"
             "بلاک‌شده بر اساس: $label «${entry.matchedPatternValue ?: ""}»"
         }
+        BlockSource.NOT_IN_CONTACTS -> "بلاک‌شده بر اساس: خارج از مخاطبین"
     }
     Text(
         text = text,
