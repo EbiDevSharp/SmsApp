@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.CalendarType
 import com.petro.smsapp.data.ClockFormat
+import com.petro.smsapp.data.ThemeMode
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 /**
  * صفحه تنظیمات. هر گزینه‌ی جدید (زبان، تم، اعلان‌ها و ...) به همین لیست اضافه میشه.
@@ -54,13 +57,33 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
         Column(modifier = Modifier
             .fillMaxSize()
             .padding(padding)
+            .verticalScroll(rememberScrollState())
         ) {
             ListItem(
                 headlineContent = { Text("زبان برنامه") },
                 supportingContent = { Text("فارسی (به‌زودی: انگلیسی هم اضافه میشه)") }
             )
             Divider()
-
+            ListItem(
+                headlineContent = { Text("تم برنامه") },
+                supportingContent = { Text("بر اساس تنظیمات گوشی یا دستی") }
+            )
+            CalendarOptionRow(
+                label = "سیستم",
+                selected = settings.themeMode == ThemeMode.SYSTEM,
+                onSelect = { AppSettings.setThemeMode(context, ThemeMode.SYSTEM) }
+            )
+            CalendarOptionRow(
+                label = "روشن",
+                selected = settings.themeMode == ThemeMode.LIGHT,
+                onSelect = { AppSettings.setThemeMode(context, ThemeMode.LIGHT) }
+            )
+            CalendarOptionRow(
+                label = "تاریک",
+                selected = settings.themeMode == ThemeMode.DARK,
+                onSelect = { AppSettings.setThemeMode(context, ThemeMode.DARK) }
+            )
+            Divider()
             // سطل زباله: اگه فعال باشه، پیام‌های حذف‌شده به‌جای حذف کامل میرن سطل زباله
             ListItem(
                 headlineContent = { Text("سطل زباله") },

@@ -10,7 +10,7 @@ enum class CalendarType { GREGORIAN, JALALI }
 
 /** فرمت نمایش ساعت توی کل برنامه */
 enum class ClockFormat { H24, H12 }
-
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /**
  * تنظیمات ساده‌ی اپ که نیاز به دیتابیس ندارن، با SharedPreferences ذخیره میشن.
  *
@@ -27,6 +27,7 @@ object AppSettings {
     private const val KEY_TRASH_ENABLED = "trash_enabled"
     private const val KEY_CALENDAR_TYPE = "calendar_type"
     private const val KEY_CLOCK_FORMAT = "clock_format"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_DELIVERY_NOTIFICATIONS = "delivery_notifications_enabled"
     private const val KEY_NOTIFICATION_ACTIONS = "notification_action_settings"
     private const val KEY_SHOW_BLOCKED_NOTIFICATIONS = "show_blocked_notifications_enabled"
@@ -63,6 +64,7 @@ object AppSettings {
         val trashEnabled: Boolean = false,
         val calendarType: CalendarType = CalendarType.GREGORIAN,
         val clockFormat: ClockFormat = ClockFormat.H24,
+        val themeMode: ThemeMode = ThemeMode.SYSTEM,
         // پیش‌فرض خاموش: اگه کاربر ۲۰ تا پیام بفرسته و همه دلیور بشن، ۲۰ تا نوتیف جدا
         // اسپم حساب میشه. تیک دلیوری زیر خود پیام (توی چت) کافیه؛ نوتیف اختیاریه.
         val deliveryNotificationsEnabled: Boolean = false,
@@ -94,6 +96,11 @@ object AppSettings {
             } else {
                 ClockFormat.H24
             },
+            themeMode = when (p.getString(KEY_THEME_MODE, null)) {
+                ThemeMode.LIGHT.name -> ThemeMode.LIGHT
+                ThemeMode.DARK.name -> ThemeMode.DARK
+                else -> ThemeMode.SYSTEM
+            },
             deliveryNotificationsEnabled = p.getBoolean(KEY_DELIVERY_NOTIFICATIONS, false),
             notificationActions = loadNotificationActionSettings(p),
             showBlockedNotificationsEnabled = p.getBoolean(KEY_SHOW_BLOCKED_NOTIFICATIONS, false),
@@ -121,7 +128,12 @@ object AppSettings {
         prefs(context).edit().putString(KEY_CLOCK_FORMAT, format.name).apply()
         _state.value = _state.value.copy(clockFormat = format)
     }
+    fun getThemeMode(context: Context): ThemeMode = _state.value.themeMode
 
+    fun setThemeMode(context: Context, mode: ThemeMode) {
+        prefs(context).edit().putString(KEY_THEME_MODE, mode.name).apply()
+        _state.value = _state.value.copy(themeMode = mode)
+    }
     fun isDeliveryNotificationsEnabled(context: Context): Boolean = _state.value.deliveryNotificationsEnabled
 
     fun setDeliveryNotificationsEnabled(context: Context, enabled: Boolean) {

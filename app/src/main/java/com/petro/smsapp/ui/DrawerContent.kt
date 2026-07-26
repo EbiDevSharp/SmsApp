@@ -40,7 +40,10 @@ val drawerItems = listOf(
     DrawerItem("scheduled", "زمان‌بندی‌شده", Icons.Filled.Schedule,androidx.compose.ui.graphics.Color(0xFF2196F3)),
     DrawerItem("blocked", "مسدودشده‌ها", Icons.Filled.Block,androidx.compose.ui.graphics.Color.Red),
     DrawerItem("private", "خصوصی", Icons.Filled.Lock,androidx.compose.ui.graphics.Color(0xFF7E57C2)),
-    DrawerItem("settings", "تنظیمات",  Icons.Filled.Build,androidx.compose.ui.graphics.Color(0xFF7E57C2)),
+    DrawerItem("settings", "تنظیمات",  Icons.Filled.Build,androidx.compose.ui.graphics.Color(
+        0xFFA9A6A6
+    )
+    ),
 )
 
 @Composable
