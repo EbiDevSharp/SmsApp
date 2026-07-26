@@ -42,4 +42,5 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("sh.calvin.reorderable:reorderable:2.2.0")
 }
