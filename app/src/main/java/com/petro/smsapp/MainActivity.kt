@@ -60,6 +60,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import com.petro.smsapp.data.ThemeMode
 import com.petro.smsapp.ui.SmsAppTheme
 
 class MainActivity : ComponentActivity() {
@@ -319,30 +320,22 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
+                val settings by AppSettings.state.collectAsState()
+                val isDarkTheme = when (settings.themeMode) {
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                    ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                }
                 AppDrawerContent(
                     currentRoute = currentRoute,
                     onItemClick = { route ->
                         scope.launch {
-                            // مهم: باید صبر کنیم انیمیشن بسته‌شدن کامل تموم بشه، بعد navigate کنیم.
-                            // قبلاً close() توی یه launch جدا (fire-and-forget) بود و navigate بلافاصله
-                            // بعدش (بدون صبر) اجرا می‌شد - یعنی وسط انیمیشن، ناوبری اتفاق می‌افتاد و
-                            // state داخلی drawerState قاطی می‌شد (صفحه سفید میومد، back هم خراب می‌شد،
-                            // فقط با swipe دستی درست می‌شد چون swipe مستقیم state رو ست می‌کنه نه از
-                            // طریق این انیمیشن).
                             drawerState.close()
-                            // اگه کاربر دقیقاً روی همون آیتمی زده که همین الان توشیم، اصلاً navigate
-                            // نکن - نه چیزی دوباره ساخته میشه نه چیزی به پشته اضافه میشه.
                             if (route != currentRoute) {
-                                // با خروج از بخش «خصوصی» (چه با کلیک آیتم دیگه‌ی دراور) قفلش برگرده -
-                                // چون فلش Back خودِ اون صفحه دیگه وجود نداره که این کارو بکنه
                                 if (currentRoute == "private") {
                                     viewModel.lockPrivate()
                                 }
                                 navController.navigate(route) {
-                                    // الگوی استاندارد ناوبریِ «تب‌مانند»: هر بار پشته رو تا مقصدِ
-                                    // شروع (لیست مکالمات) جمع می‌کنیم تا انتخاب‌های قبلی دراور روی
-                                    // هم تلنبار نشن، ولی state هرکدوم رو نگه می‌داریم (saveState) تا
-                                    // اگه دوباره برگردیم بهش، از اول ساخته نشه.
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
@@ -351,6 +344,11 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                                 }
                             }
                         }
+                    },
+                    isDarkTheme = isDarkTheme,
+                    onToggleTheme = {
+                        val newMode = if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK
+                        AppSettings.setThemeMode(context, newMode)
                     }
                 )
             }
