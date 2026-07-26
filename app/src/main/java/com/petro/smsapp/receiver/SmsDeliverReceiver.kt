@@ -57,41 +57,41 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             val messageId = android.content.ContentUris.parseId(insertedUri)
             val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
 
-            // شماره‌ی بلاک‌شده: پیام همچنان ذخیره میشه (تا توی صفحه‌ی «پیامک‌های بلاک‌شده»
-            // قابل دیدن باشه) ولی هیچ نوتیف و هیچ صدایی نمیده، و از لیست اصلی هم مخفیه.
-            // این چک بر اساس خودِ شماره‌ست، نه threadId - چون threadId می‌تونه با حذف پیام‌ها
-            // عوض/گم بشه ولی شماره همیشه همون شماره‌ست.
-            if (BlockStore.isAddressBlocked(context, sender)) {
-                return
-            }
-
-            // شماره‌ی خصوصی‌شده: دقیقاً همون منطق بلاک.
+            // شماره‌ی خصوصی‌شده: همیشه کاملاً بی‌صدا و مخفیه (این تنظیمِ جدیدِ «نمایش نوتیفِ
+            // بلاک‌شده‌ها» فقط روی بخش «بلاک» اثر داره، نه روی بخش جدای «خصوصی»).
             if (PrivateStore.isAddressPrivate(context, sender)) {
                 return
             }
 
-            // بلاک بر اساس متنِ پیام: حتی اگه شماره‌ی فرستنده اصلاً بلاک نباشه، اگه بدنه‌ی
-            // پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده‌ی کاربر باشه، همین‌جا بلاک میشه.
-            // مثل بلاک بر اساس شماره، پیام همچنان ذخیره میشه (تا توی «پیامک‌های بلاک‌شده»
-            // قابل دیدن باشه، همراه با خودِ کلمه‌ی مچ‌شده) ولی نوتیف/صدا نمیده.
+            // تشخیص اینکه این پیام از نظر «بلاک» مسدوده یا نه - از هر کدوم از سه راه:
+            // ۱) خودِ شماره‌ی فرستنده صریحاً بلاک شده (BlockStore)
+            // ۲) بدنه‌ی پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده‌ی کاربره
+            // ۳) شماره‌ی فرستنده با یکی از «الگوهای بلاکِ شماره» (شروع/پایانِ شماره) مچ میشه
+            // پیام همیشه (چه بلاک باشه چه نه) توی SMS provider ذخیره می‌مونه؛ فقط تصمیم‌گیری
+            // در مورد نوتیف/صدا و نمایش توی لیستِ اصلی جدا انجام میشه (طبق تنظیمات کاربر).
+            val isNumberBlocked = BlockStore.isAddressBlocked(context, sender)
             val matchedKeyword = BlockKeywordStore.findMatch(context, fullBody)
-            if (matchedKeyword != null) {
-                BlockedKeywordMessageStore.markBlocked(context, messageId, matchedKeyword.text)
-                // این تغییر فقط SharedPreferences رو عوض می‌کنه؛ اگه صفحه‌ی «پیامک‌های
-                // بلاک‌شده» همین الان بازه، بدون این سیگنال تا یه اتفاق دیگه پیش نیاد آپدیت نمی‌شد.
-                DataChangeSignal.notifyChanged()
-                return
-            }
+            // اگه هم شماره صریحاً بلاکه هم کلمه‌ی کلیدی مچ شده، شماره اولویت داره (متادیتای
+            // اضافه لازم نیست) - کلمه فقط وقتی ثبت میشه که تنها دلیلِ بلاک‌شدن همینه.
+            val matchedPattern = if (!isNumberBlocked) BlockPatternStore.findMatch(context, sender) else null
 
-            // بلاک بر اساس الگوی شماره: حتی اگه خودِ شماره صریحاً بلاک نباشه، اگه شماره‌ی
-            // فرستنده با یکی از «الگوهای بلاکِ شماره» (مثلاً شروع با +98/0930... یا پایان با
-            // یه رقم خاص) تعریف‌شده‌ی کاربر مچ بشه، همین‌جا بلاک میشه - دقیقاً هم‌رفتار با
-            // بلاک بر اساس کلمه‌ی کلیدی (پیام ذخیره میشه، فقط نوتیف/صدا نمیده).
-            val matchedPattern = BlockPatternStore.findMatch(context, sender)
-            if (matchedPattern != null) {
-                BlockedPatternMessageStore.markBlocked(context, messageId, matchedPattern.type, matchedPattern.value)
+            if (isNumberBlocked || matchedKeyword != null || matchedPattern != null) {
+                if (!isNumberBlocked && matchedKeyword != null) {
+                    BlockedKeywordMessageStore.markBlocked(context, messageId, matchedKeyword.text)
+                } else if (!isNumberBlocked && matchedPattern != null) {
+                    BlockedPatternMessageStore.markBlocked(context, messageId, matchedPattern.type, matchedPattern.value)
+                }
+                // این تغییر فقط SharedPreferences رو عوض می‌کنه؛ اگه صفحه‌ی «پیامک‌های
+                // بلاک‌شده» یا لیست مکالمات همین الان بازه، بدون این سیگنال تا یه اتفاق
+                // دیگه پیش نیاد آپدیت نمی‌شد.
                 DataChangeSignal.notifyChanged()
-                return
+
+                // پیش‌فرض: بدون نوتیف/صدا. اگه کاربر از تنظیماتِ بخشِ «بلاک»، «نمایش نوتیف
+                // پیام‌های بلاک‌شده» رو فعال کرده باشه، برخلاف رفتار پیش‌فرض، همچنان نوتیف
+                // نشون داده میشه (پیام هم مسدود می‌مونه، هم آگاهی‌رسانی میده).
+                if (!AppSettings.isShowBlockedNotificationsEnabled(context)) {
+                    return
+                }
             }
 
             // اگه کاربر همین الان (توی فورگراند) داخل همین مکالمه‌ست، لازم نیست نوتیف/صدا بدیم -

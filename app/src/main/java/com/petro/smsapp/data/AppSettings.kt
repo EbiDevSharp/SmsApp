@@ -29,6 +29,8 @@ object AppSettings {
     private const val KEY_CLOCK_FORMAT = "clock_format"
     private const val KEY_DELIVERY_NOTIFICATIONS = "delivery_notifications_enabled"
     private const val KEY_NOTIFICATION_ACTIONS = "notification_action_settings"
+    private const val KEY_SHOW_BLOCKED_NOTIFICATIONS = "show_blocked_notifications_enabled"
+    private const val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST = "show_blocked_in_message_list_enabled"
 
     /**
      * پیش‌فرض: فقط «خوانده شد» و «حذف» فعالن (همونایی که از قبل بودن)، بقیه (پاسخ سریع/
@@ -65,7 +67,13 @@ object AppSettings {
         // اسپم حساب میشه. تیک دلیوری زیر خود پیام (توی چت) کافیه؛ نوتیف اختیاریه.
         val deliveryNotificationsEnabled: Boolean = false,
         // ترتیب و روشن/خاموش بودن دکمه‌های نوتیف پیامک - قابل تنظیم از صفحه‌ی تنظیمات
-        val notificationActions: List<NotificationActionSetting> = defaultNotificationActionSettings()
+        val notificationActions: List<NotificationActionSetting> = defaultNotificationActionSettings(),
+        // پیش‌فرض خاموش: طبق رفتار همیشگیِ بخش «بلاک»، پیام‌های بلاک‌شده (چه بر اساس شماره،
+        // چه کلمه‌ی کلیدی، چه الگوی شماره) نه نوتیف/صدا میدن و نه توی لیست اصلیِ مکالمات/چت
+        // نشون داده میشن؛ فقط از صفحه‌ی «پیامک‌های بلاک‌شده» قابل دیدنن. این دو گزینه به کاربر
+        // اجازه میده هرکدوم از این دو رفتار رو جدا جدا خاموش/روشن کنه.
+        val showBlockedNotificationsEnabled: Boolean = false,
+        val showBlockedInMessageListEnabled: Boolean = false
     )
 
     private val _state = MutableStateFlow(State())
@@ -87,7 +95,9 @@ object AppSettings {
                 ClockFormat.H24
             },
             deliveryNotificationsEnabled = p.getBoolean(KEY_DELIVERY_NOTIFICATIONS, false),
-            notificationActions = loadNotificationActionSettings(p)
+            notificationActions = loadNotificationActionSettings(p),
+            showBlockedNotificationsEnabled = p.getBoolean(KEY_SHOW_BLOCKED_NOTIFICATIONS, false),
+            showBlockedInMessageListEnabled = p.getBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, false)
         )
     }
 
@@ -126,6 +136,22 @@ object AppSettings {
         val raw = settings.joinToString(",") { "${it.type.id}:${if (it.enabled) "1" else "0"}" }
         prefs(context).edit().putString(KEY_NOTIFICATION_ACTIONS, raw).apply()
         _state.value = _state.value.copy(notificationActions = settings)
+    }
+
+    /** آیا پیام‌های بلاک‌شده (شماره/کلمه‌ی کلیدی/الگو) هم باید نوتیف و صدا بدن؟ */
+    fun isShowBlockedNotificationsEnabled(context: Context): Boolean = _state.value.showBlockedNotificationsEnabled
+
+    fun setShowBlockedNotificationsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHOW_BLOCKED_NOTIFICATIONS, enabled).apply()
+        _state.value = _state.value.copy(showBlockedNotificationsEnabled = enabled)
+    }
+
+    /** آیا پیام‌های بلاک‌شده و شماره‌های بلاک‌شده باید توی لیستِ اصلیِ مکالمات/چت هم نشون داده بشن؟ */
+    fun isShowBlockedInMessageListEnabled(context: Context): Boolean = _state.value.showBlockedInMessageListEnabled
+
+    fun setShowBlockedInMessageListEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, enabled).apply()
+        _state.value = _state.value.copy(showBlockedInMessageListEnabled = enabled)
     }
 
     private fun prefs(context: Context) =

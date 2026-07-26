@@ -76,7 +76,13 @@ class SmsRepository(private val context: Context) {
                 ?: draft?.address?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
 
-            if (BlockStore.isAddressBlocked(context, address) || PrivateStore.isAddressPrivate(context, address)) {
+            if (PrivateStore.isAddressPrivate(context, address)) {
+                return@mapNotNull null
+            }
+            // شماره‌ی بلاک‌شده: پیش‌فرض از لیست اصلی مخفیه، مگر اینکه کاربر از تنظیماتِ
+            // بخشِ «بلاک»، «نمایش پیام‌ها و شماره‌های بلاک‌شده توی لیست پیام‌ها» رو فعال
+            // کرده باشه - اون‌وقت این مکالمه هم عادی (کنارِ بقیه) نشون داده میشه.
+            if (!AppSettings.isShowBlockedInMessageListEnabled(context) && BlockStore.isAddressBlocked(context, address)) {
                 return@mapNotNull null
             }
 
@@ -122,8 +128,11 @@ class SmsRepository(private val context: Context) {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
         val trashedIds = TrashStore.getTrashedIds(context)
-        val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
-        val patternBlockedIds = BlockedPatternMessageStore.getAllBlockedMessageIds(context)
+        // اگه کاربر «نمایش پیام‌ها/شماره‌های بلاک‌شده توی لیست پیام‌ها» رو فعال کرده باشه،
+        // این پیام‌ها دیگه از اینجا مخفی نمیشن (ست خالی یعنی هیچی فیلتر نشه).
+        val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
+        val keywordBlockedIds = if (showBlockedInList) emptySet() else BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
+        val patternBlockedIds = if (showBlockedInList) emptySet() else BlockedPatternMessageStore.getAllBlockedMessageIds(context)
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -265,8 +274,11 @@ class SmsRepository(private val context: Context) {
         if (!requireReadSmsPermission("خواندن پیام‌های یک مکالمه")) return emptyList()
         val messages = mutableListOf<SmsMessage>()
         val trashedIds = TrashStore.getTrashedIds(context)
-        val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
-        val patternBlockedIds = BlockedPatternMessageStore.getAllBlockedMessageIds(context)
+        // اگه کاربر «نمایش پیام‌ها/شماره‌های بلاک‌شده توی لیست پیام‌ها» رو فعال کرده باشه،
+        // این پیام‌ها دیگه از اینجا مخفی نمیشن (ست خالی یعنی هیچی فیلتر نشه).
+        val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
+        val keywordBlockedIds = if (showBlockedInList) emptySet() else BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
+        val patternBlockedIds = if (showBlockedInList) emptySet() else BlockedPatternMessageStore.getAllBlockedMessageIds(context)
         val uri = Telephony.Sms.CONTENT_URI
         // پیش‌نویس رو از لیست پیام‌های واقعی مکالمه کنار می‌ذاریم - پیش‌نویس حباب چت نیست،
         // فقط توی کادر متنِ پایین صفحه (از طریق getDraftText) برمی‌گرده

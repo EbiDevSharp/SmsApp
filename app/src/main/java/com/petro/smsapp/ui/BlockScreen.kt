@@ -7,8 +7,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Rule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
@@ -35,7 +37,8 @@ fun BlockScreen(
     onOpenBlockedMessages: () -> Unit,
     onOpenBlockedNumbers: () -> Unit,
     onOpenBlockKeywords: () -> Unit,
-    onOpenBlockPatterns: () -> Unit
+    onOpenBlockPatterns: () -> Unit,
+    onOpenBlockSettings: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -90,6 +93,44 @@ fun BlockScreen(
                     onClick = onOpenBlockPatterns
                 )
             }
+
+            BlockSettingsRow(onClick = onOpenBlockSettings)
+        }
+    }
+}
+
+@Composable
+private fun BlockSettingsRow(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = "تنظیمات بلاک",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Filled.ChevronLeft,
+                contentDescription = null,
+                tint = Color.Gray
+            )
         }
     }
 }

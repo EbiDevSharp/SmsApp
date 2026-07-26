@@ -36,6 +36,7 @@ import com.petro.smsapp.ui.AddPrivateNumberScreen
 import com.petro.smsapp.ui.BlockScreen
 import com.petro.smsapp.ui.BlockKeywordsScreen
 import com.petro.smsapp.ui.BlockPatternsScreen
+import com.petro.smsapp.ui.BlockSettingsScreen
 import com.petro.smsapp.ui.BlockedMessagesScreen
 import com.petro.smsapp.ui.BlockedNumbersScreen
 import com.petro.smsapp.ui.ConversationListScreen
@@ -249,6 +250,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val blockedMessages by viewModel.blockedMessages.collectAsState()
     val blockKeywords by viewModel.blockKeywords.collectAsState()
     val blockPatterns by viewModel.blockPatterns.collectAsState()
+    val appSettings by AppSettings.state.collectAsState()
     val privateNumbers by viewModel.privateNumbers.collectAsState()
     val privateMessages by viewModel.privateMessages.collectAsState()
     val privateUnlocked by viewModel.privateUnlocked.collectAsState()
@@ -508,7 +510,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onOpenBlockedMessages = { navController.navigate("blocked_messages") },
                     onOpenBlockedNumbers = { navController.navigate("blocked_numbers") },
                     onOpenBlockKeywords = { navController.navigate("block_keywords") },
-                    onOpenBlockPatterns = { navController.navigate("block_patterns") }
+                    onOpenBlockPatterns = { navController.navigate("block_patterns") },
+                    onOpenBlockSettings = { navController.navigate("block_settings") }
                 )
             }
             composable("blocked_messages") {
@@ -565,6 +568,19 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onBack = { navController.popBackStack() },
                     onAddPattern = { type, value -> viewModel.addBlockPattern(type, value) },
                     onRemovePattern = { id -> viewModel.removeBlockPattern(id) }
+                )
+            }
+            composable("block_settings") {
+                BlockSettingsScreen(
+                    showBlockedNotificationsEnabled = appSettings.showBlockedNotificationsEnabled,
+                    showBlockedInMessageListEnabled = appSettings.showBlockedInMessageListEnabled,
+                    onBack = { navController.popBackStack() },
+                    onShowBlockedNotificationsChange = { enabled ->
+                        AppSettings.setShowBlockedNotificationsEnabled(context, enabled)
+                    },
+                    onShowBlockedInMessageListChange = { enabled ->
+                        AppSettings.setShowBlockedInMessageListEnabled(context, enabled)
+                    }
                 )
             }
             composable("private") {
