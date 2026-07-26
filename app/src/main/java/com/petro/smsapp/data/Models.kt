@@ -66,24 +66,29 @@ data class TrashedMessage(
 
 /**
  * از چه طریقی یه پیام بلاک شده - برای نمایش توی صفحه‌ی «پیامک‌های بلاک‌شده».
- * PHONE_NUMBER یعنی خودِ شماره‌ی فرستنده بلاک بوده؛ KEYWORD یعنی شماره بلاک نبوده ولی
- * متن پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده توسط کاربر بوده.
+ * PHONE_NUMBER یعنی خودِ شماره‌ی فرستنده صریحاً بلاک بوده؛ KEYWORD یعنی شماره بلاک نبوده ولی
+ * متن پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده توسط کاربر بوده؛ PATTERN یعنی شماره‌ی
+ * فرستنده صریحاً بلاک نبوده ولی با یکی از «الگوهای بلاکِ شماره» (شروع/پایانِ شماره) مچ شده.
  */
 enum class BlockSource {
     PHONE_NUMBER,
-    KEYWORD
+    KEYWORD,
+    PATTERN
 }
 
 /**
- * یه پیامِ متعلق به یه شماره‌ی بلاک‌شده یا حاویِ یه کلمه‌ی کلیدیِ بلاک، به‌همراه نام/شماره‌ی
- * طرف مکالمه - برای نمایش توی صفحه‌ی «پیامک‌های بلاک‌شده». matchedKeyword فقط وقتی پر میشه
- * که blockSource برابر KEYWORD باشه.
+ * یه پیامِ متعلق به یه شماره‌ی بلاک‌شده، حاویِ یه کلمه‌ی کلیدیِ بلاک، یا مچ‌شده با یه الگوی
+ * بلاکِ شماره - به‌همراه نام/شماره‌ی طرف مکالمه - برای نمایش توی صفحه‌ی «پیامک‌های بلاک‌شده».
+ * matchedKeyword فقط وقتی پر میشه که blockSource برابر KEYWORD باشه؛ matchedPatternType و
+ * matchedPatternValue فقط وقتی پر میشن که blockSource برابر PATTERN باشه.
  */
 data class BlockedMessageEntry(
     val message: SmsMessage,
     val contactDisplayName: String,
     val blockSource: BlockSource = BlockSource.PHONE_NUMBER,
-    val matchedKeyword: String? = null
+    val matchedKeyword: String? = null,
+    val matchedPatternType: BlockPatternType? = null,
+    val matchedPatternValue: String? = null
 )
 
 /**

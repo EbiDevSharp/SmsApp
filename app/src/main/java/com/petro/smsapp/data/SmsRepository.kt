@@ -123,6 +123,7 @@ class SmsRepository(private val context: Context) {
         val unreadCounts = mutableMapOf<Long, Int>()
         val trashedIds = TrashStore.getTrashedIds(context)
         val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
+        val patternBlockedIds = BlockedPatternMessageStore.getAllBlockedMessageIds(context)
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -143,6 +144,7 @@ class SmsRepository(private val context: Context) {
                 while (cursor.moveToNext()) {
                     if (cursor.getLong(idIdx) in trashedIds) continue
                     if (cursor.getLong(idIdx) in keywordBlockedIds) continue
+                    if (cursor.getLong(idIdx) in patternBlockedIds) continue
                     if (typeIdx >= 0 && cursor.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT) continue
 
                     val threadId = cursor.getLong(threadIdIdx)
@@ -264,6 +266,7 @@ class SmsRepository(private val context: Context) {
         val messages = mutableListOf<SmsMessage>()
         val trashedIds = TrashStore.getTrashedIds(context)
         val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
+        val patternBlockedIds = BlockedPatternMessageStore.getAllBlockedMessageIds(context)
         val uri = Telephony.Sms.CONTENT_URI
         // پیش‌نویس رو از لیست پیام‌های واقعی مکالمه کنار می‌ذاریم - پیش‌نویس حباب چت نیست،
         // فقط توی کادر متنِ پایین صفحه (از طریق getDraftText) برمی‌گرده
@@ -279,6 +282,7 @@ class SmsRepository(private val context: Context) {
                     val message = cursorToMessage(cursor)
                     if (message.id in trashedIds) continue
                     if (message.id in keywordBlockedIds) continue
+                    if (message.id in patternBlockedIds) continue
                     messages.add(message)
                 }
             }
@@ -323,7 +327,26 @@ class SmsRepository(private val context: Context) {
                 }
         }
 
-        return (phoneBlockedEntries + keywordBlockedEntries).sortedByDescending { it.message.date }
+        // پیام‌هایی که فقط به‌خاطر یه الگوی بلاکِ شماره (شروع/پایانِ شماره) بلاک شدن - همون
+        // منطق بالا برای کلمه‌ی کلیدی، ولی روی BlockedPatternMessageStore.
+        val patternBlockedIds = BlockedPatternMessageStore.getAllBlockedMessageIds(context)
+        val patternBlockedEntries = if (patternBlockedIds.isEmpty()) {
+            emptyList()
+        } else {
+            getMessagesByIds(patternBlockedIds)
+                .filter { message -> blockedNumbers.none { it.address == message.address } }
+                .map { message ->
+                    val name = ContactsCache.getName(context, message.address) ?: message.address
+                    val matched = BlockedPatternMessageStore.getMatchedPattern(context, message.id)
+                    BlockedMessageEntry(
+                        message, name, BlockSource.PATTERN,
+                        matchedPatternType = matched?.type,
+                        matchedPatternValue = matched?.value
+                    )
+                }
+        }
+
+        return (phoneBlockedEntries + keywordBlockedEntries + patternBlockedEntries).sortedByDescending { it.message.date }
     }
 
     /** خوندن مستقیم پیام‌ها بر اساس یه لیست id مشخص - هم‌خانواده‌ی الگوی getTrashedMessages */
@@ -601,6 +624,7 @@ class SmsRepository(private val context: Context) {
                     )
                     DeliveryStore.clear(context, messageId)
                     BlockedKeywordMessageStore.clear(context, messageId)
+                    BlockedPatternMessageStore.clear(context, messageId)
                 } catch (e: SecurityException) {
                     Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی پیام‌ها", e)
                 }
@@ -697,6 +721,7 @@ class SmsRepository(private val context: Context) {
         }
         DeliveryStore.clear(context, messageId)
         BlockedKeywordMessageStore.clear(context, messageId)
+        BlockedPatternMessageStore.clear(context, messageId)
         TrashStore.restore(context, messageId) // دیگه ردیفی نیست، ایندکس سطل زباله رو هم پاک کن
         return true
     }

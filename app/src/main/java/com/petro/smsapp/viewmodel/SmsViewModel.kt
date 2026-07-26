@@ -12,6 +12,9 @@ import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.data.AlarmScheduler
 import com.petro.smsapp.data.BlockKeyword
 import com.petro.smsapp.data.BlockKeywordStore
+import com.petro.smsapp.data.BlockPattern
+import com.petro.smsapp.data.BlockPatternStore
+import com.petro.smsapp.data.BlockPatternType
 import com.petro.smsapp.data.BlockStore
 import com.petro.smsapp.data.BlockedKeywordMessageStore
 import com.petro.smsapp.data.BlockedMessageEntry
@@ -103,6 +106,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     // لیست کلمات کلیدی بلاک - برای صفحه‌ی «کلمات کلیدی بلاک» و بج شمارنده
     private val _blockKeywords = MutableStateFlow<List<BlockKeyword>>(emptyList())
     val blockKeywords: StateFlow<List<BlockKeyword>> = _blockKeywords.asStateFlow()
+
+    private val _blockPatterns = MutableStateFlow<List<BlockPattern>>(emptyList())
+    val blockPatterns: StateFlow<List<BlockPattern>> = _blockPatterns.asStateFlow()
 
     // لیست شماره‌های خصوصی - برای صفحه‌ی «شماره‌های خصوصی»
     private val _privateNumbers = MutableStateFlow<List<PrivateNumber>>(emptyList())
@@ -628,6 +634,37 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { BlockKeywordStore.removeKeyword(getApplication(), id) }
             loadBlockKeywords()
+        }
+    }
+
+    /** لود کردن لیست الگوهای بلاکِ شماره - برای صفحه‌ی «الگوهای بلاکِ شماره» و بج شمارنده */
+    fun loadBlockPatterns() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { BlockPatternStore.getAllPatterns(getApplication()) }
+            _blockPatterns.value = result
+        }
+    }
+
+    /**
+     * افزودن یه الگوی بلاکِ شماره‌ی جدید (شروع/پایانِ شماره) - از این لحظه به بعد، هر پیام
+     * ورودی‌ای که شماره‌ی فرستنده‌ش با این الگو مچ بشه خودکار بلاک میشه. پیام‌های قبلی که
+     * قبل از افزودن این الگو رسیده بودن، عقب‌گرد نمی‌خورن.
+     */
+    fun addBlockPattern(type: BlockPatternType, value: String) {
+        if (value.isBlank()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val added = withContext(Dispatchers.IO) { BlockPatternStore.addPattern(app, type, value) }
+            _operationMessage.value = if (added) "الگوی «${value.trim()}» اضافه شد" else "این الگو از قبل اضافه شده بود"
+            loadBlockPatterns()
+        }
+    }
+
+    /** حذف یه الگوی بلاکِ شماره - پیام‌هایی که قبلاً به‌خاطر همین الگو بلاک شده بودن، دست‌نخورده می‌مونن */
+    fun removeBlockPattern(id: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { BlockPatternStore.removePattern(getApplication(), id) }
+            loadBlockPatterns()
         }
     }
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
@@ -28,11 +29,13 @@ fun BlockScreen(
     blockedMessageCount: Int,
     blockedNumberCount: Int,
     blockKeywordCount: Int,
+    blockPatternCount: Int,
     onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onOpenBlockedMessages: () -> Unit,
     onOpenBlockedNumbers: () -> Unit,
-    onOpenBlockKeywords: () -> Unit
+    onOpenBlockKeywords: () -> Unit,
+    onOpenBlockPatterns: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -44,34 +47,49 @@ fun BlockScreen(
             )
         }
     ) { padding ->
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            BlockHubCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.Sms,
-                label = "پیامک‌های بلاک‌شده",
-                count = blockedMessageCount,
-                onClick = onOpenBlockedMessages
-            )
-            BlockHubCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.Block,
-                label = "شماره‌های بلاک‌شده",
-                count = blockedNumberCount,
-                onClick = onOpenBlockedNumbers
-            )
-            BlockHubCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.TextFields,
-                label = "کلمات کلیدی بلاک",
-                count = blockKeywordCount,
-                onClick = onOpenBlockKeywords
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                BlockHubCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Sms,
+                    label = "پیامک‌های بلاک‌شده",
+                    count = blockedMessageCount,
+                    onClick = onOpenBlockedMessages
+                )
+                BlockHubCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Block,
+                    label = "شماره‌های بلاک‌شده",
+                    count = blockedNumberCount,
+                    onClick = onOpenBlockedNumbers
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                BlockHubCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.TextFields,
+                    label = "کلمات کلیدی بلاک",
+                    count = blockKeywordCount,
+                    onClick = onOpenBlockKeywords
+                )
+                BlockHubCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Rule,
+                    label = "الگوهای بلاکِ شماره",
+                    count = blockPatternCount,
+                    onClick = onOpenBlockPatterns
+                )
+            }
         }
     }
 }

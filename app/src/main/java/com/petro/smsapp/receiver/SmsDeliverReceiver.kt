@@ -16,8 +16,10 @@ import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.BlockKeywordStore
+import com.petro.smsapp.data.BlockPatternStore
 import com.petro.smsapp.data.BlockStore
 import com.petro.smsapp.data.BlockedKeywordMessageStore
+import com.petro.smsapp.data.BlockedPatternMessageStore
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
@@ -77,6 +79,17 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 BlockedKeywordMessageStore.markBlocked(context, messageId, matchedKeyword.text)
                 // این تغییر فقط SharedPreferences رو عوض می‌کنه؛ اگه صفحه‌ی «پیامک‌های
                 // بلاک‌شده» همین الان بازه، بدون این سیگنال تا یه اتفاق دیگه پیش نیاد آپدیت نمی‌شد.
+                DataChangeSignal.notifyChanged()
+                return
+            }
+
+            // بلاک بر اساس الگوی شماره: حتی اگه خودِ شماره صریحاً بلاک نباشه، اگه شماره‌ی
+            // فرستنده با یکی از «الگوهای بلاکِ شماره» (مثلاً شروع با +98/0930... یا پایان با
+            // یه رقم خاص) تعریف‌شده‌ی کاربر مچ بشه، همین‌جا بلاک میشه - دقیقاً هم‌رفتار با
+            // بلاک بر اساس کلمه‌ی کلیدی (پیام ذخیره میشه، فقط نوتیف/صدا نمیده).
+            val matchedPattern = BlockPatternStore.findMatch(context, sender)
+            if (matchedPattern != null) {
+                BlockedPatternMessageStore.markBlocked(context, messageId, matchedPattern.type, matchedPattern.value)
                 DataChangeSignal.notifyChanged()
                 return
             }

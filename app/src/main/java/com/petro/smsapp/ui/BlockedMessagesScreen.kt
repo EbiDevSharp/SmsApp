@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.petro.smsapp.data.BlockPatternType
 import com.petro.smsapp.data.BlockSource
 import com.petro.smsapp.data.BlockedMessageEntry
 import com.petro.smsapp.util.DateFormatter
@@ -234,6 +235,10 @@ private fun BlockSourceLabel(entry: BlockedMessageEntry) {
     val text = when (entry.blockSource) {
         BlockSource.PHONE_NUMBER -> "بلاک‌شده بر اساس: شماره"
         BlockSource.KEYWORD -> "بلاک‌شده بر اساس: کلمه‌ی «${entry.matchedKeyword ?: ""}»"
+        BlockSource.PATTERN -> {
+            val label = if (entry.matchedPatternType == BlockPatternType.STARTS_WITH) "شروع شماره با" else "پایان شماره با"
+            "بلاک‌شده بر اساس: $label «${entry.matchedPatternValue ?: ""}»"
+        }
     }
     Text(
         text = text,
