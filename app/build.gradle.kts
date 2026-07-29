@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.kapt")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -32,11 +32,9 @@ android {
     }
 }
 
-// Room نیاز داره بدونه اسکیمای export‌شده رو کجا بنویسه
-kapt {
-    arguments {
-        arg("room.schemaLocation", "$projectDir/schemas")
-    }
+// Room اسکیمای دیتابیس رو (برای مایگریشن‌های بعدی) اینجا export می‌کنه
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -56,7 +54,7 @@ dependencies {
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
-    kapt("androidx.room:room-compiler:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
 
     // DataStore (Preferences) - جایگزین AppSettings و رمز بخش خصوصی
     implementation("androidx.datastore:datastore-preferences:1.1.1")
