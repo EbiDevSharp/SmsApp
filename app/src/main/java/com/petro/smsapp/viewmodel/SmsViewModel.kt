@@ -49,22 +49,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * فعلاً یک ViewModel یکپارچه (طبق تصمیم پروژه: تقسیمش رو می‌ذاریم برای بعد از پایدار
- * شدنِ مهاجرت). تنها چیزی که عوض شده لایه‌ی ذخیره‌سازیه: هر جا قبلاً یه *Store
- * (SharedPreferences) صدا زده می‌شد، الان یه Repository (روی Room) صدا زده میشه.
- *
- * لیست‌هایی که کاملاً روی Room هستن و به Telephony provider وابسته نیستن (favorites,
- * blockedNumbers, blockKeywords, blockPatterns, privateNumbers, trash, pinnedMessageIds,
- * pinned thread ids) الان واقعاً reactive ان: با stateIn مستقیم از Flow دیتابیس ساخته
- * شدن، نیازی به صدا زدن دستیِ loadX() ندارن (خودشون با هر insert/delete آپدیت میشن).
- * توابع loadX قبلی‌شون برای سازگاری با کدهای صداکننده (MainActivity) به‌صورت no-op
- * نگه داشته شدن.
- *
- * لیست‌هایی که ترکیبیِ Telephony + Room هستن (conversations, messages, blockedMessages,
- * privateMessages) هم‌چنان با همون الگوی قبلیِ trigger-based (ContentObserver +
- * DataChangeSignal) کار می‌کنن، فقط داخلشون دیگه از Room می‌خونن.
- */
 class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SmsRepository(application)
@@ -127,6 +111,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     val privateNumbers: StateFlow<List<PrivateNumber>> =
         privateRepository.observePrivateNumbers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allScheduledMessages: StateFlow<List<ScheduledMessage>> =
+        scheduledMessageRepository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // ---- لیست‌های ترکیبیِ Telephony + Room - هم‌چنان trigger-based ----
 
     private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
@@ -166,9 +153,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             smsObserver
         )
 
-        // بخشِ بزرگی از این سیگنال الان دیگه لازم نیست (چون favorites/blockedNumbers/...
-        // خودشون از Room مستقیم reactive شدن)؛ فقط برای بخش‌های ترکیبیِ Telephony+Room
-        // (conversations, blockedMessages, privateMessages) نگه داشته شده.
         viewModelScope.launch {
             DataChangeSignal.tick.drop(1).collect {
                 loadConversations()
@@ -358,7 +342,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ---- علاقه‌مندی‌ها - دیگه نیازی به load دستی نیست، فقط برای سازگاری no-op مونده ----
     @Deprecated("دیگه لازم نیست - favorites/favoriteIds خودشون از Room reactive هستن", ReplaceWith(""))
     fun loadFavorites() { /* no-op: favorites همیشه reactive */ }
 
@@ -522,7 +505,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     @Deprecated("دیگه لازم نیست - blockedNumbers خودش از Room reactive هست", ReplaceWith(""))
     fun loadBlockedNumbers() { /* no-op */ }
 
-    /** فقط بخشِ ترکیبیِ Telephony+Room؛ چیزی که واقعاً هنوز نیاز به load صریح داره */
     fun loadBlockedMessages() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForBlockedThreads() }
@@ -640,8 +622,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             _privateMessages.value = result
         }
     }
-
-    // ---- رمز بخش خصوصی - روی DataStore، suspend (UI باید async صداش بزنه) ----
 
     suspend fun hasPrivatePin(): Boolean =
         withContext(Dispatchers.IO) { PrivatePinDataStore.hasPin(getApplication()) }
@@ -765,6 +745,43 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                 scheduledMessageRepository.remove(id)
             }
             loadScheduledMessages(threadId)
+        }
+    }
+
+    fun updateScheduledTimeGlobal(id: Long, newScheduledAt: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                val existing = scheduledMessageRepository.get(id) ?: return@withContext
+                AlarmScheduler.cancel(app, id)
+                val updated = existing.copy(scheduledAt = newScheduledAt)
+                scheduledMessageRepository.save(updated)
+                AlarmScheduler.schedule(app, updated)
+            }
+        }
+    }
+
+    fun sendScheduledNowGlobal(id: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                val message = scheduledMessageRepository.get(id) ?: return@withContext
+                AlarmScheduler.cancel(app, id)
+                repository.sendSms(message.address, message.body, message.subscriptionId)
+                scheduledMessageRepository.remove(id)
+            }
+            loadConversations()
+            openThreadId?.let { refreshMessages(it) }
+        }
+    }
+
+    fun cancelScheduledMessageGlobal(id: Long) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                AlarmScheduler.cancel(app, id)
+                scheduledMessageRepository.remove(id)
+            }
         }
     }
 

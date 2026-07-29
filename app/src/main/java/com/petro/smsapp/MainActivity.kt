@@ -55,6 +55,7 @@ import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
 import com.petro.smsapp.ui.ThreadScreen
 import com.petro.smsapp.ui.TrashScreen
+import com.petro.smsapp.ui.ScheduledMessagesScreen
 import com.petro.smsapp.viewmodel.SmsViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxSize
@@ -243,6 +244,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val privateMessages by viewModel.privateMessages.collectAsState()
     val privateUnlocked by viewModel.privateUnlocked.collectAsState()
     val operationMessage by viewModel.operationMessage.collectAsState()
+    val allScheduledMessages by viewModel.allScheduledMessages.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -260,8 +262,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         navController.popBackStack()
     }
 
-    // لود اولیه‌ی چیزهایی که هنوز ترکیبیِ Telephony+Room هستن (favorites/blockedNumbers/
-    // blockKeywords/blockPatterns/privateNumbers دیگه لازم نیست چون خودشون از Room مستقیم reactive شدن)
     LaunchedEffect(Unit) {
         viewModel.loadBlockedMessages()
     }
@@ -390,6 +390,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     pinnedMessageIds = pinnedMessageIds,
                     initialDraft = draftText,
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
+                    onScheduleSend = { body, subId, at -> viewModel.scheduleMessage(address, displayName, body, subId, at) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },
                     onDeleteMessages = { messageIds -> viewModel.deleteMessages(threadId, messageIds) },
                     onResend = { message -> viewModel.resendMessage(message) },
@@ -456,10 +457,13 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("scheduled") {
-                PlaceholderScreen(
-                    title = "زمان‌بندی‌شده",
+                ScheduledMessagesScreen(
+                    scheduledMessages = allScheduledMessages,
                     onMenuClick = { scope.launch { drawerState.open() } },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onUpdateTime = { id, newTime -> viewModel.updateScheduledTimeGlobal(id, newTime) },
+                    onSendNow = { id -> viewModel.sendScheduledNowGlobal(id) },
+                    onCancel = { id -> viewModel.cancelScheduledMessageGlobal(id) }
                 )
             }
             composable("blocked") {
@@ -568,8 +572,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         onOpenPinSettings = { navController.navigate("private_pin_settings") }
                     )
                 } else {
-                    // چون رمز الان روی DataStore ئه، چک‌کردن/تائیدکردن/ساختنش suspend شده -
-                    // خودِ PrivatePinScreen این لامبداهای suspend رو با rememberCoroutineScope صدا می‌زنه
                     PrivatePinScreen(
                         checkHasExistingPin = { viewModel.hasPrivatePin() },
                         onVerifyPin = { pin -> viewModel.verifyPrivatePin(pin) },

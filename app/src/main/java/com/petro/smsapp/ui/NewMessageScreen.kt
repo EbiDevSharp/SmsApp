@@ -32,13 +32,7 @@ fun NewMessageScreen(
     onPickFromContactsClick: () -> Unit,
     onSearchChange: (String) -> Unit,
     onSend: (address: String, displayName: String, body: String, subscriptionId: Int?) -> Unit,
-    // زمان‌بندی یه پیام برای ارسال بعداً - به‌جای فرستادن فوری، توی ScheduledMessageStore
-    // ذخیره و توی AlarmManager ثبت میشه
     onScheduleSend: (address: String, displayName: String, body: String, subscriptionId: Int?, scheduledAt: Long) -> Unit,
-    // موقع خروج از این صفحه (هر دلیلی: برگشت فیزیکی، منو، یا بستن اپ) با آدرس/نام/متنِ فعلیِ
-    // کادر صدا زده میشه - دقیقاً هم‌خانواده‌ی onLeaveWithDraft توی ThreadScreen. قبلاً این
-    // مکانیزم اصلاً اینجا وجود نداشت، پس برای مخاطبی که تا حالا باهاش چت نشده بود، خروج از
-    // این صفحه (بدون ارسال) هیچ پیش‌نویسی نمی‌ساخت.
     onLeaveWithDraft: (address: String, displayName: String, body: String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -47,22 +41,7 @@ fun NewMessageScreen(
     var messageBody by remember { mutableStateOf("") }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
     var scheduledAt by remember { mutableStateOf<Long?>(null) }
-    var showTimePicker by remember { mutableStateOf(false) }
 
-    if (showTimePicker) {
-        DateTimePickerDialog(
-            initialMillis = scheduledAt ?: System.currentTimeMillis(),
-            onConfirm = {
-                scheduledAt = it
-                showTimePicker = false
-            },
-            onDismiss = { showTimePicker = false }
-        )
-    }
-
-    // موقع خروج از صفحه (به هر دلیلی) با آخرین مخاطبِ انتخاب‌شده/متنِ کادر ذخیره میشه -
-    // rememberUpdatedState لازمه چون onDispose خودِ لامبدای اولیه رو با مقدارهای همون لحظه‌ی
-    // composition اول capture می‌کنه، نه مقدار لحظه‌ی خروج.
     val latestContact = rememberUpdatedState(selectedContact)
     val latestBody = rememberUpdatedState(messageBody)
     val latestOnLeave = rememberUpdatedState(onLeaveWithDraft)
@@ -109,100 +88,41 @@ fun NewMessageScreen(
                         selectedSubscriptionId = selectedSimId,
                         onSelect = { selectedSimId = it }
                     )
-
-                    // اگه زمانی انتخاب شده، همین بالای نوار ارسال یه چیپ نشونش میده - با کلیک
-                    // روش دوباره انتخاب‌گر باز میشه (ویرایش)، با ضربدر کنارش کلاً پاک میشه
-                    val currentScheduledAt = scheduledAt
-                    if (currentScheduledAt != null) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.clickable { showTimePicker = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Schedule,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                    MessageInputBar(
+                        value = messageBody,
+                        onValueChange = { messageBody = it },
+                        onSendClick = {
+                            if (messageBody.isNotBlank()) {
+                                val at = scheduledAt
+                                if (at != null) {
+                                    onScheduleSend(
+                                        selectedContact!!.phoneNumber,
+                                        selectedContact!!.name,
+                                        messageBody,
+                                        selectedSimId,
+                                        at
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        "ارسال در ${DateFormatter.formatFull(currentScheduledAt)}",
-                                        style = MaterialTheme.typography.bodySmall
+                                } else {
+                                    onSend(
+                                        selectedContact!!.phoneNumber,
+                                        selectedContact!!.name,
+                                        messageBody,
+                                        selectedSimId
                                     )
                                 }
+                                messageBody = ""
+                                scheduledAt = null
                             }
-                            IconButton(onClick = { scheduledAt = null }) {
-                                Icon(Icons.Filled.Close, contentDescription = "لغو زمان‌بندی", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // دکمه ارسال اول میاد تا توی چیدمان راست‌به‌چپ سمت راست کادر بشینه
-                        Button(
-                            onClick = {
-                                if (messageBody.isNotBlank()) {
-                                    val at = scheduledAt
-                                    if (at != null) {
-                                        onScheduleSend(
-                                            selectedContact!!.phoneNumber,
-                                            selectedContact!!.name,
-                                            messageBody,
-                                            selectedSimId,
-                                            at
-                                        )
-                                    } else {
-                                        onSend(
-                                            selectedContact!!.phoneNumber,
-                                            selectedContact!!.name,
-                                            messageBody,
-                                            selectedSimId
-                                        )
-                                    }
-                                    // خالی می‌کنیم تا موقع خروج از صفحه (که بعد از ارسال/زمان‌بندی قطعاً
-                                    // اتفاق می‌افته) onDispose متنِ همین‌الان‌فرستاده‌شده رو
-                                    // دوباره به‌عنوان پیش‌نویس ذخیره نکنه
-                                    messageBody = ""
-                                    scheduledAt = null
-                                }
-                            },
-                            enabled = messageBody.isNotBlank()
-                        ) {
-                            Text(if (scheduledAt != null) "زمان‌بندی" else "ارسال")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = messageBody,
-                            onValueChange = { messageBody = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("متن پیام") },
-                            maxLines = 5,
-                            // متن انگلیسی/اعداد از چپ نوشته بشن، حتی داخل کانتینر راست‌به‌چپ
-                            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
-                        )
-                        IconButton(onClick = { showTimePicker = true }) {
-                            Icon(Icons.Filled.Schedule, contentDescription = "زمان‌بندی ارسال")
-                        }
-                    }
+                        },
+                        scheduledAt = scheduledAt,
+                        onScheduledAtChange = { scheduledAt = it },
+                        placeholder = "متن پیام"
+                    )
                 }
             }
         }
     ) { padding ->
         if (selectedContact == null) {
-            // مرحله ۱: انتخاب گیرنده
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -244,7 +164,6 @@ fun NewMessageScreen(
                 }
             }
         } else {
-            // مرحله ۲: هدر گیرنده همیشه بالا ثابت می‌مونه، بدنه‌ی زیرش (برای پیام‌های آینده) قابل اسکرول می‌مونه
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -268,7 +187,6 @@ fun NewMessageScreen(
                 }
                 Divider()
 
-                // فضای خالی زیر هدر - جای پیام‌هایی که بعداً ارسال میشن (بعد از اولین پیام میره صفحه چت)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

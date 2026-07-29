@@ -43,12 +43,6 @@ import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
 import kotlinx.coroutines.launch
 
-/**
- * یه ردیف واحد برای LazyColumn صفحه‌ی چت - یا یه پیام واقعی، یا یه پیام زمان‌بندی‌شده‌ی
- * هنوز-در-انتظار (که هنوز SmsMessage واقعی نیست چون ارسال نشده). برای اینکه هردو تو یه
- * لیستِ زمانی درست کنار هم مرتب بشن (پیام‌های زمان‌بندی‌شده معمولاً چون زمانشون تو
- * آینده‌ست، ته لیست/پایین صفحه می‌شینن).
- */
 private sealed class ThreadListItem {
     abstract val sortDate: Long
     data class Real(val message: SmsMessage) : ThreadListItem() {
@@ -59,36 +53,18 @@ private sealed class ThreadListItem {
     }
 }
 
-/**
- * صفحه‌ی چت یک مخاطب. دو تا قابلیت مهم علاوه بر ارسال/دریافت معمولی:
- *
- * ۱) حالت «انتخاب چندتایی» - دقیقاً همون الگوی لیست مکالمات: لانگ‌کلیک روی یه پیام وارد
- *    حالت انتخاب میشه، تک‌کلیک بعدی روی هر پیام دیگه فقط انتخاب/عدم‌انتخابش می‌کنه (دیگه
- *    منوی اکشن پیام باز نمیشه)، نوار بالا با تعداد انتخاب‌شده + انتخاب‌همه + حذف عوض میشه.
- *
- * ۲) زوم فونت با دو انگشت (Pinch) - این یه Scale واقعی روی کل صفحه نیست؛ فقط اندازه‌ی فونت
- *    متن پیام‌ها (که حباب‌ها هم چون دور همون متن رو می‌گیرن، خودشون بزرگ/کوچیک میشن) بین
- *    16sp تا 28sp تغییر می‌کنه. کاربر حس می‌کنه صفحه رو زوم کرده، ولی فقط متنه که عوض میشه.
- *
- * ۳) مکالمه‌های بدون شماره‌ی واقعی (Sender ID حروفی مثل اسم اپراتورها) - این‌جور مکالمه‌ها
- *    قابل بازکردن و خوندن هستن (پیام‌های دریافتی‌شون سرجاشونه) ولی چون address واقعاً یه
- *    شماره نیست، کادرِ ارسال/دکمه‌ی ارسال اصلاً نشون داده نمیشه؛ به‌جاش یه پیام توضیحی میاد.
- */
 @Composable
 fun ThreadScreen(
     displayName: String,
-    // آدرس خام مکالمه (ستونِ address توی جدول اس‌ام‌اس) - برای تشخیص اینکه واقعاً شماره‌ست
-    // یا صرفاً یه Sender ID حروفی (مثلاً اسم اپراتور) که نمیشه بهش پیام فرستاد
     address: String,
     messages: List<SmsMessage>,
     scheduledMessages: List<ScheduledMessage>,
     sims: List<SimInfo>,
     favoriteIds: Set<Long>,
-    // id پیام‌هایی که داخل همین چت پین شدن - برای نشون‌دادن حالت پین‌شده توی منوی کلیک پیام
     pinnedMessageIds: Set<Long> = emptySet(),
-    // متن پیش‌نویسِ ذخیره‌شده‌ی همین مکالمه (اگه بود) - برای پرکردن خودکار کادر متن
     initialDraft: String = "",
     onSend: (body: String, subscriptionId: Int?) -> Unit,
+    onScheduleSend: (body: String, subscriptionId: Int?, scheduledAt: Long) -> Unit,
     onDeleteMessage: (messageId: Long) -> Unit,
     onDeleteMessages: (Set<Long>) -> Unit,
     onOpenNote: (text: String) -> Unit,
@@ -98,19 +74,10 @@ fun ThreadScreen(
     onUpdateScheduledTime: (id: Long, newTime: Long) -> Unit,
     onSendScheduledNow: (id: Long) -> Unit,
     onCancelScheduledMessage: (id: Long) -> Unit,
-    // موقع خروج از صفحه (هر دلیلی) با متنِ فعلیِ کادر صدا زده میشه - پیاده‌سازی این تابع
-    // تصمیم می‌گیره ذخیره کنه (اگه متنی بود) یا پیش‌نویس قبلی رو پاک کنه (اگه خالی بود)
     onLeaveWithDraft: (text: String) -> Unit,
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
-    // initialDraft از دیتابیس async لود میشه، پس اولین باری که این Composable با این پارامتر
-    // اجرا میشه معمولاً هنوز "" (مقدار اولیه‌ی StateFlow) هست و متن واقعیِ درفت چند میلی‌ثانیه
-    // بعد می‌رسه. قبلاً draftApplied همون بار اول (با مقدار خالی) true می‌شد، پس وقتی متن
-    // واقعی می‌رسید دیگه اعمال نمی‌شد - نتیجه‌ش این بود که کادر متن خالی می‌موند، و موقع خروج
-    // از صفحه همون مقدار خالی به‌عنوان درفت جدید ذخیره می‌شد که عملاً درفت واقعی رو پاک می‌کرد.
-    // الان draftApplied فقط وقتی true میشه که واقعاً یه مقدار غیرخالی رسیده باشه، پس effect
-    // دوباره (با کلید جدید) اجرا میشه تا مقدار واقعی برسه.
     var draftApplied by remember { mutableStateOf(false) }
     LaunchedEffect(initialDraft) {
         if (!draftApplied && initialDraft.isNotBlank()) {
@@ -120,16 +87,11 @@ fun ThreadScreen(
             }
         }
     }
-    // موقع خروج از صفحه (به هر دلیلی: برگشت، رفتن سراغ مکالمه‌ی دیگه، بستن اپ) با آخرین
-    // متنِ کادر ذخیره میشه - rememberUpdatedState لازمه چون onDispose خودِ لامبدای اولیه رو
-    // با مقدار input در همون لحظه‌ی composition اول capture می‌کنه، نه مقدار لحظه‌ی خروج.
     val latestInput = rememberUpdatedState(input)
     val latestOnLeave = rememberUpdatedState(onLeaveWithDraft)
     DisposableEffect(Unit) {
         onDispose { latestOnLeave.value(latestInput.value) }
     }
-    // اگه address یه شماره‌ی واقعی نباشه (مثلاً Sender ID حروفیِ اپراتورها)، امکان ارسال
-    // پیام به این مکالمه نیست - کادر ارسال اصلاً نشون داده نمیشه
     val canSend = remember(address) { PhoneNumberUtils.isSendableAddress(address) }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
     var selectedMessage by remember { mutableStateOf<SmsMessage?>(null) }
@@ -137,30 +99,20 @@ fun ThreadScreen(
     var editingScheduledMessage by remember { mutableStateOf<ScheduledMessage?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    // 1f = فونت پایه (16sp)، 1.75f = حداکثر زوم (28sp)
     var fontScale by remember { mutableStateOf(1f) }
+    var scheduledAt by remember { mutableStateOf<Long?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // پیام‌های واقعی + پیام‌های زمان‌بندی‌شده‌ی در انتظار (که هنوز SmsMessage واقعی
-    // نیستن) با هم ترکیب و بر اساس تاریخ/زمانِ خودشون مرتب میشن - پیام‌های
-    // زمان‌بندی‌شده چون زمانشون تو آینده‌ست، معمولاً ته لیست (پایین صفحه) می‌شینن.
-    // این محاسبه بالاتر از Scaffold اومده (نه فقط داخل LazyColumn) چون نوار «پیام پین‌شده»
-    // بالای صفحه هم برای اسکرول‌کردن به ایندکسِ درست بهش نیاز داره.
     val combinedItems = remember(messages, scheduledMessages) {
         (messages.map { ThreadListItem.Real(it) } + scheduledMessages.map { ThreadListItem.Pending(it) })
             .sortedBy { it.sortDate }
     }
 
-    // پیام‌های پین‌شده‌ی همین مکالمه، از قدیمی به جدید - برای نوارِ آویزونِ بالای چت (شبیه
-    // بقیه‌ی اپ‌های پیام‌رسان) که حتی وسط اسکرولِ یه چتِ شلوغ هم گم نمیشه
     val pinnedInThread = remember(messages, pinnedMessageIds) {
         messages.filter { pinnedMessageIds.contains(it.id) }.sortedBy { it.date }
     }
-    // ایندکسِ پیامِ پین‌شده‌ای که الان توی نوار نشون داده میشه - دقیقاً رفتار تلگرام: با هر
-    // کلیک روی نوار، میره سراغِ همین پیام و بعد ایندکس یکی جلو میره (وقتی به آخری رسید،
-    // دوباره از اول شروع میشه) تا کلیکِ بعدی، پیامِ پین‌شده‌ی بعدی رو نشون بده.
     var pinnedBannerIndex by remember(pinnedInThread) { mutableStateOf(0) }
     val currentPinnedMessage = pinnedInThread.getOrNull(pinnedBannerIndex)
 
@@ -170,7 +122,6 @@ fun ThreadScreen(
         }
     }
 
-    // اگه بعد از حذف/تغییر لیست، بعضی id های انتخاب‌شده دیگه وجود نداشته باشن، از انتخاب پاک بشن
     LaunchedEffect(messages) {
         val stillExisting = messages.map { it.id }.toSet()
         if (selectedIds.any { it !in stillExisting }) {
@@ -178,11 +129,6 @@ fun ThreadScreen(
         }
     }
 
-    // دکمه‌ی برگشت سیستم: همیشه توسط خودمون مدیریت میشه (نه پیش‌فرض NavHost) -
-    // چون قبلاً وقتی selectionMode نبود، این BackHandler غیرفعال بود و برگشت از مسیر
-    // پیش‌فرض NavHost رد می‌شد؛ یعنی onBack (که clearOpenThread رو صدا می‌زنه) هیچ‌وقت
-    // اجرا نمی‌شد و ActiveThreadTracker/openThreadId رو یه مکالمه‌ی قدیمی گیر می‌کرد -
-    // نتیجه‌ش این بود که پیام‌های بعدیِ همون مخاطب نه نوتیف می‌گرفتن نه به‌درستی خونده‌نشده می‌موندن.
     BackHandler(enabled = true) {
         if (selectionMode) {
             selectedIds = emptySet()
@@ -293,9 +239,6 @@ fun ThreadScreen(
                             IconButton(onClick = onBack) { Text("←") }
                         }
                     )
-                    // نوار «پیام پین‌شده» - همیشه بالای صفحه آویزونه (زیرِ TopAppBar، جزوِ
-                    // topBar خودِ Scaffold) پس با اسکرول کردن وسط پیام‌های زیاد گم نمیشه.
-                    // با کلیک، مستقیم می‌پره روی خودِ پیام پین‌شده.
                     if (currentPinnedMessage != null) {
                         PinnedMessageBanner(
                             message = currentPinnedMessage,
@@ -308,8 +251,6 @@ fun ThreadScreen(
                                 if (index >= 0) {
                                     scope.launch { listState.animateScrollToItem(index) }
                                 }
-                                // بعد از رفتن سراغِ این یکی، دفعه‌ی بعد که کاربر کلیک کرد، پیامِ
-                                // پین‌شده‌ی بعدی رو نشون بده - اگه آخری بود، دوباره از اول
                                 pinnedBannerIndex = (pinnedBannerIndex + 1) % pinnedInThread.size
                             },
                             onUnpin = { onTogglePinMessage(currentPinnedMessage) }
@@ -331,35 +272,25 @@ fun ThreadScreen(
                             selectedSubscriptionId = selectedSimId,
                             onSelect = { selectedSimId = it }
                         )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // دکمه ارسال اول میاد تا توی چیدمان راست‌به‌چپ سمت راست کادر بشینه
-                            Button(onClick = {
+                        MessageInputBar(
+                            value = input,
+                            onValueChange = { input = it },
+                            onSendClick = {
                                 if (input.isNotBlank()) {
-                                    onSend(input, selectedSimId)
+                                    val at = scheduledAt
+                                    if (at != null) {
+                                        onScheduleSend(input, selectedSimId, at)
+                                    } else {
+                                        onSend(input, selectedSimId)
+                                    }
                                     input = ""
+                                    scheduledAt = null
                                 }
-                            }) {
-                                Text("ارسال")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            OutlinedTextField(
-                                value = input,
-                                onValueChange = { input = it },
-                                modifier = Modifier.weight(1f),
-                                placeholder = { Text("پیام...") },
-                                maxLines = 5,
-                                // متن انگلیسی/اعداد از چپ نوشته بشن، حتی داخل کانتینر راست‌به‌چپ
-                                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
-                            )
-                        }
+                            },
+                            scheduledAt = scheduledAt,
+                            onScheduledAtChange = { scheduledAt = it }
+                        )
                     } else {
-                        // این مکالمه شماره‌ی واقعی نداره (Sender ID حروفیه، مثل اسم اپراتورها) -
-                        // به‌جای کادر ارسال، فقط یه توضیح نشون بده که ارسال به این مخاطب ممکن نیست
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -382,19 +313,15 @@ fun ThreadScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                // زوم فونت با دو انگشت - فقط اندازه‌ی متن عوض میشه، نه واقعاً اسکیل کل صفحه
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoom, _ ->
                         fontScale = (fontScale * zoom).coerceIn(1f, 1.75f)
                     }
                 }
         ) {
-            // هر بار فضای واقعی در دسترس عوض بشه (باز/بسته شدن کیبورد، چرخش صفحه و ...)
-            // دوباره برو آخرین پیام تا زیر کادر ارسال قایم نمونه
             val availableHeight = maxHeight
             LaunchedEffect(availableHeight, combinedItems.size) {
                 if (combinedItems.isNotEmpty()) {
-                    // چون reverseLayout=true هست، ایندکس ۰ = پایین‌ترین/جدیدترین پیام
                     listState.animateScrollToItem(0)
                 }
             }
@@ -458,11 +385,6 @@ fun ThreadScreen(
     }
 }
 
-/**
- * نوار «پیام پین‌شده» - زیرِ TopAppBar آویزون می‌مونه (نه داخلِ لیستِ پیام‌ها)، پس با
- * اسکرول‌کردنِ چتِ شلوغ گم نمیشه. کلیک روش می‌بره سراغِ خودِ پیام، دکمه‌ی کنارش هم
- * مستقیم آنپینش می‌کنه بدون نیاز به رفتن سراغِ منوی پیام.
- */
 @Composable
 private fun PinnedMessageBanner(
     message: SmsMessage,
@@ -483,8 +405,6 @@ private fun PinnedMessageBanner(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // وقتی بیش از یه پیام پین باشه، به‌جای آیکنِ ساده، یه ردیف خط‌های کوچیک (شبیه
-            // نشانگرِ داستان/پیشرفتِ تلگرام) نشون میده که کدوم پیامِ پین‌شده الان انتخابه
             if (totalPinnedCount > 1) {
                 Row(modifier = Modifier.height(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     repeat(totalPinnedCount) { i ->
@@ -545,7 +465,6 @@ private fun MessageBubble(
     onLongClick: () -> Unit
 ) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
-    // پیام‌های ارسالیِ ناموفق زمینه‌ی قرمز کم‌رنگ می‌گیرن تا همون نگاه اول معلوم باشه مشکل داشتن
     val bubbleColor = when {
         message.isFailed -> Color(0xFFFFCDD2)
         message.isOutgoing -> MaterialTheme.colorScheme.primary
@@ -579,13 +498,9 @@ private fun MessageBubble(
                 Surface(
                     color = bubbleColor,
                     shape = RoundedCornerShape(16.dp),
-                    // پیام پین‌شده یه حاشیه‌ی نازکِ رنگی می‌گیره تا همون نگاه اول از بقیه‌ی
-                    // پیام‌ها متمایز باشه (علاوه بر آیکن پین زیرِ پیام)
                     border = if (isPinned) BorderStroke(1.5.dp, Color(0xFFFFA000)) else null,
                     modifier = Modifier
                         .padding(4.dp)
-                        // تک‌کلیک: برای پیام ناموفق مستقیم دوباره می‌فرسته، وگرنه منوی اکشن پیام
-                        // (یا انتخاب، توی حالت انتخاب) - دابل‌کلیک: نوت - لانگ‌کلیک: ورود به حالت انتخاب
                         .combinedClickable(
                             onClick = if (message.isFailed && !selectionMode) onResend else onClick,
                             onDoubleClick = onDoubleClick,
@@ -609,10 +524,6 @@ private fun MessageBubble(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray
                 )
-                // وضعیت ارسال - فقط برای پیام‌های ارسالی، دقیقاً همون‌جایی که قبلاً فقط
-                // تیکِ دلیوری بود؛ حالا هر ۴ حالت یه آیکن مشخص همینجا نشون میدن:
-                // در صف/در حال ارسال -> ساعت خاکستری، ارسال‌شده (بدون گزارش دلیوری) -> یه تیک،
-                // تحویل داده‌شده -> دو تیک سبز، ناموفق -> آیکن خطا (با کلیک، دوباره می‌فرسته)
                 if (message.isOutgoing) {
                     Spacer(modifier = Modifier.width(4.dp))
                     when {
@@ -643,7 +554,6 @@ private fun MessageBubble(
                             )
                         }
                         else -> {
-                            // ارسال‌شده ولی هنوز گزارش دلیوری نرسیده (یا اصلاً درخواستش نکردیم)
                             Icon(
                                 imageVector = Icons.Filled.Done,
                                 contentDescription = "ارسال شد",
@@ -653,7 +563,6 @@ private fun MessageBubble(
                         }
                     }
                 }
-                // نشان ستاره: پیام فیوریت‌شده (قفل‌شده در برابر حذف)
                 if (isFavorite) {
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(
@@ -663,7 +572,6 @@ private fun MessageBubble(
                         modifier = Modifier.size(14.dp)
                     )
                 }
-                // نشان پین: پیام پین‌شده‌ی داخل همین چت
                 if (isPinned) {
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(
@@ -678,7 +586,6 @@ private fun MessageBubble(
     }
 }
 
-/** آواتار جایگزین توی حالت انتخاب: دایره‌ی خالی وقتی انتخاب نشده، دایره‌ی رنگی با تیک وقتی انتخاب شده */
 @Composable
 private fun SelectionCheck(isSelected: Boolean) {
     Box(
@@ -701,11 +608,6 @@ private fun SelectionCheck(isSelected: Boolean) {
     }
 }
 
-/**
- * حباب مجازی یه پیام زمان‌بندی‌شده‌ی هنوز-در-انتظار - شکلش شبیه حباب پیام ارسالی معمولیه
- * (چون قراره از طرف ما فرستاده بشه)، با یه خط کوچیک بالای متن که ساعت ارسالش رو نشون میده.
- * تک‌کلیک روش منوی «ویرایش زمان / اکنون ارسال شود / لغو زمان‌بندی» رو باز می‌کنه.
- */
 @Composable
 private fun PendingScheduledBubble(scheduled: ScheduledMessage, onClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
