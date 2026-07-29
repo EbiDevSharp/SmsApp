@@ -17,31 +17,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
-private enum class PinStage { VERIFY, SETUP_ENTER, SETUP_CONFIRM }
+private enum class PinStage { LOADING, VERIFY, SETUP_ENTER, SETUP_CONFIRM }
 
 /**
  * صفحه‌ی ورود به بخش «خصوصی» با یه رمز ۴ رقمی.
- * - اگه هنوز رمزی ساخته نشده (hasExistingPin=false): اول یه رمز جدید می‌گیره، بعد برای
- *   اطمینان دوباره همون رمز رو می‌خواد؛ اگه یکی بودن، ذخیره میشه و وارد میشیم.
- * - اگه رمز از قبل هست: فقط یه‌بار می‌خواد و با رمز ذخیره‌شده مقایسه می‌کنه.
  *
- * onVerifyPin/onSetPin عملیات واقعی (هش‌کردن و مقایسه با PrivateStore) رو از بیرون
- * (ViewModel) می‌گیرن - این کامپوننت فقط UI و جریان صفحات رو مدیریت می‌کنه.
+ * چون رمز الان روی DataStore ئه (نه SharedPreferences synchronous قبلی)، چک‌کردن
+ * وجودِ رمز و تائید/ساختش همگی suspend شدن؛ برای همین این صفحه خودش (با
+ * rememberCoroutineScope) مسئولِ صدا زدنِ suspend لامبداهاست، نه صداکننده‌ش.
  */
 @Composable
 fun PrivatePinScreen(
-    hasExistingPin: Boolean,
-    onVerifyPin: (pin: String) -> Boolean,
-    onSetPin: (pin: String) -> Unit,
+    checkHasExistingPin: suspend () -> Boolean,
+    onVerifyPin: suspend (pin: String) -> Boolean,
+    onSetPin: suspend (pin: String) -> Unit,
     onUnlocked: () -> Unit,
     onMenuClick: () -> Unit,
     onBack: () -> Unit
 ) {
-    var stage by remember { mutableStateOf(if (hasExistingPin) PinStage.VERIFY else PinStage.SETUP_ENTER) }
+    var stage by remember { mutableStateOf(PinStage.LOADING) }
     var firstPin by remember { mutableStateOf("") }
     var input by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        stage = if (checkHasExistingPin()) PinStage.VERIFY else PinStage.SETUP_ENTER
+    }
 
     fun onDigit(d: String) {
         if (input.length >= 4) return
@@ -50,11 +54,14 @@ fun PrivatePinScreen(
         if (input.length == 4) {
             when (stage) {
                 PinStage.VERIFY -> {
-                    if (onVerifyPin(input)) {
-                        onUnlocked()
-                    } else {
-                        errorMessage = "رمز اشتباهه"
-                        input = ""
+                    val enteredPin = input
+                    scope.launch {
+                        if (onVerifyPin(enteredPin)) {
+                            onUnlocked()
+                        } else {
+                            errorMessage = "رمز اشتباهه"
+                            input = ""
+                        }
                     }
                 }
                 PinStage.SETUP_ENTER -> {
@@ -64,8 +71,11 @@ fun PrivatePinScreen(
                 }
                 PinStage.SETUP_CONFIRM -> {
                     if (input == firstPin) {
-                        onSetPin(input)
-                        onUnlocked()
+                        val newPin = input
+                        scope.launch {
+                            onSetPin(newPin)
+                            onUnlocked()
+                        }
                     } else {
                         errorMessage = "رمزها یکسان نبودن، دوباره تلاش کن"
                         firstPin = ""
@@ -73,6 +83,7 @@ fun PrivatePinScreen(
                         stage = PinStage.SETUP_ENTER
                     }
                 }
+                PinStage.LOADING -> Unit
             }
         }
     }
@@ -82,6 +93,7 @@ fun PrivatePinScreen(
     }
 
     val title = when (stage) {
+        PinStage.LOADING -> ""
         PinStage.VERIFY -> "رمز بخش خصوصی رو وارد کن"
         PinStage.SETUP_ENTER -> "یه رمز ۴ رقمی برای بخش خصوصی بساز"
         PinStage.SETUP_CONFIRM -> "رمز رو دوباره وارد کن"
@@ -97,6 +109,13 @@ fun PrivatePinScreen(
             )
         }
     ) { padding ->
+        if (stage == PinStage.LOADING) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -128,8 +147,6 @@ fun PrivatePinScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-            // این Row رو صراحتاً LTR می‌کنیم (برخلاف بقیه‌ی صفحه که RTL هست) تا دایره‌ی اول
-            // (index 0) سمت چپ رندر بشه و پر شدن از چپ به راست پیش بره، نه راست به چپ
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     repeat(4) { i ->
@@ -148,7 +165,6 @@ fun PrivatePinScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            // ارتفاع ثابت برای پیام خطا، تا با ظاهرشدن/ناپدیدشدنش کیبورد اعداد جابه‌جا نشه
             Box(modifier = Modifier.height(20.dp)) {
                 if (errorMessage != null) {
                     Text(

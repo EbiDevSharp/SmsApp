@@ -82,9 +82,6 @@ class MainActivity : ComponentActivity() {
         checkPermissionsAndLoad()
     }
 
-    // مجوز alarm دقیق (برای پیام‌های زمان‌بندی‌شده) از نوع runtime-permission معمولی نیست؛
-    // فقط با بردن کاربر به یه صفحه‌ی تنظیمات مخصوص سیستم قابل درخواسته. نتیجه‌ش برامون مهم
-    // نیست (چه بده چه نده، AlarmScheduler خودش fallback غیردقیق داره)، پس callback خالیه.
     private val requestExactAlarmLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { }
@@ -102,8 +99,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SmsAppTheme {
-                // اپ فعلاً فقط فارسیه، پس صرف‌نظر از زبان گوشی چیدمان رو راست‌به‌چپ می‌کنیم.
-                // اعداد (ساعت/تاریخ/شماره تلفن) به‌خاطر الگوریتم بایدای یونیکد خودشون چپ‌به‌راست می‌مونن.
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -128,27 +123,19 @@ class MainActivity : ComponentActivity() {
             checkPermissionsAndLoad()
         }
 
-        // اگه اپ از طریق کلیک روی نوتیف پیامک باز شده، مستقیم برو صفحه چت همون مخاطب
         handleNotificationIntent(intent)
     }
 
     override fun onPause() {
         super.onPause()
-        // اپ رفت بک‌گراند - حتی اگه هنوز روی صفحه‌ی چت باشیم، دیگه کاربر واقعاً نمی‌بینتش،
-        // پس نوتیف پیام‌های بعدی باید دوباره نشون داده بشه
         viewModel.onAppBackgrounded()
     }
 
     override fun onResume() {
         super.onResume()
-        // برگشتیم فورگراند - اگه هنوز همون thread باز بود، دوباره ساکتش کن
         viewModel.onAppForegrounded()
     }
 
-    /**
-     * وقتی اپ از قبل باز باشه (launchMode="singleTop") و کاربر روی یه نوتیف دیگه بزنه،
-     * onCreate دوباره صدا زده نمیشه - این تابع همون کار رو برای اون حالت انجام میده.
-     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -186,13 +173,6 @@ class MainActivity : ComponentActivity() {
         requestExactAlarmPermissionIfNeeded()
     }
 
-    /**
-     * از اندروید ۱۲ (S) به بعد، ارسال دقیقاً سرِ همون ثانیه‌ای که کاربر برای پیام
-     * زمان‌بندی‌شده انتخاب کرده نیاز به یه مجوز جدا داره که فقط از یه صفحه‌ی تنظیمات
-     * مخصوص سیستم قابل دادنه (نه از دیالوگ معمولی مجوزها). اگه کاربر ندش، AlarmScheduler
-     * خودش با یه alarm غیردقیق (ممکنه چند دقیقه دیر برسه) fallback می‌کنه - پس رد شدن این
-     * مجوز چیزی رو خراب نمی‌کنه، فقط دقتِ زمان ارسال رو کم می‌کنه.
-     */
     private fun requestExactAlarmPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = getSystemService(android.app.AlarmManager::class.java)
@@ -205,7 +185,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** خواندن نام و شماره‌ی مخاطبی که از اپ مخاطبین سیستم انتخاب شده */
     private fun handlePickedContact(uri: Uri) {
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             if (!cursor.moveToFirst()) return@use
@@ -269,35 +248,24 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // مسیر فعلیِ NavHost - برای اینکه دراور بدونه دقیقاً کدوم آیتم باید روشن/انتخاب‌شده باشه
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
 
-    // محافظ صریح: اگه دراور بازه، دکمه‌ی برگشت فقط دراور رو ببنده، نه اینکه بره از NavHost خارج بشه
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
     }
 
-    // چون فلش Back صفحه‌ی «خصوصی» برداشته شد (به‌جاش همبرگر دائمیه)، دیگه نقطه‌ی UI ای
-    // نداریم که با خروج از این صفحه viewModel.lockPrivate() رو صدا بزنه. این محافظ همون
-    // کارو برای «خروج با دکمه‌ی برگشتِ خودِ گوشی» انجام میده (خروج با کلیک آیتم دیگه‌ی
-    // دراور هم پایین‌تر، توی onItemClick خودش هندل میشه).
     BackHandler(enabled = !drawerState.isOpen && currentRoute == "private") {
         viewModel.lockPrivate()
         navController.popBackStack()
     }
 
-    // لود اولیه‌ی لیست فیوریت‌ها و بلاک‌ها - همون اول که برنامه بالا میاد (برای بج‌های شمارنده)
+    // لود اولیه‌ی چیزهایی که هنوز ترکیبیِ Telephony+Room هستن (favorites/blockedNumbers/
+    // blockKeywords/blockPatterns/privateNumbers دیگه لازم نیست چون خودشون از Room مستقیم reactive شدن)
     LaunchedEffect(Unit) {
-        viewModel.loadFavorites()
-        viewModel.loadPinnedMessages()
-        viewModel.loadBlockedNumbers()
         viewModel.loadBlockedMessages()
-        viewModel.loadBlockKeywords()
-        viewModel.loadBlockPatterns()
     }
 
-    // پیام‌های یک‌بارمصرف (مثل «این پیام قفله») به‌صورت Toast نشون داده میشن
     LaunchedEffect(operationMessage) {
         operationMessage?.let { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -305,7 +273,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
         }
     }
 
-    // وقتی از صفحه پیام جدید، پیام ارسال و thread ساخته/پیدا شد، برو صفحه چت همون thread با آدرس درست
     LaunchedEffect(newTarget) {
         val target = newTarget
         if (target != null) {
@@ -332,26 +299,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     currentRoute = currentRoute,
                     onItemClick = { route ->
                         scope.launch {
-                            // مهم: باید صبر کنیم انیمیشن بسته‌شدن کامل تموم بشه، بعد navigate کنیم.
-                            // قبلاً close() توی یه launch جدا (fire-and-forget) بود و navigate بلافاصله
-                            // بعدش (بدون صبر) اجرا می‌شد - یعنی وسط انیمیشن، ناوبری اتفاق می‌افتاد و
-                            // state داخلی drawerState قاطی می‌شد (صفحه سفید میومد، back هم خراب می‌شد،
-                            // فقط با swipe دستی درست می‌شد چون swipe مستقیم state رو ست می‌کنه نه از
-                            // طریق این انیمیشن).
                             drawerState.close()
-                            // اگه کاربر دقیقاً روی همون آیتمی زده که همین الان توشیم، اصلاً navigate
-                            // نکن - نه چیزی دوباره ساخته میشه نه چیزی به پشته اضافه میشه.
                             if (route != currentRoute) {
-                                // با خروج از بخش «خصوصی» (چه با کلیک آیتم دیگه‌ی دراور) قفلش برگرده -
-                                // چون فلش Back خودِ اون صفحه دیگه وجود نداره که این کارو بکنه
                                 if (currentRoute == "private") {
                                     viewModel.lockPrivate()
                                 }
                                 navController.navigate(route) {
-                                    // الگوی استاندارد ناوبریِ «تب‌مانند»: هر بار پشته رو تا مقصدِ
-                                    // شروع (لیست مکالمات) جمع می‌کنیم تا انتخاب‌های قبلی دراور روی
-                                    // هم تلنبار نشن، ولی state هرکدوم رو نگه می‌داریم (saveState) تا
-                                    // اگه دوباره برگردیم بهش، از اول ساخته نشه.
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
@@ -375,8 +328,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 ConversationListScreen(
                     conversations = conversations,
                     onConversationClick = { conversation ->
-                        // گارد اضافه: حتی اگه یه‌جای دیگه‌ی کد یه Conversation با آدرس خالی
-                        // ساخته بشه، دیگه crash نمی‌کنیم - فقط وارد چتش نمیشیم
                         if (conversation.address.isNotBlank()) {
                             viewModel.loadThread(conversation.threadId)
                             navController.navigate("thread/${conversation.threadId}/${Uri.encode(conversation.address)}/${Uri.encode(conversation.displayName)}")
@@ -425,8 +376,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 val address = backStackEntry.arguments?.getString("address") ?: ""
                 val displayName = backStackEntry.arguments?.getString("displayName") ?: address
 
-                // اگه نوتیف این مخاطب هنوز بالاست (کاربر کنارش نزده)، با ورود به همین چت پاکش کن -
-                // notificationId توی SmsDeliverReceiver همون address.hashCode() هست
                 LaunchedEffect(threadId, address) {
                     NotificationManagerCompat.from(context).cancel(address.hashCode())
                 }
@@ -485,7 +434,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("favorites") {
-                LaunchedEffect(Unit) { viewModel.loadFavorites() }
                 FavoritesScreen(
                     favorites = favorites,
                     onMenuClick = { scope.launch { drawerState.open() } },
@@ -515,14 +463,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("blocked") {
-                // باگ قبلی: این لیست‌ها فقط یه‌بار موقع بالا اومدن کل اپ لود می‌شدن، پس تا
-                // اپ رو کامل نمی‌بستی و دوباره باز نمی‌کردی، عدد بج‌ها/لیست‌ها آپدیت نمی‌شد.
-                // حالا هر بار که وارد این صفحه میشیم، دوباره از نو لود میشه.
                 LaunchedEffect(Unit) {
-                    viewModel.loadBlockedNumbers()
                     viewModel.loadBlockedMessages()
-                    viewModel.loadBlockKeywords()
-                    viewModel.loadBlockPatterns()
                 }
                 BlockScreen(
                     blockedMessageCount = blockedMessages.size,
@@ -554,7 +496,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("blocked_numbers") {
-                LaunchedEffect(Unit) { viewModel.loadBlockedNumbers() }
                 BlockedNumbersScreen(
                     blockedNumbers = blockedNumbers,
                     onBack = { navController.popBackStack() },
@@ -577,7 +518,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("block_keywords") {
-                LaunchedEffect(Unit) { viewModel.loadBlockKeywords() }
                 BlockKeywordsScreen(
                     keywords = blockKeywords,
                     onBack = { navController.popBackStack() },
@@ -586,7 +526,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("block_patterns") {
-                LaunchedEffect(Unit) { viewModel.loadBlockPatterns() }
                 BlockPatternsScreen(
                     patterns = blockPatterns,
                     onBack = { navController.popBackStack() },
@@ -612,10 +551,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 )
             }
             composable("private") {
-                // درست مثل بلاک: تا اینجا بودیم قفل نشده، رمز خواسته میشه (اولین بار: ساخت رمز)
                 if (privateUnlocked) {
                     LaunchedEffect(Unit) {
-                        viewModel.loadPrivateNumbers()
                         viewModel.loadPrivateMessages()
                     }
                     PrivateScreen(
@@ -623,7 +560,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         privateNumberCount = privateNumbers.size,
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onBack = {
-                            viewModel.lockPrivate() // با خروج کامل از بخش خصوصی، دفعه‌ی بعد دوباره رمز بخواد
+                            viewModel.lockPrivate()
                             navController.popBackStack()
                         },
                         onOpenPrivateMessages = { navController.navigate("private_messages") },
@@ -631,8 +568,10 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                         onOpenPinSettings = { navController.navigate("private_pin_settings") }
                     )
                 } else {
+                    // چون رمز الان روی DataStore ئه، چک‌کردن/تائیدکردن/ساختنش suspend شده -
+                    // خودِ PrivatePinScreen این لامبداهای suspend رو با rememberCoroutineScope صدا می‌زنه
                     PrivatePinScreen(
-                        hasExistingPin = viewModel.hasPrivatePin(),
+                        checkHasExistingPin = { viewModel.hasPrivatePin() },
                         onVerifyPin = { pin -> viewModel.verifyPrivatePin(pin) },
                         onSetPin = { pin -> viewModel.setPrivatePin(pin) },
                         onUnlocked = { viewModel.unlockPrivate() },
@@ -642,7 +581,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 }
             }
             composable("private_pin_settings") {
-                // مسیر مستقیم بدون رد شدن از هاب - محافظت اضافه، اگه قفل بود برگرد عقب
                 LaunchedEffect(privateUnlocked) {
                     if (!privateUnlocked) navController.popBackStack()
                 }
@@ -656,7 +594,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 }
             }
             composable("private_messages") {
-                // مسیر مستقیم بدون رد شدن از هاب - محافظت اضافه، اگه قفل بود برگرد عقب
                 LaunchedEffect(privateUnlocked) {
                     if (!privateUnlocked) {
                         navController.popBackStack()
@@ -680,13 +617,6 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 }
             }
             composable("private_numbers") {
-                LaunchedEffect(privateUnlocked) {
-                    if (!privateUnlocked) {
-                        navController.popBackStack()
-                    } else {
-                        viewModel.loadPrivateNumbers()
-                    }
-                }
                 if (privateUnlocked) {
                     PrivateNumbersScreen(
                         privateNumbers = privateNumbers,
@@ -697,10 +627,11 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                             navController.navigate("private_add_number")
                         }
                     )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
             composable("private_add_number") {
-                // مسیر مستقیم بدون رد شدن از هاب - محافظت اضافه، اگه قفل بود برگرد عقب
                 LaunchedEffect(privateUnlocked) {
                     if (!privateUnlocked) navController.popBackStack()
                 }

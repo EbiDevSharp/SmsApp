@@ -18,21 +18,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 private enum class Stage { MENU, VERIFY_CURRENT, NEW_ENTER, NEW_CONFIRM, CONFIRM_REMOVE }
 private enum class PendingAction { CHANGE, REMOVE }
 
 /**
- * تنظیمات رمز بخش خصوصی - از داخل خودِ PrivateScreen (آیکون تنظیمات) باز میشه.
- * دو تا کار می‌تونه بکنه:
- * - «تغییر رمز»: اول رمز فعلی رو تائید می‌کنه، بعد یه رمز جدید (با تکرار) می‌گیره.
- * - «حذف رمز»: اول رمز فعلی رو تائید می‌کنه، بعد با یه دیالوگ تائید نهایی، رمز کاملاً پاک میشه
- *   (دفعه‌ی بعد که وارد بخش خصوصی بشه، دوباره باید یه رمز جدید بسازه).
+ * تنظیمات رمز بخش خصوصی - onVerifyPin/onChangePin چون روی DataStore کار می‌کنن
+ * suspend شدن؛ onRemovePin فایر-اند-فورگت می‌مونه چون خودِ ViewModel داخلش
+ * coroutine جدا راه می‌ندازه.
  */
 @Composable
 fun PrivatePinSettingsScreen(
-    onVerifyPin: (pin: String) -> Boolean,
-    onChangePin: (newPin: String) -> Unit,
+    onVerifyPin: suspend (pin: String) -> Boolean,
+    onChangePin: suspend (newPin: String) -> Unit,
     onRemovePin: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -42,6 +41,7 @@ fun PrivatePinSettingsScreen(
     var input by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showRemoveConfirmDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     fun startFlow(action: PendingAction) {
         pendingAction = action
@@ -57,19 +57,22 @@ fun PrivatePinSettingsScreen(
         if (input.length == 4) {
             when (stage) {
                 Stage.VERIFY_CURRENT -> {
-                    if (onVerifyPin(input)) {
-                        input = ""
-                        stage = when (pendingAction) {
-                            PendingAction.CHANGE -> Stage.NEW_ENTER
-                            PendingAction.REMOVE -> {
-                                showRemoveConfirmDialog = true
-                                Stage.MENU // تا وقتی دیالوگ تائید بسته نشده برنمی‌گردیم منو، فقط دیالوگ رو نشون می‌دیم
+                    val entered = input
+                    scope.launch {
+                        if (onVerifyPin(entered)) {
+                            input = ""
+                            stage = when (pendingAction) {
+                                PendingAction.CHANGE -> Stage.NEW_ENTER
+                                PendingAction.REMOVE -> {
+                                    showRemoveConfirmDialog = true
+                                    Stage.MENU
+                                }
+                                null -> Stage.MENU
                             }
-                            null -> Stage.MENU
+                        } else {
+                            errorMessage = "رمز فعلی اشتباهه"
+                            input = ""
                         }
-                    } else {
-                        errorMessage = "رمز فعلی اشتباهه"
-                        input = ""
                     }
                 }
                 Stage.NEW_ENTER -> {
@@ -79,8 +82,11 @@ fun PrivatePinSettingsScreen(
                 }
                 Stage.NEW_CONFIRM -> {
                     if (input == firstNewPin) {
-                        onChangePin(input)
-                        onBack()
+                        val newPin = input
+                        scope.launch {
+                            onChangePin(newPin)
+                            onBack()
+                        }
                     } else {
                         errorMessage = "رمزها یکسان نبودن، دوباره تلاش کن"
                         firstNewPin = ""
@@ -211,7 +217,6 @@ private fun PinEntryBody(
         Text(text = title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
 
         Spacer(modifier = Modifier.height(24.dp))
-        // LTR اجباری - دقیقاً همون دلیل PrivatePinScreen: پرشدن باید از چپ به راست باشه
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 repeat(4) { i ->

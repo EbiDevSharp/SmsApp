@@ -1,9 +1,19 @@
 package com.petro.smsapp.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /** نوع تقویمی که برای نمایش تاریخ توی کل برنامه استفاده میشه */
 enum class CalendarType { GREGORIAN, JALALI }
@@ -11,37 +21,48 @@ enum class CalendarType { GREGORIAN, JALALI }
 /** فرمت نمایش ساعت توی کل برنامه */
 enum class ClockFormat { H24, H12 }
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+private val Context.settingsDataStore by preferencesDataStore(name = "app_settings")
+
 /**
- * تنظیمات ساده‌ی اپ که نیاز به دیتابیس ندارن، با SharedPreferences ذخیره میشن.
+ * تنظیمات ساده‌ی اپ - روی Preferences DataStore، دقیقاً همونی که خودِ گوگل برای
+ * دیتای flat و key-value (نه رابطه‌ای) پیشنهاد می‌ده.
  *
- * علاوه بر پرچم «سطل زباله»، الان تنظیمات نوع تقویم (میلادی/شمسی) و فرمت ساعت (۱۲/۲۴)
- * هم اینجا نگه‌داری میشن. چون AppSettings یه object سراسریه و جاهای زیادی از کد (مثل
- * DateFormatter) بدون داشتن Context بهش نیاز دارن، مقادیر علاوه بر SharedPreferences
- * توی یه StateFlow داخل حافظه هم نگه داشته میشن؛ کافیه AppSettings.init(context) یه بار
- * توی SmsApplication.onCreate صدا زده بشه تا این StateFlow از روی مقادیر ذخیره‌شده پر بشه.
- * هر setter هم SharedPreferences و هم StateFlow رو با هم آپدیت می‌کنه، پس UI (با collectAsState)
- * فوراً از تغییرات باخبر میشه.
+ * API عمومیِ این object عیناً با نسخه‌ی قبلی (SharedPreferences-based) یکیه - چون
+ * DateFormatter و چندین Composable مستقیم و synchronous از AppSettings.state.value
+ * می‌خونن، تغییر این امضا یعنی دست زدن به کلی فایل دیگه که ربطی به مهاجرت storage
+ * نداره. به‌جاش همون الگوی قبلی رو نگه داشتیم: یه StateFlow داخل حافظه که با
+ * DataStore هم‌گام (in-sync) نگه داشته میشه؛ ولی برخلاف قبل، خودِ این StateFlow
+ * دیگه «کش دستی» نیست - مستقیم و پیوسته از Flow خودِ DataStore پر میشه (init یه
+ * collector راه می‌ندازه)، یعنی اگه از هر مسیر دیگه‌ای هم DataStore تغییر کنه
+ * (مثلاً یه پروسس دیگه)، این State هم خودکار به‌روز میشه.
  */
 object AppSettings {
-    private const val PREFS_NAME = "app_settings"
-    private const val KEY_TRASH_ENABLED = "trash_enabled"
-    private const val KEY_CALENDAR_TYPE = "calendar_type"
-    private const val KEY_CLOCK_FORMAT = "clock_format"
-    private const val KEY_THEME_MODE = "theme_mode"
-    private const val KEY_DELIVERY_NOTIFICATIONS = "delivery_notifications_enabled"
-    private const val KEY_NOTIFICATION_ACTIONS = "notification_action_settings"
-    private const val KEY_SHOW_BLOCKED_NOTIFICATIONS = "show_blocked_notifications_enabled"
-    private const val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST = "show_blocked_in_message_list_enabled"
-    private const val KEY_BLOCK_NON_CONTACTS = "block_non_contacts_enabled"
-    private const val KEY_MAX_PINNED_CONVERSATIONS = "max_pinned_conversations"
+    private const val KEY_TRASH_ENABLED_NAME = "trash_enabled"
+    private const val KEY_CALENDAR_TYPE_NAME = "calendar_type"
+    private const val KEY_CLOCK_FORMAT_NAME = "clock_format"
+    private const val KEY_THEME_MODE_NAME = "theme_mode"
+    private const val KEY_DELIVERY_NOTIFICATIONS_NAME = "delivery_notifications_enabled"
+    private const val KEY_NOTIFICATION_ACTIONS_NAME = "notification_action_settings"
+    private const val KEY_SHOW_BLOCKED_NOTIFICATIONS_NAME = "show_blocked_notifications_enabled"
+    private const val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST_NAME = "show_blocked_in_message_list_enabled"
+    private const val KEY_BLOCK_NON_CONTACTS_NAME = "block_non_contacts_enabled"
+    private const val KEY_MAX_PINNED_CONVERSATIONS_NAME = "max_pinned_conversations"
+
+    private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
+    private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
+    private val KEY_CLOCK_FORMAT = stringPreferencesKey(KEY_CLOCK_FORMAT_NAME)
+    private val KEY_THEME_MODE = stringPreferencesKey(KEY_THEME_MODE_NAME)
+    private val KEY_DELIVERY_NOTIFICATIONS = booleanPreferencesKey(KEY_DELIVERY_NOTIFICATIONS_NAME)
+    private val KEY_NOTIFICATION_ACTIONS = stringPreferencesKey(KEY_NOTIFICATION_ACTIONS_NAME)
+    private val KEY_SHOW_BLOCKED_NOTIFICATIONS = booleanPreferencesKey(KEY_SHOW_BLOCKED_NOTIFICATIONS_NAME)
+    private val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST = booleanPreferencesKey(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST_NAME)
+    private val KEY_BLOCK_NON_CONTACTS = booleanPreferencesKey(KEY_BLOCK_NON_CONTACTS_NAME)
+    private val KEY_MAX_PINNED_CONVERSATIONS = intPreferencesKey(KEY_MAX_PINNED_CONVERSATIONS_NAME)
 
     /** پیش‌فرض حداکثر تعداد مکالمه‌ی قابل‌پین در لیست اصلی - کاربر می‌تونه از تنظیمات عوضش کنه */
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
 
-    /**
-     * پیش‌فرض: فقط «خوانده شد» و «حذف» فعالن (همونایی که از قبل بودن)، بقیه (پاسخ سریع/
-     * بلاک/تماس) غیرفعالن چون تازه اضافه شدن و کاربر باید خودش از تنظیمات فعالشون کنه.
-     */
     private fun defaultNotificationActionSettings(): List<NotificationActionSetting> = listOf(
         NotificationActionSetting(NotificationActionType.MARK_READ, true),
         NotificationActionSetting(NotificationActionType.DELETE, true),
@@ -50,16 +71,14 @@ object AppSettings {
         NotificationActionSetting(NotificationActionType.CALL, false)
     )
 
-    private fun loadNotificationActionSettings(p: android.content.SharedPreferences): List<NotificationActionSetting> {
-        val raw = p.getString(KEY_NOTIFICATION_ACTIONS, null) ?: return defaultNotificationActionSettings()
+    private fun parseNotificationActionSettings(raw: String?): List<NotificationActionSetting> {
+        if (raw == null) return defaultNotificationActionSettings()
         val saved = raw.split(",").mapNotNull { entry ->
             val parts = entry.split(":")
             if (parts.size != 2) return@mapNotNull null
             val type = NotificationActionType.fromId(parts[0]) ?: return@mapNotNull null
             NotificationActionSetting(type, parts[1] == "1")
         }
-        // اگه بعداً یه نوع اکشن جدید به enum اضافه شد که هنوز تو تنظیمات ذخیره‌شده‌ی کاربر
-        // نیست، انتهای لیست اضافه‌ش کن (غیرفعال، تا کاربر خودش تصمیم بگیره فعالش کنه)
         val missing = NotificationActionType.entries.filter { type -> saved.none { it.type == type } }
             .map { NotificationActionSetting(it, false) }
         return saved + missing
@@ -70,131 +89,108 @@ object AppSettings {
         val calendarType: CalendarType = CalendarType.GREGORIAN,
         val clockFormat: ClockFormat = ClockFormat.H24,
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
-        // پیش‌فرض خاموش: اگه کاربر ۲۰ تا پیام بفرسته و همه دلیور بشن، ۲۰ تا نوتیف جدا
-        // اسپم حساب میشه. تیک دلیوری زیر خود پیام (توی چت) کافیه؛ نوتیف اختیاریه.
         val deliveryNotificationsEnabled: Boolean = false,
-        // ترتیب و روشن/خاموش بودن دکمه‌های نوتیف پیامک - قابل تنظیم از صفحه‌ی تنظیمات
         val notificationActions: List<NotificationActionSetting> = defaultNotificationActionSettings(),
-        // پیش‌فرض خاموش: طبق رفتار همیشگیِ بخش «بلاک»، پیام‌های بلاک‌شده (چه بر اساس شماره،
-        // چه کلمه‌ی کلیدی، چه الگوی شماره) نه نوتیف/صدا میدن و نه توی لیست اصلیِ مکالمات/چت
-        // نشون داده میشن؛ فقط از صفحه‌ی «پیامک‌های بلاک‌شده» قابل دیدنن. این دو گزینه به کاربر
-        // اجازه میده هرکدوم از این دو رفتار رو جدا جدا خاموش/روشن کنه.
         val showBlockedNotificationsEnabled: Boolean = false,
         val showBlockedInMessageListEnabled: Boolean = false,
-        // پیش‌فرض خاموش: اگه فعال بشه، پیامک‌های شماره‌هایی که جزو مخاطبینِ ذخیره‌شده‌ی گوشی
-        // نیستن هم مثل بقیه‌ی راه‌های بلاک (شماره/کلمه‌ی کلیدی/الگو) مسدود میشن.
         val blockNonContactsEnabled: Boolean = false,
-        // حداکثر تعداد مکالمه‌ای که می‌شه هم‌زمان توی لیست اصلی پین کرد
         val maxPinnedConversations: Int = DEFAULT_MAX_PINNED_CONVERSATIONS
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
-    /** باید یه بار توی SmsApplication.onCreate صدا زده بشه تا مقادیر ذخیره‌شده لود بشن */
+    // اسکوپِ سطحِ اپلیکیشن - این object در طولِ عمرِ کل پروسس زنده‌ست، پس نیازی به
+    // cancel کردن نداره (دقیقاً هم‌خانواده‌ی چیزی که SmsApplication خودش هم می‌بود)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var initialized = false
+
+    /**
+     * باید یه بار توی SmsApplication.onCreate صدا زده بشه. برخلاف قبل (که یه خوندنِ
+     * synchronous از SharedPreferences بود)، اینجا یه collector روی Flow خودِ
+     * DataStore راه می‌افته که برای همیشه _state رو هم‌گام نگه می‌داره.
+     */
     fun init(context: Context) {
-        val p = prefs(context)
-        _state.value = State(
-            trashEnabled = p.getBoolean(KEY_TRASH_ENABLED, false),
-            calendarType = if (p.getString(KEY_CALENDAR_TYPE, null) == CalendarType.JALALI.name) {
-                CalendarType.JALALI
-            } else {
-                CalendarType.GREGORIAN
-            },
-            clockFormat = if (p.getString(KEY_CLOCK_FORMAT, null) == ClockFormat.H12.name) {
-                ClockFormat.H12
-            } else {
-                ClockFormat.H24
-            },
-            themeMode = when (p.getString(KEY_THEME_MODE, null)) {
-                ThemeMode.LIGHT.name -> ThemeMode.LIGHT
-                ThemeMode.DARK.name -> ThemeMode.DARK
-                else -> ThemeMode.SYSTEM
-            },
-            deliveryNotificationsEnabled = p.getBoolean(KEY_DELIVERY_NOTIFICATIONS, false),
-            notificationActions = loadNotificationActionSettings(p),
-            showBlockedNotificationsEnabled = p.getBoolean(KEY_SHOW_BLOCKED_NOTIFICATIONS, false),
-            showBlockedInMessageListEnabled = p.getBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, false),
-            blockNonContactsEnabled = p.getBoolean(KEY_BLOCK_NON_CONTACTS, false),
-            maxPinnedConversations = p.getInt(KEY_MAX_PINNED_CONVERSATIONS, DEFAULT_MAX_PINNED_CONVERSATIONS)
-        )
+        if (initialized) return
+        initialized = true
+        scope.launch {
+            context.settingsDataStore.data
+                .map { prefs ->
+                    State(
+                        trashEnabled = prefs[KEY_TRASH_ENABLED] ?: false,
+                        calendarType = if (prefs[KEY_CALENDAR_TYPE] == CalendarType.JALALI.name) CalendarType.JALALI else CalendarType.GREGORIAN,
+                        clockFormat = if (prefs[KEY_CLOCK_FORMAT] == ClockFormat.H12.name) ClockFormat.H12 else ClockFormat.H24,
+                        themeMode = when (prefs[KEY_THEME_MODE]) {
+                            ThemeMode.LIGHT.name -> ThemeMode.LIGHT
+                            ThemeMode.DARK.name -> ThemeMode.DARK
+                            else -> ThemeMode.SYSTEM
+                        },
+                        deliveryNotificationsEnabled = prefs[KEY_DELIVERY_NOTIFICATIONS] ?: false,
+                        notificationActions = parseNotificationActionSettings(prefs[KEY_NOTIFICATION_ACTIONS]),
+                        showBlockedNotificationsEnabled = prefs[KEY_SHOW_BLOCKED_NOTIFICATIONS] ?: false,
+                        showBlockedInMessageListEnabled = prefs[KEY_SHOW_BLOCKED_IN_MESSAGE_LIST] ?: false,
+                        blockNonContactsEnabled = prefs[KEY_BLOCK_NON_CONTACTS] ?: false,
+                        maxPinnedConversations = prefs[KEY_MAX_PINNED_CONVERSATIONS] ?: DEFAULT_MAX_PINNED_CONVERSATIONS
+                    )
+                }
+                .collect { newState -> _state.value = newState }
+        }
     }
 
     fun isTrashEnabled(context: Context): Boolean = _state.value.trashEnabled
 
-    fun setTrashEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_TRASH_ENABLED, enabled).apply()
-        _state.value = _state.value.copy(trashEnabled = enabled)
-    }
+    fun setTrashEnabled(context: Context, enabled: Boolean) = write(context) { it[KEY_TRASH_ENABLED] = enabled }
 
     fun getCalendarType(context: Context): CalendarType = _state.value.calendarType
 
-    fun setCalendarType(context: Context, type: CalendarType) {
-        prefs(context).edit().putString(KEY_CALENDAR_TYPE, type.name).apply()
-        _state.value = _state.value.copy(calendarType = type)
-    }
+    fun setCalendarType(context: Context, type: CalendarType) = write(context) { it[KEY_CALENDAR_TYPE] = type.name }
 
     fun getClockFormat(context: Context): ClockFormat = _state.value.clockFormat
 
-    fun setClockFormat(context: Context, format: ClockFormat) {
-        prefs(context).edit().putString(KEY_CLOCK_FORMAT, format.name).apply()
-        _state.value = _state.value.copy(clockFormat = format)
-    }
+    fun setClockFormat(context: Context, format: ClockFormat) = write(context) { it[KEY_CLOCK_FORMAT] = format.name }
+
     fun getThemeMode(context: Context): ThemeMode = _state.value.themeMode
 
-    fun setThemeMode(context: Context, mode: ThemeMode) {
-        prefs(context).edit().putString(KEY_THEME_MODE, mode.name).apply()
-        _state.value = _state.value.copy(themeMode = mode)
-    }
+    fun setThemeMode(context: Context, mode: ThemeMode) = write(context) { it[KEY_THEME_MODE] = mode.name }
+
     fun isDeliveryNotificationsEnabled(context: Context): Boolean = _state.value.deliveryNotificationsEnabled
 
-    fun setDeliveryNotificationsEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_DELIVERY_NOTIFICATIONS, enabled).apply()
-        _state.value = _state.value.copy(deliveryNotificationsEnabled = enabled)
-    }
+    fun setDeliveryNotificationsEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_DELIVERY_NOTIFICATIONS] = enabled }
 
     fun getNotificationActionSettings(context: Context): List<NotificationActionSetting> =
         _state.value.notificationActions
 
     fun setNotificationActionSettings(context: Context, settings: List<NotificationActionSetting>) {
         val raw = settings.joinToString(",") { "${it.type.id}:${if (it.enabled) "1" else "0"}" }
-        prefs(context).edit().putString(KEY_NOTIFICATION_ACTIONS, raw).apply()
-        _state.value = _state.value.copy(notificationActions = settings)
+        write(context) { it[KEY_NOTIFICATION_ACTIONS] = raw }
     }
 
-    /** آیا پیام‌های بلاک‌شده (شماره/کلمه‌ی کلیدی/الگو) هم باید نوتیف و صدا بدن؟ */
     fun isShowBlockedNotificationsEnabled(context: Context): Boolean = _state.value.showBlockedNotificationsEnabled
 
-    fun setShowBlockedNotificationsEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_SHOW_BLOCKED_NOTIFICATIONS, enabled).apply()
-        _state.value = _state.value.copy(showBlockedNotificationsEnabled = enabled)
-    }
+    fun setShowBlockedNotificationsEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SHOW_BLOCKED_NOTIFICATIONS] = enabled }
 
-    /** آیا پیام‌های بلاک‌شده و شماره‌های بلاک‌شده باید توی لیستِ اصلیِ مکالمات/چت هم نشون داده بشن؟ */
     fun isShowBlockedInMessageListEnabled(context: Context): Boolean = _state.value.showBlockedInMessageListEnabled
 
-    fun setShowBlockedInMessageListEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST, enabled).apply()
-        _state.value = _state.value.copy(showBlockedInMessageListEnabled = enabled)
-    }
+    fun setShowBlockedInMessageListEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SHOW_BLOCKED_IN_MESSAGE_LIST] = enabled }
 
-    /** آیا شماره‌هایی که جزو مخاطبینِ گوشی نیستن باید خودکار بلاک بشن؟ */
     fun isBlockNonContactsEnabled(context: Context): Boolean = _state.value.blockNonContactsEnabled
 
-    fun setBlockNonContactsEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_BLOCK_NON_CONTACTS, enabled).apply()
-        _state.value = _state.value.copy(blockNonContactsEnabled = enabled)
-    }
+    fun setBlockNonContactsEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_BLOCK_NON_CONTACTS] = enabled }
 
-    /** حداکثر تعداد مکالمه‌ی قابل‌پین توی لیست اصلی مکالمات */
     fun getMaxPinnedConversations(context: Context): Int = _state.value.maxPinnedConversations
 
     fun setMaxPinnedConversations(context: Context, count: Int) {
         val clamped = count.coerceIn(1, 20)
-        prefs(context).edit().putInt(KEY_MAX_PINNED_CONVERSATIONS, clamped).apply()
-        _state.value = _state.value.copy(maxPinnedConversations = clamped)
+        write(context) { it[KEY_MAX_PINNED_CONVERSATIONS] = clamped }
     }
 
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+        scope.launch {
+            context.applicationContext.settingsDataStore.edit { prefs -> block(prefs) }
+        }
+    }
 }

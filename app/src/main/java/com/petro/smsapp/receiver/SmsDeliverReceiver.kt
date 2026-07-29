@@ -14,21 +14,21 @@ import androidx.core.app.RemoteInput
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
+import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
-import com.petro.smsapp.data.BlockKeywordStore
-import com.petro.smsapp.data.BlockPatternStore
-import com.petro.smsapp.data.BlockStore
-import com.petro.smsapp.data.BlockedKeywordMessageStore
-import com.petro.smsapp.data.BlockedNonContactMessageStore
-import com.petro.smsapp.data.BlockedPatternMessageStore
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
-import com.petro.smsapp.data.PrivateStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
- * وقتی اپ ما "پیش‌فرض پیامک" باشه، این ریسیور به جای سیستم پیام رو دریافت می‌کنه
- * و خودمون مسئول ذخیره‌ش توی SMS Provider هستیم (سیستم دیگه خودکار ذخیره نمی‌کنه)
+ * وقتی اپ ما "پیش‌فرض پیامک" باشه، این ریسیور به جای سیستم پیام رو دریافت می‌کنه.
+ *
+ * چون تصمیم‌گیریِ بلاک‌بودن حالا از روی Room (suspend) میاد، نه SharedPreferences
+ * (synchronous)، کل منطق داخل goAsync() + یه coroutine روی Dispatchers.IO اجرا میشه -
+ * وگرنه Main Thread تا پایان کوئری‌های دیتابیس قفل می‌موند (ریسک ANR).
  */
 class SmsDeliverReceiver : BroadcastReceiver() {
 
@@ -40,12 +40,11 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val sender = messages[0].originatingAddress ?: "ناشناس"
         val fullBody = messages.joinToString(separator = "") { it.messageBody ?: "" }
-        // زمانی که شبکه/فرستنده پیام رو فرستاده (از PDU میاد)
         val sentTimestamp = messages[0].timestampMillis
-        // زمانی که این گوشی واقعاً پیام رو پردازش کرده - اگه گوشی خاموش بوده، این خیلی دیرتر از sentTimestamp میشه
         val receivedTimestamp = System.currentTimeMillis()
 
-        // ذخیره توی content provider سیستم (جدول Sms.Inbox)
+        // چون contentResolver.insert سریع و خودِ سیستمه (نه Room)، همینجا synchronous
+        // انجامش می‌دیم؛ فقط تصمیم‌گیریِ بلاک/خصوصی/نوتیف که به Room نیاز داره میره تو goAsync
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, sender)
             put(Telephony.Sms.BODY, fullBody)
@@ -54,66 +53,61 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             put(Telephony.Sms.READ, 0)
             put(Telephony.Sms.SEEN, 0)
         }
-        context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)?.let { insertedUri ->
-            val messageId = android.content.ContentUris.parseId(insertedUri)
-            val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
+        val insertedUri = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values) ?: return
+        val messageId = android.content.ContentUris.parseId(insertedUri)
+        val threadId = Telephony.Threads.getOrCreateThreadId(context, setOf(sender))
 
-            // شماره‌ی خصوصی‌شده: همیشه کاملاً بی‌صدا و مخفیه (این تنظیمِ جدیدِ «نمایش نوتیفِ
-            // بلاک‌شده‌ها» فقط روی بخش «بلاک» اثر داره، نه روی بخش جدای «خصوصی»).
-            if (PrivateStore.isAddressPrivate(context, sender)) {
-                return
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                handleBlockAndNotify(context, sender, fullBody, threadId, messageId)
+            } finally {
+                pendingResult.finish()
             }
-
-            // تشخیص اینکه این پیام از نظر «بلاک» مسدوده یا نه - از هر کدوم از چهار راه:
-            // ۱) خودِ شماره‌ی فرستنده صریحاً بلاک شده (BlockStore)
-            // ۲) بدنه‌ی پیام شامل یکی از «کلمات کلیدی بلاک» تعریف‌شده‌ی کاربره
-            // ۳) شماره‌ی فرستنده با یکی از «الگوهای بلاکِ شماره» (شروع/پایانِ شماره) مچ میشه
-            // ۴) کاربر «بلاک شماره‌های خارج از مخاطبین» رو فعال کرده و این شماره جزو
-            //    مخاطبینِ ذخیره‌شده‌ی گوشی نیست
-            // پیام همیشه (چه بلاک باشه چه نه) توی SMS provider ذخیره می‌مونه؛ فقط تصمیم‌گیری
-            // در مورد نوتیف/صدا و نمایش توی لیستِ اصلی جدا انجام میشه (طبق تنظیمات کاربر).
-            val isNumberBlocked = BlockStore.isAddressBlocked(context, sender)
-            val matchedKeyword = BlockKeywordStore.findMatch(context, fullBody)
-            // اگه هم شماره صریحاً بلاکه هم کلمه‌ی کلیدی مچ شده، شماره اولویت داره (متادیتای
-            // اضافه لازم نیست) - کلمه فقط وقتی ثبت میشه که تنها دلیلِ بلاک‌شدن همینه.
-            val matchedPattern = if (!isNumberBlocked) BlockPatternStore.findMatch(context, sender) else null
-            // فقط وقتی بررسی میشه که هیچ‌کدوم از سه راه دیگه دلیلِ بلاک نبوده و کاربر خودش
-            // این گزینه رو از تنظیماتِ بلاک فعال کرده باشه؛ ContactsCache.getName فقط وقتی
-            // null برمی‌گردونه که شماره جزو مخاطبینِ ذخیره‌شده‌ی گوشی نباشه.
-            val isBlockedAsNonContact = !isNumberBlocked && matchedKeyword == null && matchedPattern == null &&
-                AppSettings.isBlockNonContactsEnabled(context) &&
-                ContactsCache.getName(context, sender) == null
-
-            if (isNumberBlocked || matchedKeyword != null || matchedPattern != null || isBlockedAsNonContact) {
-                if (!isNumberBlocked && matchedKeyword != null) {
-                    BlockedKeywordMessageStore.markBlocked(context, messageId, matchedKeyword.text)
-                } else if (!isNumberBlocked && matchedPattern != null) {
-                    BlockedPatternMessageStore.markBlocked(context, messageId, matchedPattern.type, matchedPattern.value)
-                } else if (isBlockedAsNonContact) {
-                    BlockedNonContactMessageStore.markBlocked(context, messageId, sender)
-                }
-                // این تغییر فقط SharedPreferences رو عوض می‌کنه؛ اگه صفحه‌ی «پیامک‌های
-                // بلاک‌شده» یا لیست مکالمات همین الان بازه، بدون این سیگنال تا یه اتفاق
-                // دیگه پیش نیاد آپدیت نمی‌شد.
-                DataChangeSignal.notifyChanged()
-
-                // پیش‌فرض: بدون نوتیف/صدا. اگه کاربر از تنظیماتِ بخشِ «بلاک»، «نمایش نوتیف
-                // پیام‌های بلاک‌شده» رو فعال کرده باشه، برخلاف رفتار پیش‌فرض، همچنان نوتیف
-                // نشون داده میشه (پیام هم مسدود می‌مونه، هم آگاهی‌رسانی میده).
-                if (!AppSettings.isShowBlockedNotificationsEnabled(context)) {
-                    return
-                }
-            }
-
-            // اگه کاربر همین الان (توی فورگراند) داخل همین مکالمه‌ست، لازم نیست نوتیف/صدا بدیم -
-            // چون ContentObserver توی ViewModel خودش صفحه‌ی چت رو زنده آپدیت می‌کنه و کاربر
-            // همون لحظه پیام رو روی صفحه می‌بینه.
-            if (ActiveThreadTracker.activeThreadId == threadId) {
-                return
-            }
-
-            showNotification(context, sender, fullBody, threadId, messageId)
         }
+    }
+
+    private suspend fun handleBlockAndNotify(
+        context: Context,
+        sender: String,
+        fullBody: String,
+        threadId: Long,
+        messageId: Long
+    ) {
+        val privateRepository = AppContainer.privateRepository(context)
+        val blockRepository = AppContainer.blockRepository(context)
+
+        if (privateRepository.isAddressPrivate(sender)) {
+            return
+        }
+
+        val isNumberBlocked = blockRepository.isAddressBlocked(sender)
+        val matchedKeyword = blockRepository.findKeywordMatch(fullBody)
+        val matchedPattern = if (!isNumberBlocked) blockRepository.findPatternMatch(sender) else null
+        val isBlockedAsNonContact = !isNumberBlocked && matchedKeyword == null && matchedPattern == null &&
+            AppSettings.isBlockNonContactsEnabled(context) &&
+            ContactsCache.getName(context, sender) == null
+
+        if (isNumberBlocked || matchedKeyword != null || matchedPattern != null || isBlockedAsNonContact) {
+            if (!isNumberBlocked && matchedKeyword != null) {
+                blockRepository.markKeywordBlocked(messageId, matchedKeyword.text)
+            } else if (!isNumberBlocked && matchedPattern != null) {
+                blockRepository.markPatternBlocked(messageId, matchedPattern.type, matchedPattern.value)
+            } else if (isBlockedAsNonContact) {
+                blockRepository.markNonContactBlocked(messageId, sender)
+            }
+            DataChangeSignal.notifyChanged()
+
+            if (!AppSettings.isShowBlockedNotificationsEnabled(context)) {
+                return
+            }
+        }
+
+        if (ActiveThreadTracker.activeThreadId == threadId) {
+            return
+        }
+
+        showNotification(context, sender, fullBody, threadId, messageId)
     }
 
     private fun showNotification(
@@ -137,9 +131,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // آیکن کوچیکِ نوار وضعیت طبق قانون خودِ اندروید همیشه یه‌رنگ/سیلوئته (نمیشه رنگی
-        // نشونش داد، محدودیت خودِ سیستم‌عامله). چیزی که واقعاً «آیکن اپ» رو قابل تشخیص
-        // می‌کنه large icon هست که میشه رنگی/کامل نشونش داد - قبلاً اصلاً ست نمی‌شد.
         val largeIcon = runCatching {
             BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
         }.getOrNull()
@@ -148,8 +139,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             .setSmallIcon(R.drawable.ic_message)
             .setContentTitle(sender)
             .setContentText(body)
-            // BigTextStyle باعث میشه نوتیف قابل کشیدن/expand باشه و کاربر بتونه کل متنِ
-            // پیام رو (نه فقط یک خط خلاصه‌شده) مستقیم از توی نوتیف ببینه.
             .setStyle(NotificationCompat.BigTextStyle().bigText(body).setBigContentTitle(sender))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -158,10 +147,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             builder.setLargeIcon(largeIcon)
         }
 
-        // دکمه‌های نوتیف داینامیکن: ترتیب و روشن/خاموش بودنشون از تنظیمات میاد (صفحه‌ی
-        // «دکمه‌های نوتیفیکیشن» تو تنظیمات) و می‌تونه جابه‌جا/فعال-غیرفعال بشه. اندروید
-        // معمولاً بیشتر از ۳ تا اکشن رو خوب نشون نمی‌ده (بسته به لانچر/OEM ممکنه بقیه رو
-        // قایم کنه یا overflow کنه)، پس فقط ۳ تای اول از دکمه‌های فعال رو اضافه می‌کنیم.
         val enabledActions = AppSettings.getNotificationActionSettings(context)
             .filter { it.enabled }
             .take(3)
@@ -230,8 +215,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
     }
 
     private fun buildCallAction(context: Context, address: String, notificationId: Int): NotificationCompat.Action {
-        // ACTION_DIAL (نه ACTION_CALL) چون فقط شماره‌گیر رو با شماره‌ی پرشده باز می‌کنه،
-        // بدون نیاز به مجوز CALL_PHONE - کاربر خودش باید دکمه‌ی تماس رو تو دایلر بزنه
         val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))
         val callPendingIntent = PendingIntent.getActivity(
             context, notificationId * 10 + 4, dialIntent,
@@ -251,9 +234,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             putExtra(NotificationActionReceiver.EXTRA_ADDRESS, address)
             putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
         }
-        // برخلاف بقیه‌ی اکشن‌ها، PendingIntent مربوط به RemoteInput باید MUTABLE باشه
-        // (سیستم لازمه جواب تایپ‌شده رو داخل همین Intent قرار بده) - FLAG_IMMUTABLE
-        // باعث میشه پاسخ سریع اصلاً کار نکنه (خصوصاً روی اندروید ۱۲ به بالا).
         val replyPendingIntent = PendingIntent.getBroadcast(
             context, notificationId * 10 + 5, replyIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE

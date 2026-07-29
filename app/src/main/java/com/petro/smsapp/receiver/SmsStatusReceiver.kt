@@ -5,21 +5,20 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.provider.Telephony
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.R
 import com.petro.smsapp.data.SmsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
- * دو تا اکشن رو مدیریت می‌کنه:
- * - ACTION_SMS_SENT: نتیجه‌ی خودِ عملیات ارسال (رادیو/آنتن) - اگه اینجا خطا بگیریم یعنی
- *   پیام اصلاً به شبکه نرسیده (نه اینکه گیرنده تحویل نگرفته).
- * - ACTION_SMS_DELIVERED: گزارش دلیوری از شبکه - یعنی گیرنده پیام رو تحویل گرفته یا نه.
- *
- * وضعیت پیام رو توی Sms provider آپدیت می‌کنه (برای تیک زیر حباب پیام) و برای هر دو حالت
- * (موفق/ناموفق) یه نوتیف مناسب نشون میده - فعلاً روی همون کانال/صدای نوتیف پیامک معمولی.
+ * دو تا اکشن رو مدیریت می‌کنه (نتیجه‌ی ارسال / گزارش دلیوری). چون
+ * SmsRepository.updateDeliveryStatus حالا suspend شده (Room)، از goAsync() +
+ * coroutine استفاده می‌کنیم؛ resultCode باید همون لحظه‌ی synchronous خونده بشه
+ * (بعد از برگشتن از onReceive دیگه معتبر نیست)، پس قبل از launch ذخیره‌ش می‌کنیم.
  */
 class SmsStatusReceiver : BroadcastReceiver() {
 
@@ -27,28 +26,32 @@ class SmsStatusReceiver : BroadcastReceiver() {
         val messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, -1L)
         if (messageId == -1L) return
 
-        when (intent.action) {
-            ACTION_SMS_SENT -> handleSentResult(context, messageId)
-            ACTION_SMS_DELIVERED -> handleDeliveryReport(context, messageId, intent)
+        // resultCode فقط تا وقتی onReceive برنگشته معتبره؛ همینجا می‌خونیمش
+        val capturedResultCode = resultCode
+
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                when (intent.action) {
+                    ACTION_SMS_SENT -> handleSentResult(context, messageId, capturedResultCode)
+                    ACTION_SMS_DELIVERED -> handleDeliveryReport(context, messageId, intent, capturedResultCode)
+                }
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
-    /**
-     * اگه ارسال با خطا مواجه بشه (مثلاً آنتن نبودن، رادیو خاموش، پیامک نامعتبر)، پیام هیچ‌وقت
-     * گزارش دلیوری نمی‌گیره و قبلاً بی‌سروصدا برای همیشه با STATUS_PENDING می‌موند - انگار
-     * هنوز در انتظاره، بدون اینکه کاربر بفهمه اصلاً ارسال نشده. اینجا همون لحظه وضعیت رو
-     * STATUS_FAILED می‌کنیم و یه نوتیف «ارسال نشد» نشون می‌دیم.
-     */
-    private fun handleSentResult(context: Context, messageId: Long) {
-        if (resultCode == Activity.RESULT_OK) return // ارسال موفق بود، منتظر گزارش دلیوری می‌مونیم
+    private suspend fun handleSentResult(context: Context, messageId: Long, resultCode: Int) {
+        if (resultCode == Activity.RESULT_OK) return
 
         val repository = SmsRepository(context)
         repository.updateDeliveryStatus(messageId, delivered = false, deliveredAtMillis = 0L)
         showSendFailedNotification(context, messageId)
     }
 
-    private fun handleDeliveryReport(context: Context, messageId: Long, intent: Intent) {
-        val delivered = isDeliverySuccessful(intent)
+    private suspend fun handleDeliveryReport(context: Context, messageId: Long, intent: Intent, resultCode: Int) {
+        val delivered = isDeliverySuccessful(intent, resultCode)
         val repository = SmsRepository(context)
         val now = System.currentTimeMillis()
         repository.updateDeliveryStatus(messageId, delivered, now)
@@ -60,11 +63,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * نتیجه‌ی resultCode به‌تنهایی همیشه دقیق نیست؛ اگه PDU گزارش دلیوری همراه intent باشه
-     * (که معمولاً هست)، وضعیت واقعی رو از خودش می‌خونیم. status == 0 یعنی تحویل موفق.
-     */
-    private fun isDeliverySuccessful(intent: Intent): Boolean {
+    private fun isDeliverySuccessful(intent: Intent, resultCode: Int): Boolean {
         return try {
             val pdu = intent.getByteArrayExtra("pdu")
             if (pdu != null) {

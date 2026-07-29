@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 android {
@@ -31,6 +32,13 @@ android {
     }
 }
 
+// Room نیاز داره بدونه اسکیمای export‌شده رو کجا بنویسه
+kapt {
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.material3:material3")
@@ -43,4 +51,13 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("sh.calvin.reorderable:reorderable:2.2.0")
+
+    // Room - جایگزین همه‌ی *Store های SharedPreferences قبلی
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
+
+    // DataStore (Preferences) - جایگزین AppSettings و رمز بخش خصوصی
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 }

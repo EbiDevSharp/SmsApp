@@ -11,17 +11,32 @@ import android.provider.Telephony
 import android.telephony.SmsManager
 import android.util.Log
 import com.petro.smsapp.DefaultSmsAppHelper
+import com.petro.smsapp.data.repository.BlockRepository
+import com.petro.smsapp.data.repository.DeliveryRepository
+import com.petro.smsapp.data.repository.PinRepository
+import com.petro.smsapp.data.repository.PrivateRepository
+import com.petro.smsapp.data.repository.TrashRepository
 import com.petro.smsapp.receiver.SmsStatusReceiver
 
-class SmsRepository(private val context: Context) {
+/**
+ * لایه‌ی خواندن/نوشتنِ Telephony.Sms Provider - این پروایدر خودِ اندروید همیشه source
+ * of truth می‌مونه (نمی‌شه به Room منتقلش کرد)، ولی همه‌ی متادیتای مربوط به بلاک/
+ * خصوصی/سطل‌زباله/پین/دلیوری که قبلاً SharedPreferences بودن، الان از طریق
+ * Repositoryهای تزریق‌شده (روی Room) میان - بدون هیچ کش میانیِ اضافه.
+ *
+ * همه‌ی متدهای این کلاس suspend شدن (قبلاً synchronous بودن چون SharedPreferences
+ * synchronous بود) - چون همه‌جا همین الان هم از داخل withContext(Dispatchers.IO)
+ * صدا زده میشن (توی SmsViewModel)، این تغییر امن و بدون بلاک‌کردن Main Thread ئه.
+ */
+class SmsRepository(
+    private val context: Context,
+    private val blockRepository: BlockRepository = AppContainer.blockRepository(context),
+    private val privateRepository: PrivateRepository = AppContainer.privateRepository(context),
+    private val trashRepository: TrashRepository = AppContainer.trashRepository(context),
+    private val pinRepository: PinRepository = AppContainer.pinRepository(context),
+    private val deliveryRepository: DeliveryRepository = AppContainer.deliveryRepository(context)
+) {
 
-    /**
-     * فقط اپ پیش‌فرض پیامک اجازه‌ی نوشتن (ارسال/حذف/آپدیت) روی Telephony.Sms رو داره.
-     * قبلاً این چک فقط موقع باز شدن اپ (MainActivity) انجام می‌شد؛ ولی اگه بعداً کاربر
-     * اپ پیش‌فرض رو عوض کنه (یا هیچ‌وقت قبول نکنه) و دوباره سراغ ارسال/حذف بره،
-     * contentResolver با SecurityException کرش می‌کرد. این تابع قبل از هر نوشتن صدا زده
-     * میشه؛ اگه پیش‌فرض نبودیم، به‌جای کرش، فقط لاگ می‌کنیم و عملیات رو انجام نمی‌دیم.
-     */
     private fun requireDefaultSmsApp(operation: String): Boolean {
         val isDefault = DefaultSmsAppHelper.isDefaultSmsApp(context)
         if (!isDefault) {
@@ -30,13 +45,6 @@ class SmsRepository(private val context: Context) {
         return isDefault
     }
 
-    /**
-     * لایه‌ی دفاعی برای عملیات‌های خواندن. اپ می‌تونه پیش‌فرض پیامک باشه ولی کاربر بعداً
-     * از تنظیمات سیستم مجوز READ_SMS رو دستی برداشته باشه - در اون حالت
-     * requireDefaultSmsApp چیزی نمی‌گیره چون همچنان پیش‌فرضیم، ولی contentResolver.query
-     * با SecurityException کرش می‌کنه. این تابع قبل از هر خوندن صدا زده میشه؛ اگه مجوز
-     * نبود، به‌جای کرش، فقط لاگ می‌کنیم و لیست خالی برمی‌گردونیم.
-     */
     private fun requireReadSmsPermission(operation: String): Boolean {
         val hasPermission = PermissionHelper.hasReadSmsPermission(context)
         if (!hasPermission) {
@@ -45,55 +53,30 @@ class SmsRepository(private val context: Context) {
         return hasPermission
     }
 
-    /**
-     * خواندن لیست مکالمات، گروه‌بندی‌شده بر اساس thread_id
-     *
-     * قبلاً اینجا یه کوئری جدا به Telephony.Sms.Conversations می‌زدیم فقط برای گرفتن
-     * snippet (خلاصه‌ی آخرین پیام)، که مشکلش این بود: اون جدول از مفهوم «سطل زباله»ی
-     * ما خبر نداره - یعنی اگه آخرین پیام یه مکالمه تو سطل زباله بود، snippet همچنان
-     * متن همون پیام حذف‌شده رو نشون می‌داد. الان به‌جاش توی همون یه پاسِ بالک روی
-     * جدول sms (که برای آدرس/تاریخ/تعداد نخونده هم می‌زدیم) snippet رو هم از روی
-     * جدیدترین پیامِ غیر-سطل‌زباله‌ای می‌سازیم - هم دقیق‌تره هم یه کوئری کمتر.
-     */
-    fun getConversations(): List<Conversation> {
+    suspend fun getConversations(): List<Conversation> {
         if (!requireReadSmsPermission("خواندن لیست مکالمات")) return emptyList()
         val threadMeta = getAllThreadsMeta()
         val drafts = getAllDrafts()
 
-        // اتحاد threadId هایی که پیام واقعی دارن + threadId هایی که فقط پیش‌نویس دارن
-        // (مثلاً مکالمه‌ی جدیدی که کاربر شروع کرده ولی هنوز چیزی نفرستاده)
         val allThreadIds = threadMeta.keys + drafts.keys
 
         val conversations = allThreadIds.mapNotNull { threadId ->
             val meta = threadMeta[threadId]
             val draft = drafts[threadId]
 
-            // آدرس رو ترجیحاً از آخرین پیام واقعی می‌گیریم؛ اگه thread فقط پیش‌نویس داره،
-            // از آدرس خودِ ردیف پیش‌نویس استفاده می‌کنیم. اگه هیچ‌کدوم آدرس معتبر نداشتن
-            // (مثلاً پیش‌نویسِ بی‌آدرس - همون موردی که قبلاً کرش می‌کرد)، این thread رو
-            // اصلاً نشون نمی‌دیم؛ چون بدون آدرس نه می‌شه مخاطب رو شناخت نه می‌شه وارد چتش شد.
             val address = meta?.address?.takeIf { it.isNotBlank() }
                 ?: draft?.address?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
 
-            if (PrivateStore.isAddressPrivate(context, address)) {
+            if (privateRepository.isAddressPrivate(address)) {
                 return@mapNotNull null
             }
-            // شماره‌ی بلاک‌شده: پیش‌فرض از لیست اصلی مخفیه، مگر اینکه کاربر از تنظیماتِ
-            // بخشِ «بلاک»، «نمایش پیام‌ها و شماره‌های بلاک‌شده توی لیست پیام‌ها» رو فعال
-            // کرده باشه - اون‌وقت این مکالمه هم عادی (کنارِ بقیه) نشون داده میشه.
-            if (!AppSettings.isShowBlockedInMessageListEnabled(context) && BlockStore.isAddressBlocked(context, address)) {
+            if (!AppSettings.isShowBlockedInMessageListEnabled(context) && blockRepository.isAddressBlocked(address)) {
                 return@mapNotNull null
             }
 
             val displayName = ContactsCache.getName(context, address) ?: address
 
-            // پیش‌نویس فقط وقتی روی snippet/isDraft تأثیر می‌ذاره که واقعاً از آخرین پیامِ
-            // واقعیِ این thread جدیدتر باشه - وگرنه (مثلاً یه پیش‌نویسِ قدیمیِ دست‌نخورده که
-            // بعدش یه پیام واقعیِ جدیدتر روی همون thread اومده) باید متن/رنگِ همون پیامِ واقعیِ
-            // جدیدتر نشون داده بشه، نه پیش‌نویسِ کهنه. قبلاً همیشه (فقط بر اساس وجودِ پیش‌نویس،
-            // بدون مقایسه‌ی تاریخ) پیش‌نویس رو نشون می‌داد که همون چیزیه که کاربر بهش می‌گفت
-            // «پیام درفت باید بر اساس تاریخ باشه».
             val draftIsNewer = draft != null && draft.date >= (meta?.date ?: 0L)
 
             Conversation(
@@ -104,14 +87,15 @@ class SmsRepository(private val context: Context) {
                 date = maxOf(meta?.date ?: 0L, draft?.date ?: 0L),
                 unreadCount = meta?.unreadCount ?: 0,
                 isDraft = draftIsNewer,
-                isPinned = PinStore.isPinned(context, threadId)
+                isPinned = pinRepository.isThreadPinned(threadId)
             )
         }
-        // مکالمه‌های پین‌شده همیشه بالای لیست میان (جدیدترین‌پین‌شده اول)، بعدش بقیه‌ی
-        // مکالمه‌ها به ترتیبِ همیشگی (جدیدترین پیام اول).
+        val pinnedAtByThread = conversations.filter { it.isPinned }
+            .associate { it.threadId to pinRepository.getPinnedAt(it.threadId) }
+
         return conversations.sortedWith(
             compareByDescending<Conversation> { it.isPinned }
-                .thenByDescending { if (it.isPinned) PinStore.getPinnedAt(context, it.threadId) else it.date }
+                .thenByDescending { pinnedAtByThread[it.threadId] ?: 0L }
                 .thenByDescending { it.date }
         )
     }
@@ -119,28 +103,14 @@ class SmsRepository(private val context: Context) {
     private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val snippet: String)
     private data class DraftMeta(val address: String, val body: String, val date: Long)
 
-    /**
-     * یه پاس روی کل جدول sms (مرتب‌شده بر اساس DATE نزولی) تا برای هر thread، آخرین آدرس/
-     * تاریخ/متن (اولین ردیفی که برای اون thread می‌بینیم چون نزولیه) و تعداد پیام نخونده رو
-     * بسازیم. پیام‌های توی سطل زباله (TrashStore) کاملاً نادیده گرفته میشن - نه تو محاسبه‌ی
-     * جدیدترین پیام دخیلن، نه تو شمارش نخونده‌ها؛ اگه یه thread فقط پیام سطل‌زباله‌ای داشته
-     * باشه، اصلاً توی نتیجه نمیاد (یعنی از لیست مکالمات ناپدید میشه، درست مثل حذف واقعی).
-     *
-     * پیام‌های نوع DRAFT هم اینجا کاملاً نادیده گرفته میشن - قبلاً نادیده گرفته نمی‌شدن و همین
-     * باعث می‌شد اگه آخرین ردیفِ یه thread پیش‌نویس بود، متنش به‌جای آخرین پیامِ واقعی نشون داده
-     * بشه (و چون ADDRESS پیش‌نویس گاهی خالیه، مکالمه «ناشناس» و باز کردنش کرش می‌کرد). پیش‌نویس‌ها
-     * الان جدا توی getAllDrafts مدیریت میشن.
-     */
-    private fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
+    private suspend fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
-        val trashedIds = TrashStore.getTrashedIds(context)
-        // اگه کاربر «نمایش پیام‌ها/شماره‌های بلاک‌شده توی لیست پیام‌ها» رو فعال کرده باشه،
-        // این پیام‌ها دیگه از اینجا مخفی نمیشن (ست خالی یعنی هیچی فیلتر نشه).
+        val trashedIds = trashRepository.getTrashedIds()
         val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
-        val keywordBlockedIds = if (showBlockedInList) emptySet() else BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
-        val patternBlockedIds = if (showBlockedInList) emptySet() else BlockedPatternMessageStore.getAllBlockedMessageIds(context)
-        val nonContactBlockedIds = if (showBlockedInList) emptySet() else BlockedNonContactMessageStore.getAllBlockedMessageIds(context)
+        val keywordBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getKeywordBlockedMessageIds()
+        val patternBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getPatternBlockedMessageIds()
+        val nonContactBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getNonContactBlockedMessageIds()
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -169,12 +139,11 @@ class SmsRepository(private val context: Context) {
                     if (cursor.getInt(readIdx) == 0) {
                         unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
                     }
-                    // چون نزولیه، اولین باری که یه threadId رو می‌بینیم همون جدیدترین پیام غیر-سطل‌زباله‌ایشه
                     if (!result.containsKey(threadId)) {
                         result[threadId] = ThreadMeta(
                             address = cursor.getStringOrNull(addressIdx) ?: "",
                             date = cursor.getLong(dateIdx),
-                            unreadCount = 0, // بعداً از unreadCounts پر میشه
+                            unreadCount = 0,
                             snippet = cursor.getStringOrNull(bodyIdx) ?: ""
                         )
                     }
@@ -187,10 +156,6 @@ class SmsRepository(private val context: Context) {
         return result.mapValues { (threadId, meta) -> meta.copy(unreadCount = unreadCounts[threadId] ?: 0) }
     }
 
-    /**
-     * پیش‌نویس‌ها (Telephony.Sms.MESSAGE_TYPE_DRAFT) جدا و مستقل از پیام‌های واقعی خونده میشن -
-     * برای هر thread حداکثر یه پیش‌نویس نگه می‌داریم (جدیدترینش، اگه چندتا بود).
-     */
     private fun getAllDrafts(): Map<Long, DraftMeta> {
         val result = mutableMapOf<Long, DraftMeta>()
         try {
@@ -208,8 +173,8 @@ class SmsRepository(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val threadId = cursor.getLong(threadIdIdx)
                     val body = cursor.getStringOrNull(bodyIdx) ?: ""
-                    if (body.isBlank()) continue // پیش‌نویس خالی، چیزی برای نشون‌دادن نیست
-                    if (!result.containsKey(threadId)) { // نزولیه، اولین‌بار = جدیدترین
+                    if (body.isBlank()) continue
+                    if (!result.containsKey(threadId)) {
                         result[threadId] = DraftMeta(
                             address = cursor.getStringOrNull(addressIdx) ?: "",
                             body = body,
@@ -225,7 +190,6 @@ class SmsRepository(private val context: Context) {
         return result
     }
 
-    /** خواندن متن پیش‌نویسِ یک thread مشخص - برای پرکردن خودکار کادر متن وقتی وارد چتش میشیم */
     fun getDraftText(threadId: Long): String {
         if (!requireReadSmsPermission("خواندن پیش‌نویس")) return ""
         try {
@@ -245,12 +209,6 @@ class SmsRepository(private val context: Context) {
         return ""
     }
 
-    /**
-     * ذخیره/آپدیت/حذفِ پیش‌نویسِ یک thread، دقیقاً هماهنگ با رفتار اپ‌های پیامک استاندارد:
-     * - اگه body خالی باشه، هر پیش‌نویس قبلی این thread پاک میشه (چیزی برای نگه‌داشتن نیست).
-     * - اگه body چیزی داشته باشه، اول پیش‌نویس(های) قبلیِ همین thread پاک میشن (تا تکراری نشه)
-     *   بعد یه ردیف DRAFT جدید با متن تازه درج میشه.
-     */
     fun saveDraft(threadId: Long, address: String, body: String) {
         if (!requireDefaultSmsApp("ذخیره‌ی پیش‌نویس")) return
         try {
@@ -275,23 +233,15 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    /**
-     * خواندن همه پیام‌های یک مکالمه (thread) به ترتیب زمانی - پیام‌های توی سطل زباله
-     * فیلتر میشن، همون‌طور که تو getConversations هم فیلتر میشن.
-     */
-    fun getMessagesForThread(threadId: Long): List<SmsMessage> {
+    suspend fun getMessagesForThread(threadId: Long): List<SmsMessage> {
         if (!requireReadSmsPermission("خواندن پیام‌های یک مکالمه")) return emptyList()
         val messages = mutableListOf<SmsMessage>()
-        val trashedIds = TrashStore.getTrashedIds(context)
-        // اگه کاربر «نمایش پیام‌ها/شماره‌های بلاک‌شده توی لیست پیام‌ها» رو فعال کرده باشه،
-        // این پیام‌ها دیگه از اینجا مخفی نمیشن (ست خالی یعنی هیچی فیلتر نشه).
+        val trashedIds = trashRepository.getTrashedIds()
         val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
-        val keywordBlockedIds = if (showBlockedInList) emptySet() else BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
-        val patternBlockedIds = if (showBlockedInList) emptySet() else BlockedPatternMessageStore.getAllBlockedMessageIds(context)
-        val nonContactBlockedIds = if (showBlockedInList) emptySet() else BlockedNonContactMessageStore.getAllBlockedMessageIds(context)
+        val keywordBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getKeywordBlockedMessageIds()
+        val patternBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getPatternBlockedMessageIds()
+        val nonContactBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getNonContactBlockedMessageIds()
         val uri = Telephony.Sms.CONTENT_URI
-        // پیش‌نویس رو از لیست پیام‌های واقعی مکالمه کنار می‌ذاریم - پیش‌نویس حباب چت نیست،
-        // فقط توی کادر متنِ پایین صفحه (از طریق getDraftText) برمی‌گرده
         val selection = "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} != ?"
         val selectionArgs = arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
 
@@ -316,14 +266,8 @@ class SmsRepository(private val context: Context) {
         return messages
     }
 
-    /**
-     * همه‌ی پیام‌های همه‌ی شماره‌های بلاک‌شده رو با هم برمی‌گردونه (جدیدترین بالا)، مستقیم
-     * بر اساس آدرس (نه threadId) - چون اگه یه thread خالی بشه (همه‌ی پیام‌هاش حذف/سطل‌زباله
-     * بشن)، اندروید ممکنه اون threadId رو دیگه نگه نداره یا برای پیام بعدی یه threadId
-     * جدید بسازه؛ ولی آدرس همیشه همون آدرسه.
-     */
-    fun getMessagesForBlockedThreads(): List<BlockedMessageEntry> {
-        val blockedNumbers = BlockStore.getAllBlockedNumbers(context)
+    suspend fun getMessagesForBlockedThreads(): List<BlockedMessageEntry> {
+        val blockedNumbers = blockRepository.getAllBlockedNumbersOnce()
         val phoneBlockedEntries = if (blockedNumbers.isEmpty()) {
             emptyList()
         } else {
@@ -334,10 +278,7 @@ class SmsRepository(private val context: Context) {
                 }
         }
 
-        // پیام‌هایی که فقط به‌خاطر کلمه‌ی کلیدی بلاک شدن (شماره‌شون بلاک نیست) - جدا از بالا،
-        // چون بر اساس id خودِ پیام مشخص میشن نه آدرس. اگه شماره‌شون هم بلاک بوده باشه، اینجا
-        // دوباره اضافه نمی‌شن (تا توی لیست تکراری نشن) - همون ردیف بالا با منبع «شماره» کافیه.
-        val keywordBlockedIds = BlockedKeywordMessageStore.getAllBlockedMessageIds(context)
+        val keywordBlockedIds = blockRepository.getKeywordBlockedMessageIds()
         val keywordBlockedEntries = if (keywordBlockedIds.isEmpty()) {
             emptyList()
         } else {
@@ -345,14 +286,12 @@ class SmsRepository(private val context: Context) {
                 .filter { message -> blockedNumbers.none { it.address == message.address } }
                 .map { message ->
                     val name = ContactsCache.getName(context, message.address) ?: message.address
-                    val keyword = BlockedKeywordMessageStore.getMatchedKeyword(context, message.id)
+                    val keyword = blockRepository.getMatchedKeyword(message.id)
                     BlockedMessageEntry(message, name, BlockSource.KEYWORD, keyword)
                 }
         }
 
-        // پیام‌هایی که فقط به‌خاطر یه الگوی بلاکِ شماره (شروع/پایانِ شماره) بلاک شدن - همون
-        // منطق بالا برای کلمه‌ی کلیدی، ولی روی BlockedPatternMessageStore.
-        val patternBlockedIds = BlockedPatternMessageStore.getAllBlockedMessageIds(context)
+        val patternBlockedIds = blockRepository.getPatternBlockedMessageIds()
         val patternBlockedEntries = if (patternBlockedIds.isEmpty()) {
             emptyList()
         } else {
@@ -360,7 +299,7 @@ class SmsRepository(private val context: Context) {
                 .filter { message -> blockedNumbers.none { it.address == message.address } }
                 .map { message ->
                     val name = ContactsCache.getName(context, message.address) ?: message.address
-                    val matched = BlockedPatternMessageStore.getMatchedPattern(context, message.id)
+                    val matched = blockRepository.getMatchedPattern(message.id)
                     BlockedMessageEntry(
                         message, name, BlockSource.PATTERN,
                         matchedPatternType = matched?.type,
@@ -369,9 +308,7 @@ class SmsRepository(private val context: Context) {
                 }
         }
 
-        // پیام‌هایی که فقط به‌خاطر «خارج از مخاطبین بودنِ شماره» بلاک شدن - همون منطق بالا،
-        // ولی روی BlockedNonContactMessageStore.
-        val nonContactBlockedIds = BlockedNonContactMessageStore.getAllBlockedMessageIds(context)
+        val nonContactBlockedIds = blockRepository.getNonContactBlockedMessageIds()
         val nonContactBlockedEntries = if (nonContactBlockedIds.isEmpty()) {
             emptyList()
         } else {
@@ -386,11 +323,10 @@ class SmsRepository(private val context: Context) {
         return (phoneBlockedEntries + keywordBlockedEntries + patternBlockedEntries + nonContactBlockedEntries).sortedByDescending { it.message.date }
     }
 
-    /** خوندن مستقیم پیام‌ها بر اساس یه لیست id مشخص - هم‌خانواده‌ی الگوی getTrashedMessages */
-    private fun getMessagesByIds(ids: Set<Long>): List<SmsMessage> {
+    private suspend fun getMessagesByIds(ids: Set<Long>): List<SmsMessage> {
         if (!requireReadSmsPermission("خواندن پیامک‌های بلاک‌شده بر اساس کلمه")) return emptyList()
         if (ids.isEmpty()) return emptyList()
-        val trashedIds = TrashStore.getTrashedIds(context)
+        val trashedIds = trashRepository.getTrashedIds()
         val placeholders = ids.joinToString(",") { "?" }
         val selection = "${Telephony.Sms._ID} IN ($placeholders)"
         val selectionArgs = ids.map { it.toString() }.toTypedArray()
@@ -413,12 +349,8 @@ class SmsRepository(private val context: Context) {
         return messages
     }
 
-    /**
-     * همه‌ی پیام‌های همه‌ی شماره‌های خصوصی‌شده رو با هم برمی‌گردونه (جدیدترین بالا)، مستقیم
-     * بر اساس آدرس - برای صفحه‌ی «پیامک‌های خصوصی» (پشتِ رمز ۴ رقمی).
-     */
-    fun getMessagesForPrivateThreads(): List<PrivateMessageEntry> {
-        val privateNumbers = PrivateStore.getAllPrivateNumbers(context)
+    suspend fun getMessagesForPrivateThreads(): List<PrivateMessageEntry> {
+        val privateNumbers = privateRepository.getAllPrivateNumbersOnce()
         if (privateNumbers.isEmpty()) return emptyList()
         return getMessagesByAddresses(privateNumbers.map { it.address })
             .map { message ->
@@ -427,11 +359,10 @@ class SmsRepository(private val context: Context) {
             }
     }
 
-    /** خوندن مستقیم پیام‌ها بر اساس لیست آدرس (نه threadId) - سطل‌زباله همچنان فیلتر میشه */
-    private fun getMessagesByAddresses(addresses: List<String>): List<SmsMessage> {
+    private suspend fun getMessagesByAddresses(addresses: List<String>): List<SmsMessage> {
         if (!requireReadSmsPermission("خواندن پیامک‌های بلاک/خصوصی‌شده")) return emptyList()
         if (addresses.isEmpty()) return emptyList()
-        val trashedIds = TrashStore.getTrashedIds(context)
+        val trashedIds = trashRepository.getTrashedIds()
         val messages = mutableListOf<SmsMessage>()
         val selection = addresses.joinToString(" OR ") { "${Telephony.Sms.ADDRESS} = ?" }
         val selectionArgs = addresses.toTypedArray()
@@ -453,19 +384,6 @@ class SmsRepository(private val context: Context) {
         return messages
     }
 
-    /**
-     * ارسال پیامک - پیامک‌های بلند رو خودکار تقسیم می‌کنه
-     * subscriptionId: برای گوشی‌های دو سیم‌کارت، مشخص می‌کنه از کدوم سیم ارسال بشه (null = پیش‌فرض سیستم)
-     *
-     * برای نمایش «تیک دلیوری» زیر پیام ارسالی، اول ردیف رو با STATUS_PENDING توی
-     * sent box ذخیره می‌کنیم تا messageId رو داشته باشیم، بعد با همون id یه sentIntent
-     * (برای فهمیدن اینکه خودِ ارسال موفق بوده یا نه - مثلاً آنتن نبودن/رادیو خاموش) و یه
-     * deliveryIntent (برای فهمیدن اینکه گیرنده تحویل گرفته یا نه) به SmsStatusReceiver می‌سازیم.
-     *
-     * نکته: برای پیامک چندپارتی، فقط به آخرین پارت PendingIntent می‌دیم (بقیه null)،
-     * وگرنه به‌ازای هر پارت یه گزارش جدا می‌رسید و هم وضعیت چندبار آپدیت می‌شد هم
-     * نوتیف «تحویل داده شد» چندبار نشون داده می‌شد.
-     */
     fun sendSms(address: String, body: String, subscriptionId: Int? = null) {
         if (!requireDefaultSmsApp("ارسال پیامک")) return
 
@@ -477,8 +395,6 @@ class SmsRepository(private val context: Context) {
         }
         val parts = smsManager.divideMessage(body)
 
-        // ذخیره توی sent box (اپ پیش‌فرض پیامک خودش مسئول این کاره - سیستم دیگه این کار رو خودکار انجام نمیده)
-        // قبل از ارسال، تا id رو داشته باشیم
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address)
@@ -488,8 +404,6 @@ class SmsRepository(private val context: Context) {
             put(Telephony.Sms.READ, 1)
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
             put(Telephony.Sms.STATUS, Telephony.Sms.STATUS_PENDING)
-            // ذخیره‌ی سیمِ استفاده‌شده روی خودِ ردیف - برای این‌که «ارسال دوباره»ی یه پیامِ
-            // ناموفق بتونه دقیقاً از همون سیم دوباره امتحان کنه، نه سیمِ پیش‌فرضِ سیستم
             if (subscriptionId != null && subscriptionId != -1) {
                 put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
             }
@@ -524,7 +438,6 @@ class SmsRepository(private val context: Context) {
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            // فقط آخرین پارت PendingIntent می‌گیره، بقیه null
             sentIntents = ArrayList<PendingIntent?>(parts.size).apply {
                 repeat(parts.size - 1) { add(null) }
                 add(sentPending)
@@ -538,12 +451,7 @@ class SmsRepository(private val context: Context) {
         smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, deliveryIntents)
     }
 
-    /**
-     * وقتی گزارش دلیوری از SmsStatusReceiver می‌رسه، وضعیت همون ردیف رو آپدیت می‌کنیم
-     * تا توی UI تیک دلیوری نشون داده بشه. زمان دقیق تحویل جدا توی DeliveryStore ذخیره میشه
-     * چون Sms provider ستونی برای اون نداره.
-     */
-    fun updateDeliveryStatus(messageId: Long, delivered: Boolean, deliveredAtMillis: Long) {
+    suspend fun updateDeliveryStatus(messageId: Long, delivered: Boolean, deliveredAtMillis: Long) {
         if (!requireDefaultSmsApp("آپدیت وضعیت دلیوری")) return
         val values = ContentValues().apply {
             put(Telephony.Sms.STATUS, if (delivered) Telephony.Sms.STATUS_COMPLETE else Telephony.Sms.STATUS_FAILED)
@@ -558,13 +466,10 @@ class SmsRepository(private val context: Context) {
             return
         }
         if (delivered) {
-            DeliveryStore.setDeliveredAt(context, messageId, deliveredAtMillis)
+            deliveryRepository.setDeliveredAt(messageId, deliveredAtMillis)
         }
     }
 
-    /**
-     * حذف کل مکالمه (اگه لازم بشه - فعلاً جایی صداش نمی‌زنیم چون خیلی مخرب بود برای اکشن نوتیف)
-     */
     fun deleteThread(threadId: Long) {
         if (!requireDefaultSmsApp("حذف مکالمه")) return
         try {
@@ -578,30 +483,22 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    /**
-     * حذف دسته‌جمعی چند مکالمه با هم - برای حالت «انتخاب چندتایی» توی صفحه‌ی اصلی لیست پیام‌ها.
-     *
-     * دقیقاً همون قانونِ حذف تکی (deleteMessage) رو برای تک‌تکِ پیام‌های هر مکالمه‌ی انتخاب‌شده
-     * رعایت می‌کنه: پیام‌های فیوریت‌شده قفلن و دست‌نخورده می‌مونن (شمارش میشن تا بعداً به کاربر
-     * اطلاع داده بشه)، و بسته به تنظیم «سطل زباله»، بقیه‌ی پیام‌ها یا مخفی/قابل‌بازیابی میشن یا
-     * فیزیکی حذف. اگه یه مکالمه فقط پیام فیوریت داشته باشه، عملاً هیچی ازش حذف نمیشه و توی
-     * لیست باقی می‌مونه - دقیقاً همون رفتار محافظتی‌ای که برای حذف تکی هم داریم.
-     */
-    fun deleteThreads(threadIds: Set<Long>): BulkDeleteResult {
+    suspend fun deleteThreads(threadIds: Set<Long>): BulkDeleteResult {
         if (!requireDefaultSmsApp("حذف دسته‌جمعی مکالمه‌ها")) {
             return BulkDeleteResult(movedToTrash = false, blockedFavoriteCount = 0)
         }
         val trashEnabled = AppSettings.isTrashEnabled(context)
         var blockedCount = 0
+        val favoriteRepository = AppContainer.favoriteRepository(context)
         threadIds.forEach { threadId ->
-            PinStore.unpin(context, threadId)
+            pinRepository.unpinThread(threadId)
             getMessageIdsForThread(threadId).forEach { messageId ->
-                if (FavoriteStore.isFavorite(context, messageId)) {
+                if (favoriteRepository.isFavorite(messageId)) {
                     blockedCount++
                     return@forEach
                 }
                 if (trashEnabled) {
-                    TrashStore.moveToTrash(context, messageId)
+                    trashRepository.moveToTrash(messageId)
                 } else {
                     try {
                         context.contentResolver.delete(
@@ -609,7 +506,7 @@ class SmsRepository(private val context: Context) {
                             null,
                             null
                         )
-                        DeliveryStore.clear(context, messageId)
+                        deliveryRepository.clear(messageId)
                     } catch (e: SecurityException) {
                         Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی مکالمه‌ها", e)
                     }
@@ -635,24 +532,20 @@ class SmsRepository(private val context: Context) {
         return ids
     }
 
-    /**
-     * حذف دسته‌جمعی چند پیامِ تکی از داخل یه مکالمه (برای حالت «انتخاب چندتایی» داخل چت،
-     * برخلاف deleteThreads که کل مکالمه رو حذف می‌کنه). همون قانون‌های deleteMessage
-     * (قفل فیوریت + احترام به تنظیم سطل زباله) برای تک‌تک پیام‌ها رعایت میشه.
-     */
-    fun deleteMessages(messageIds: Set<Long>): BulkDeleteResult {
+    suspend fun deleteMessages(messageIds: Set<Long>): BulkDeleteResult {
         if (!requireDefaultSmsApp("حذف دسته‌جمعی پیام‌ها")) {
             return BulkDeleteResult(movedToTrash = false, blockedFavoriteCount = 0)
         }
         val trashEnabled = AppSettings.isTrashEnabled(context)
         var blockedCount = 0
+        val favoriteRepository = AppContainer.favoriteRepository(context)
         messageIds.forEach { messageId ->
-            if (FavoriteStore.isFavorite(context, messageId)) {
+            if (favoriteRepository.isFavorite(messageId)) {
                 blockedCount++
                 return@forEach
             }
             if (trashEnabled) {
-                TrashStore.moveToTrash(context, messageId)
+                trashRepository.moveToTrash(messageId)
             } else {
                 try {
                     context.contentResolver.delete(
@@ -660,11 +553,9 @@ class SmsRepository(private val context: Context) {
                         null,
                         null
                     )
-                    DeliveryStore.clear(context, messageId)
-                    BlockedKeywordMessageStore.clear(context, messageId)
-                    BlockedPatternMessageStore.clear(context, messageId)
-                    BlockedNonContactMessageStore.clear(context, messageId)
-                    PinnedMessageStore.clear(context, messageId)
+                    deliveryRepository.clear(messageId)
+                    blockRepository.clearMessageBlockMetadata(messageId)
+                    pinRepository.clearPinnedMessage(messageId)
                 } catch (e: SecurityException) {
                     Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی پیام‌ها", e)
                 }
@@ -673,26 +564,14 @@ class SmsRepository(private val context: Context) {
         return BulkDeleteResult(movedToTrash = trashEnabled, blockedFavoriteCount = blockedCount)
     }
 
-    /**
-     * حذف فقط یک پیام مشخص (برای اکشن «حذف» روی نوتیفیکیشن و منوی داخل مکالمه)
-     *
-     * اگه پیام فیوریت‌شده باشه، اصلاً حذف نمیشه (نقش قفل/لاک - طبق درخواست کاربر) و
-     * false برگردونده میشه؛ برای برداشتن این قفل، اول باید از صفحه‌ی «علاقه‌مندی‌ها»
-     * از فیوریت خارج بشه.
-     *
-     * اگه تیک «سطل زباله» توی تنظیمات فعال باشه، به‌جای حذف فیزیکی، پیام فقط با
-     * TrashStore.moveToTrash مخفی میشه (خودِ ردیف دست‌نخورده می‌مونه) تا از صفحه‌ی
-     * «سطل زباله» قابل ری‌استور باشه. اگه غیرفعال باشه، رفتار قبلی (حذف واقعی) ادامه داره.
-     *
-     * @return true اگه حذف/انتقال به سطل زباله انجام شد، false اگه به‌خاطر قفل‌بودن (فیوریت) رد شد
-     */
-    fun deleteMessage(messageId: Long): Boolean {
+    suspend fun deleteMessage(messageId: Long): Boolean {
         if (!requireDefaultSmsApp("حذف پیام")) return false
-        if (FavoriteStore.isFavorite(context, messageId)) {
+        val favoriteRepository = AppContainer.favoriteRepository(context)
+        if (favoriteRepository.isFavorite(messageId)) {
             return false
         }
         if (AppSettings.isTrashEnabled(context)) {
-            TrashStore.moveToTrash(context, messageId)
+            trashRepository.moveToTrash(messageId)
             return true
         }
         try {
@@ -705,18 +584,13 @@ class SmsRepository(private val context: Context) {
             Log.w("SmsRepository", "SecurityException موقع حذف پیام", e)
             return false
         }
-        DeliveryStore.clear(context, messageId)
+        deliveryRepository.clear(messageId)
         return true
     }
 
-    /**
-     * خواندن همه‌ی پیام‌های توی سطل زباله، به‌همراه نام/شماره‌ی طرف مکالمه، مرتب‌شده
-     * از جدیدترین‌حذف‌شده به قدیمی‌ترین. چون خودِ ردیف‌ها هنوز واقعاً توی Sms provider
-     * هستن (TrashStore فقط مخفی‌شون می‌کنه)، مستقیم با _ID IN (...) می‌خونیمشون.
-     */
-    fun getTrashedMessages(): List<TrashedMessage> {
+    suspend fun getTrashedMessages(): List<TrashedMessage> {
         if (!requireReadSmsPermission("خواندن سطل زباله")) return emptyList()
-        val trashedIds = TrashStore.getTrashedIds(context)
+        val trashedIds = trashRepository.getTrashedIds()
         if (trashedIds.isEmpty()) return emptyList()
 
         val placeholders = trashedIds.joinToString(",") { "?" }
@@ -731,7 +605,7 @@ class SmsRepository(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val message = cursorToMessage(cursor)
                     val displayName = ContactsCache.getName(context, message.address) ?: message.address
-                    result.add(TrashedMessage(message, displayName, TrashStore.getTrashedAt(context, message.id)))
+                    result.add(TrashedMessage(message, displayName, trashRepository.getTrashedAt(message.id)))
                 }
             }
         } catch (e: SecurityException) {
@@ -741,13 +615,11 @@ class SmsRepository(private val context: Context) {
         return result.sortedByDescending { it.trashedAt }
     }
 
-    /** بازگردوندن یه پیام از سطل زباله - چون ردیف اصلی همیشه واقعی بوده، فقط از ایندکس مخفی‌سازی درش میاریم */
-    fun restoreFromTrash(messageId: Long) {
-        TrashStore.restore(context, messageId)
+    suspend fun restoreFromTrash(messageId: Long) {
+        trashRepository.restore(messageId)
     }
 
-    /** حذف همیشگی از داخل خودِ صفحه‌ی سطل زباله - این دیگه واقعاً فیزیکیه و برگشت نداره */
-    fun permanentlyDelete(messageId: Long): Boolean {
+    suspend fun permanentlyDelete(messageId: Long): Boolean {
         if (!requireDefaultSmsApp("حذف همیشگی از سطل زباله")) return false
         try {
             context.contentResolver.delete(
@@ -759,21 +631,13 @@ class SmsRepository(private val context: Context) {
             Log.w("SmsRepository", "SecurityException موقع حذف همیشگی از سطل زباله", e)
             return false
         }
-        DeliveryStore.clear(context, messageId)
-        BlockedKeywordMessageStore.clear(context, messageId)
-        BlockedPatternMessageStore.clear(context, messageId)
-        BlockedNonContactMessageStore.clear(context, messageId)
-        PinnedMessageStore.clear(context, messageId)
-        TrashStore.restore(context, messageId) // دیگه ردیفی نیست، ایندکس سطل زباله رو هم پاک کن
+        deliveryRepository.clear(messageId)
+        blockRepository.clearMessageBlockMetadata(messageId)
+        pinRepository.clearPinnedMessage(messageId)
+        trashRepository.restore(messageId)
         return true
     }
 
-    /**
-     * پیدا کردن thread موجود برای یه شماره، یا ساختن یه thread جدید اگه وجود نداشته باشه
-     * (لازم برای شروع مکالمه‌ی جدید از صفحه "پیام جدید")
-     */
-    /** try/catch به‌جای پیش‌چک، چون این تابع از جریان «پیام جدید» صدا زده میشه و بهتره
-     *  به‌جای خالی برگردوندن، صفر برگردونه (thread نامعتبر) اگه مجوزی نبود */
     fun getOrCreateThreadId(address: String): Long {
         return try {
             Telephony.Threads.getOrCreateThreadId(context, setOf(address))
@@ -799,7 +663,8 @@ class SmsRepository(private val context: Context) {
         return true
     }
 
-    private fun cursorToMessage(cursor: Cursor): SmsMessage {
+    /** suspend چون deliveryRepository.getDeliveredAt روی Room ئه - همه‌ی صداکننده‌هاش خودشون suspend هستن */
+    private suspend fun cursorToMessage(cursor: Cursor): SmsMessage {
         fun col(name: String) = cursor.getColumnIndex(name)
         val type = cursor.getInt(col(Telephony.Sms.TYPE))
         val dateSentIdx = col(Telephony.Sms.DATE_SENT)
@@ -821,7 +686,7 @@ class SmsRepository(private val context: Context) {
                     type == Telephony.Sms.MESSAGE_TYPE_QUEUED,
             isRead = cursor.getInt(col(Telephony.Sms.READ)) == 1,
             status = status,
-            deliveredAt = if (status == Telephony.Sms.STATUS_COMPLETE) DeliveryStore.getDeliveredAt(context, id) else 0L,
+            deliveredAt = if (status == Telephony.Sms.STATUS_COMPLETE) deliveryRepository.getDeliveredAt(id) else 0L,
             subscriptionId = if (subIdIdx >= 0) cursor.getInt(subIdIdx) else -1
         )
     }

@@ -10,14 +10,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.data.AlarmScheduler
+import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.BlockKeyword
-import com.petro.smsapp.data.BlockKeywordStore
 import com.petro.smsapp.data.BlockPattern
-import com.petro.smsapp.data.BlockPatternStore
 import com.petro.smsapp.data.BlockPatternType
-import com.petro.smsapp.data.BlockStore
-import com.petro.smsapp.data.BlockedKeywordMessageStore
 import com.petro.smsapp.data.BlockedMessageEntry
 import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.data.ContactInfo
@@ -25,34 +22,60 @@ import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.FavoriteMessage
-import com.petro.smsapp.data.FavoriteStore
 import com.petro.smsapp.data.PrivateMessageEntry
 import com.petro.smsapp.data.PrivateNumber
-import com.petro.smsapp.data.PrivateStore
-import com.petro.smsapp.data.PinStore
-import com.petro.smsapp.data.PinnedMessageStore
+import com.petro.smsapp.data.PrivatePinDataStore
 import com.petro.smsapp.data.ScheduledMessage
-import com.petro.smsapp.data.ScheduledMessageStore
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.data.SmsRepository
 import com.petro.smsapp.data.TrashedMessage
+import com.petro.smsapp.data.repository.BlockRepository
+import com.petro.smsapp.data.repository.PinRepository
+import com.petro.smsapp.data.repository.PrivateRepository
+import com.petro.smsapp.data.repository.FavoriteRepository
+import com.petro.smsapp.data.repository.ScheduledMessageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * فعلاً یک ViewModel یکپارچه (طبق تصمیم پروژه: تقسیمش رو می‌ذاریم برای بعد از پایدار
+ * شدنِ مهاجرت). تنها چیزی که عوض شده لایه‌ی ذخیره‌سازیه: هر جا قبلاً یه *Store
+ * (SharedPreferences) صدا زده می‌شد، الان یه Repository (روی Room) صدا زده میشه.
+ *
+ * لیست‌هایی که کاملاً روی Room هستن و به Telephony provider وابسته نیستن (favorites,
+ * blockedNumbers, blockKeywords, blockPatterns, privateNumbers, trash, pinnedMessageIds,
+ * pinned thread ids) الان واقعاً reactive ان: با stateIn مستقیم از Flow دیتابیس ساخته
+ * شدن، نیازی به صدا زدن دستیِ loadX() ندارن (خودشون با هر insert/delete آپدیت میشن).
+ * توابع loadX قبلی‌شون برای سازگاری با کدهای صداکننده (MainActivity) به‌صورت no-op
+ * نگه داشته شدن.
+ *
+ * لیست‌هایی که ترکیبیِ Telephony + Room هستن (conversations, messages, blockedMessages,
+ * privateMessages) هم‌چنان با همون الگوی قبلیِ trigger-based (ContentObserver +
+ * DataChangeSignal) کار می‌کنن، فقط داخلشون دیگه از Room می‌خونن.
+ */
 class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SmsRepository(application)
     private val contactsRepository = ContactsRepository(application)
     private val simRepository = SimRepository(application)
+
+    private val favoriteRepository: FavoriteRepository = AppContainer.favoriteRepository(application)
+    private val blockRepository: BlockRepository = AppContainer.blockRepository(application)
+    private val privateRepository: PrivateRepository = AppContainer.privateRepository(application)
+    private val pinRepository: PinRepository = AppContainer.pinRepository(application)
+    private val scheduledMessageRepository: ScheduledMessageRepository = AppContainer.scheduledMessageRepository(application)
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
@@ -60,11 +83,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _messages = MutableStateFlow<List<SmsMessage>>(emptyList())
     val messages: StateFlow<List<SmsMessage>> = _messages.asStateFlow()
 
-    // پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظارِ همین مکالمه - برای نمایش حباب مجازی «ارسال در ساعت X»
     private val _scheduledMessages = MutableStateFlow<List<ScheduledMessage>>(emptyList())
     val scheduledMessages: StateFlow<List<ScheduledMessage>> = _scheduledMessages.asStateFlow()
 
-    // متن پیش‌نویسِ thread فعلاً بازشده - برای پرکردن خودکار کادر متن موقع ورود به چت
     private val _draftText = MutableStateFlow("")
     val draftText: StateFlow<String> = _draftText.asStateFlow()
 
@@ -74,83 +95,59 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _sims = MutableStateFlow<List<SimInfo>>(emptyList())
     val sims: StateFlow<List<SimInfo>> = _sims.asStateFlow()
 
-    // مخاطبی که کاربر از اپ مخاطبین سیستم (نه لیست داخلی) انتخاب کرده
     private val _pickedContact = MutableStateFlow<ContactInfo?>(null)
     val pickedContact: StateFlow<ContactInfo?> = _pickedContact.asStateFlow()
 
-    // اطلاعات مکالمه‌ای که بعد از "پیام جدید" ساخته/پیدا شده، تا Navigation بتونه با اطلاعات کامل بره صفحه چت
     private val _newConversationTarget = MutableStateFlow<NewConversationTarget?>(null)
     val newConversationTarget: StateFlow<NewConversationTarget?> = _newConversationTarget.asStateFlow()
 
-    // متن پیامی که کاربر برای باز کردن توی صفحه‌ی «نوت پیام» انتخاب کرده (دابل‌کلیک یا از منو)
     private val _noteText = MutableStateFlow<String?>(null)
     val noteText: StateFlow<String?> = _noteText.asStateFlow()
 
-    // لیست کامل پیام‌های فیوریت‌شده - برای صفحه‌ی «علاقه‌مندی‌ها»
-    private val _favorites = MutableStateFlow<List<FavoriteMessage>>(emptyList())
-    val favorites: StateFlow<List<FavoriteMessage>> = _favorites.asStateFlow()
+    // ---- لیست‌های کاملاً Room-based - reactive، بدون نیاز به load دستی ----
 
-    // فقط id پیام‌های فیوریت‌شده - برای اینکه توی صفحه‌ی چت سریع بشه چک کرد پیامی فیوریته یا نه
-    private val _favoriteIds = MutableStateFlow<Set<Long>>(emptySet())
-    val favoriteIds: StateFlow<Set<Long>> = _favoriteIds.asStateFlow()
+    val favorites: StateFlow<List<FavoriteMessage>> =
+        favoriteRepository.observeFavorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // فقط id پیام‌های پین‌شده‌ی داخل چت - برای اینکه توی منوی کلیک پیام سریع بشه چک کرد پینه یا نه
-    private val _pinnedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
-    val pinnedMessageIds: StateFlow<Set<Long>> = _pinnedMessageIds.asStateFlow()
+    val favoriteIds: StateFlow<Set<Long>> =
+        favoriteRepository.observeFavoriteIds().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
-    // لیست پیام‌های توی سطل زباله - برای صفحه‌ی «سطل زباله»
+    val pinnedMessageIds: StateFlow<Set<Long>> =
+        pinRepository.observePinnedMessageIds().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val blockedNumbers: StateFlow<List<BlockedNumber>> =
+        blockRepository.observeBlockedNumbers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val blockKeywords: StateFlow<List<BlockKeyword>> =
+        blockRepository.observeKeywords().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val blockPatterns: StateFlow<List<BlockPattern>> =
+        blockRepository.observePatterns().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val privateNumbers: StateFlow<List<PrivateNumber>> =
+        privateRepository.observePrivateNumbers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ---- لیست‌های ترکیبیِ Telephony + Room - هم‌چنان trigger-based ----
+
     private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
     val trash: StateFlow<List<TrashedMessage>> = _trash.asStateFlow()
 
-    // لیست شماره‌های بلاک‌شده - برای صفحه‌ی «شماره‌های بلاک‌شده»
-    private val _blockedNumbers = MutableStateFlow<List<BlockedNumber>>(emptyList())
-    val blockedNumbers: StateFlow<List<BlockedNumber>> = _blockedNumbers.asStateFlow()
-
-    // همه‌ی پیام‌های thread های بلاک‌شده با هم - برای صفحه‌ی «پیامک‌های بلاک‌شده»
     private val _blockedMessages = MutableStateFlow<List<BlockedMessageEntry>>(emptyList())
     val blockedMessages: StateFlow<List<BlockedMessageEntry>> = _blockedMessages.asStateFlow()
 
-    // لیست کلمات کلیدی بلاک - برای صفحه‌ی «کلمات کلیدی بلاک» و بج شمارنده
-    private val _blockKeywords = MutableStateFlow<List<BlockKeyword>>(emptyList())
-    val blockKeywords: StateFlow<List<BlockKeyword>> = _blockKeywords.asStateFlow()
-
-    private val _blockPatterns = MutableStateFlow<List<BlockPattern>>(emptyList())
-    val blockPatterns: StateFlow<List<BlockPattern>> = _blockPatterns.asStateFlow()
-
-    // لیست شماره‌های خصوصی - برای صفحه‌ی «شماره‌های خصوصی»
-    private val _privateNumbers = MutableStateFlow<List<PrivateNumber>>(emptyList())
-    val privateNumbers: StateFlow<List<PrivateNumber>> = _privateNumbers.asStateFlow()
-
-    // همه‌ی پیام‌های thread های خصوصی با هم - برای صفحه‌ی «پیامک‌های خصوصی»
     private val _privateMessages = MutableStateFlow<List<PrivateMessageEntry>>(emptyList())
     val privateMessages: StateFlow<List<PrivateMessageEntry>> = _privateMessages.asStateFlow()
 
-    // آیا کاربر همین الان (توی همین session) رمز بخش خصوصی رو درست وارد کرده - با خروج
-    // کامل از بخش خصوصی (دکمه‌ی برگشتِ خودِ هاب) دوباره false میشه، پس دفعه‌ی بعد رمز می‌خواد
     private val _privateUnlocked = MutableStateFlow(false)
     val privateUnlocked: StateFlow<Boolean> = _privateUnlocked.asStateFlow()
 
-    // پیام یک‌بارمصرف برای اطلاع‌رسانی به کاربر (مثلاً «این پیام قفله و قابل حذف نیست»)
     private val _operationMessage = MutableStateFlow<String?>(null)
     val operationMessage: StateFlow<String?> = _operationMessage.asStateFlow()
 
-    // threadId مکالمه‌ای که الان روی صفحه چت بازه، تا وقتی پیامک جدید میاد بدونیم کدوم thread رو دوباره لود کنیم
     private var openThreadId: Long? = null
 
     private var observerDebounceJob: Job? = null
 
-    /**
-     * وقتی پیامکی وارد یا ارسال میشه (چه از این اپ، چه از بیرون)، سیستم به این آبزرور خبر میده
-     * و بدون نیاز به بستن/بازکردن اپ، لیست مکالمات و مکالمه‌ی بازشده به‌روز میشن.
-     *
-     * یه نکته‌ی مهم: تغییرات content provider فقط «پیام جدید» نیستن؛ ارسال، دلیوری،
-     * خوانده‌شدن، حذف و تغییر STATUS هم همین observer رو صدا می‌زنن. برای یه اتفاق منطقی
-     * واحد (مثلاً ارسال یه پیام که چند میلی‌ثانیه بعد وضعیتش به COMPLETE آپدیت میشه) ممکنه
-     * onChange چندبار پشت‌سرهم صدا زده بشه. به‌جای اینکه هر بار جدا loadConversations کامل
-     * رو صدا بزنیم (که برای هر پیامک/دلیوری یه Query سنگین به کل جدول sms میزنه)، چند
-     * میلی‌ثانیه صبر می‌کنیم و اگه توی این فاصله دوباره onChange اومد، تایمر رو ریست می‌کنیم -
-     * یعنی فقط وقتی تغییرات «آروم» گرفتن، یه بار لود انجام میشه.
-     */
     private val smsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
             observerDebounceJob?.cancel()
@@ -165,19 +162,17 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     init {
         application.contentResolver.registerContentObserver(
             Telephony.Sms.CONTENT_URI,
-            true, // notifyForDescendants: تغییرات inbox/sent/... که زیرشاخه‌ی content://sms هستن رو هم پوشش میده
+            true,
             smsObserver
         )
 
-        // تغییراتی که از بیرون ViewModel میان (مثل بلاک‌کردن از روی دکمه‌ی خودِ نوتیف) فقط
-        // SharedPreferences رو عوض می‌کنن، نه SMS Provider - پس smsObserver بالا خبردار نمیشه.
-        // این signal همون نقش رو براشون بازی می‌کنه.
+        // بخشِ بزرگی از این سیگنال الان دیگه لازم نیست (چون favorites/blockedNumbers/...
+        // خودشون از Room مستقیم reactive شدن)؛ فقط برای بخش‌های ترکیبیِ Telephony+Room
+        // (conversations, blockedMessages, privateMessages) نگه داشته شده.
         viewModelScope.launch {
             DataChangeSignal.tick.drop(1).collect {
                 loadConversations()
-                loadBlockedNumbers()
                 loadBlockedMessages()
-                loadPrivateNumbers()
                 loadPrivateMessages()
             }
         }
@@ -200,17 +195,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         ActiveThreadTracker.activeThreadId = threadId
         loadScheduledMessages(threadId)
         viewModelScope.launch {
-            // اول پیام‌ها لود و روی صفحه نمایش داده میشن، بعد خوانده‌شده علامت می‌خورن.
-            // اگه برعکس بود (که قبلاً بود) و لود با خطا مواجه می‌شد، پیامی که کاربر
-            // واقعاً ندیده بود به‌اشتباه خوانده‌شده ثبت می‌شد.
             val result = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
             _messages.value = result
             _draftText.value = withContext(Dispatchers.IO) { repository.getDraftText(threadId) }
 
             val marked = withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
             if (!marked) {
-                // اگه اپ الان پیش‌فرض پیامک نباشه، markThreadAsRead سایلنت رد میشه و بج خوانده‌نشده
-                // هیچ‌وقت پاک نمیشه؛ این پیام دقیقاً همین حالت رو به کاربر نشون میده
                 _operationMessage.value = "اپ الان پیش‌فرض پیامک نیست، برای همین علامت «خوانده‌شده» ثبت نشد."
             } else {
                 loadConversations()
@@ -218,41 +208,27 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * فقط خوندن پیام‌ها بدون markAsRead - این تابع رو observer صدا می‌زنه.
-     * مهم: markThreadAsRead خودش یه update روی content provider هست که دوباره onChange رو صدا می‌زنه؛
-     * اگه از loadThread استفاده می‌کردیم اینجا، یه حلقه‌ی بی‌نهایت درست می‌شد.
-     */
     private fun refreshMessages(threadId: Long) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
             _messages.value = result
 
-            // اگه هنوز داخل همین مکالمه‌ایم و پیام واردی خونده‌نشده‌ای اومده، خودکار خونده‌شده علامت بزن.
-            // این خودش یه update دیگه روی content provider هست که onChange رو دوباره صدا می‌زنه،
-            // ولی چون دفعه‌ی بعد هیچ پیام خونده‌نشده‌ای پیدا نمیشه، شرط زیر false میشه و حلقه خودش تموم میشه.
             if (openThreadId == threadId && result.any { !it.isOutgoing && !it.isRead }) {
                 withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
             }
         }
     }
 
-    /** وقتی از صفحه چت خارج میشیم، دیگه لازم نیست observer اون thread رو رفرش کنه */
     fun clearOpenThread() {
         openThreadId = null
         ActiveThreadTracker.activeThreadId = null
         _draftText.value = ""
     }
 
-    /**
-     * وقتی اپ میره بک‌گراند (Activity.onPause)، حتی اگه هنوز روی صفحه‌ی چت باشیم، دیگه
-     * کاربر واقعاً «داره می‌بینه» حساب نمیشه - پس نوتیف پیام‌های جدید باید دوباره نشون داده بشه.
-     */
     fun onAppBackgrounded() {
         ActiveThreadTracker.activeThreadId = null
     }
 
-    /** وقتی اپ برمی‌گرده فورگراند (Activity.onResume) و هنوز همون thread بازه، دوباره ساکت کن */
     fun onAppForegrounded() {
         ActiveThreadTracker.activeThreadId = openThreadId
     }
@@ -272,12 +248,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * ذخیره‌ی متنِ نوشته‌نشده‌ی صفحه‌ی چت به‌عنوان پیش‌نویس - از ThreadScreen موقع خروج از
-     * صفحه (چه با دکمه‌ی برگشت، چه با رفتن سراغ یه مکالمه‌ی دیگه) صدا زده میشه. اگه body
-     * خالی باشه (یعنی یا چیزی تایپ نشده بوده یا کاربر همین الان پیام رو فرستاده)، هر
-     * پیش‌نویس قبلیِ این thread هم پاک میشه.
-     */
     fun saveDraft(threadId: Long, address: String, body: String) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.saveDraft(threadId, address, body) }
@@ -285,16 +255,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * ذخیره‌ی درفت موقع خروج از صفحه‌ی «پیام جدید» - برای مخاطبی که هنوز thread ای باهاش
-     * وجود نداره (تا حالا چت نکردیم). برخلاف saveDraft بالا (که threadId رو از قبل داره،
-     * چون از داخل یه چتِ موجود صدا زده میشه)، اینجا threadId رو باید همین‌جا با
-     * getOrCreateThreadId بسازیم - دقیقاً همون کاری که «پیام جدید» موقع ارسالِ واقعی هم
-     * می‌کنه. اگه body خالی باشه، کاری لازم نیست بکنیم: چون thread ای که فقط برای ذخیره‌ی
-     * یه درفتِ خالی ساخته بشه، getConversations اصلاً نشونش نمی‌ده (نه meta داره نه drafts).
-     */
     fun saveDraftForNewConversation(address: String, displayName: String, body: String) {
-        // اگه چیزی تایپ نشده، نیازی به ساختنِ thread نیست - چیزی برای نگه‌داشتن وجود نداره
         if (address.isBlank() || body.isBlank()) return
         viewModelScope.launch {
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
@@ -304,18 +265,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * ارسال دوباره‌ی یه پیامِ ناموفق (STATUS_FAILED یا TYPE=FAILED) - ردیف قدیمی رو پاک
-     * می‌کنه و دوباره با همون آدرس/متن/سیم ارسال می‌کنه، انگار کاربر همین الان پیام رو نوشته.
-     *
-     * دو تا نکته که قبلاً رعایت نمی‌شدن:
-     * ۱) اگه پیامِ ناموفق فیوریت‌شده (قفل) باشه، deleteMessage اون رو پاک نمی‌کنه (false
-     *    برمی‌گردونه)؛ قبلاً این نتیجه چک نمی‌شد و کد بدون توجه به شکست حذف، بازم پیامِ
-     *    جدید رو می‌فرستاد - نتیجه‌ش دو تا ردیف (هم قدیمیِ فیل‌شده‌ی قفل، هم جدید) بود.
-     *    الان اگه حذف نشه، اصلاً ارسال دوباره انجام نمیشه و به کاربر اطلاع داده میشه.
-     * ۲) قبلاً همیشه subscriptionId=null (یعنی سیمِ پیش‌فرضِ سیستم) پاس داده می‌شد؛ الان از
-     *    روی همون سیمی که پیام اولش باهاش امتحان شده بود (message.subscriptionId) دوباره می‌فرسته.
-     */
     fun resendMessage(message: SmsMessage) {
         viewModelScope.launch {
             val deleted = withContext(Dispatchers.IO) { repository.deleteMessage(message.id) }
@@ -331,12 +280,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** حذف یه پیام مشخص از داخل مکالمه (بعد از تائید کاربر توی MessageActionsSheet) */
     fun deleteMessage(threadId: Long, messageId: Long) {
         viewModelScope.launch {
             val deleted = withContext(Dispatchers.IO) { repository.deleteMessage(messageId) }
             if (!deleted) {
-                // پیام فیوریت‌شده بود و رد شد (نقش قفل) - فقط به کاربر اطلاع میدیم
                 _operationMessage.value = "این پیام به علاقه‌مندی‌ها اضافه شده و قفله. برای حذف، اول از علاقه‌مندی‌ها بردارش."
                 return@launch
             }
@@ -345,15 +292,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** پیامی که به کاربر نشون داده شده رو مصرف می‌کنه (مثلاً بعد از نمایش Snackbar) */
     fun consumeOperationMessage() {
         _operationMessage.value = null
     }
 
-    /**
-     * حذف دسته‌جمعی چند پیام با هم - از حالت «انتخاب چندتایی» داخل صفحه‌ی چت یک مخاطب
-     * (بعد از تائید کاربر توی دیالوگ حذف).
-     */
     fun deleteMessages(threadId: Long, messageIds: Set<Long>) {
         if (messageIds.isEmpty()) return
         viewModelScope.launch {
@@ -369,11 +311,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * حذف دسته‌جمعی از داخل «پیامک‌های بلاک‌شده» - برخلاف deleteMessages بالا که مال یه
-     * مکالمه‌ی مشخصه، اینجا پیام‌های انتخاب‌شده ممکنه از چند شماره‌ی بلاک‌شده‌ی مختلف باشن،
-     * پس به‌جای refreshMessages(threadId)، کل لیست بلاک‌شده‌ها رو دوباره لود می‌کنیم.
-     */
     fun deleteBlockedMessages(messageIds: Set<Long>) {
         if (messageIds.isEmpty()) return
         viewModelScope.launch {
@@ -388,11 +325,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * حذف دسته‌جمعی از داخل «پیامک‌های خصوصی» - دقیقاً همون منطق deleteBlockedMessages،
-     * فقط بعدش لیست خصوصی‌ها رو دوباره لود می‌کنه (چون این پیام‌ها هم ممکنه از چند شماره‌ی
-     * خصوصی‌شده‌ی مختلف باشن، نه فقط یه thread خاص).
-     */
     fun deletePrivateMessages(messageIds: Set<Long>) {
         if (messageIds.isEmpty()) return
         viewModelScope.launch {
@@ -407,12 +339,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * حذف دسته‌جمعی چند مکالمه با هم - از حالت «انتخاب چندتایی» توی صفحه‌ی اصلی لیست پیام‌ها
-     * (بعد از تائید کاربر توی دیالوگ حذف). نتیجه رو به‌صورت یه پیام کوتاه به کاربر نشون میده:
-     * اینکه به سطل زباله رفتن یا واقعاً حذف شدن، و اگه چندتا پیام فیوریت (قفل) بودن که دست
-     * نخوردن، اونم اضافه میشه.
-     */
     fun deleteConversations(threadIds: Set<Long>) {
         if (threadIds.isEmpty()) return
         viewModelScope.launch {
@@ -432,89 +358,59 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** لود کردن لیست فیوریت‌ها - برای صفحه‌ی «علاقه‌مندی‌ها» */
-    fun loadFavorites() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { FavoriteStore.getAllFavorites(getApplication<Application>()) }
-            _favorites.value = result
-            _favoriteIds.value = result.map { it.messageId }.toSet()
-        }
-    }
+    // ---- علاقه‌مندی‌ها - دیگه نیازی به load دستی نیست، فقط برای سازگاری no-op مونده ----
+    @Deprecated("دیگه لازم نیست - favorites/favoriteIds خودشون از Room reactive هستن", ReplaceWith(""))
+    fun loadFavorites() { /* no-op: favorites همیشه reactive */ }
 
-    /**
-     * فیوریت‌کردن/برداشتنِ فیوریت یه پیام با یک کلیک (از منوی اکشن پیام).
-     * تا وقتی پیامی فیوریته، SmsRepository.deleteMessage اجازه‌ی حذفش رو نمی‌ده.
-     */
     fun toggleFavorite(message: SmsMessage, contactDisplayName: String) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                if (FavoriteStore.isFavorite(getApplication<Application>(), message.id)) {
-                    FavoriteStore.removeFavorite(getApplication<Application>(), message.id)
-                } else {
-                    FavoriteStore.addFavorite(
-                        getApplication<Application>(),
-                        FavoriteMessage(
-                            messageId = message.id,
-                            threadId = message.threadId,
-                            address = message.address,
-                            displayName = contactDisplayName,
-                            body = message.body,
-                            date = message.date
-                        )
+                favoriteRepository.toggleFavorite(
+                    FavoriteMessage(
+                        messageId = message.id,
+                        threadId = message.threadId,
+                        address = message.address,
+                        displayName = contactDisplayName,
+                        body = message.body,
+                        date = message.date
                     )
-                }
+                )
             }
-            loadFavorites()
         }
     }
 
-    /** برداشتن فیوریت از داخل خود صفحه‌ی «علاقه‌مندی‌ها» (بدون نیاز به SmsMessage کامل) */
     fun removeFavorite(messageId: Long) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { FavoriteStore.removeFavorite(getApplication<Application>(), messageId) }
-            loadFavorites()
+            withContext(Dispatchers.IO) { favoriteRepository.removeFavorite(messageId) }
         }
     }
 
-    fun loadPinnedMessages() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { PinnedMessageStore.getAllPinnedIds(getApplication<Application>()) }
-            _pinnedMessageIds.value = result
-        }
-    }
+    @Deprecated("دیگه لازم نیست - pinnedMessageIds خودش از Room reactive هست", ReplaceWith(""))
+    fun loadPinnedMessages() { /* no-op */ }
 
-    /** پین‌کردن/برداشتنِ پینِ یه پیام با یک کلیک (از منوی اکشن پیام، دقیقاً هم‌خانواده‌ی toggleFavorite) */
     fun togglePinMessage(message: SmsMessage) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { PinnedMessageStore.togglePin(getApplication<Application>(), message.id) }
-            loadPinnedMessages()
+            withContext(Dispatchers.IO) { pinRepository.togglePinMessage(message.id) }
         }
     }
 
-    /**
-     * پین‌کردن/برداشتنِ پینِ دسته‌جمعی چند مکالمه - از حالت «انتخاب چندتایی» توی لیست اصلی.
-     * اگه همه‌ی مکالمه‌های انتخاب‌شده از قبل پین بودن، همه رو آنپین می‌کنه؛ وگرنه سعی می‌کنه
-     * بقیه رو هم پین کنه، ولی با رعایتِ سقفِ AppSettings.getMaxPinnedConversations - از اون
-     * سقف که رد بشه، بقیه رد میشن و توی پیام نتیجه بهش اشاره میشه.
-     */
     fun pinConversations(conversations: List<Conversation>) {
         if (conversations.isEmpty()) return
         viewModelScope.launch {
-            val app = getApplication<Application>()
             val allPinned = conversations.all { it.isPinned }
             var pinnedCount = 0
             var limitSkipped = 0
+            val maxAllowed = AppSettings.getMaxPinnedConversations(getApplication())
             withContext(Dispatchers.IO) {
                 if (allPinned) {
-                    conversations.forEach { PinStore.unpin(app, it.threadId) }
+                    conversations.forEach { pinRepository.unpinThread(it.threadId) }
                 } else {
-                    val maxAllowed = AppSettings.getMaxPinnedConversations(app)
                     conversations.filter { !it.isPinned }.forEach { conversation ->
-                        if (PinStore.getPinnedCount(app) >= maxAllowed) {
+                        if (pinRepository.getPinnedCount() >= maxAllowed) {
                             limitSkipped++
                             return@forEach
                         }
-                        PinStore.pin(app, conversation.threadId)
+                        pinRepository.pinThread(conversation.threadId)
                         pinnedCount++
                     }
                 }
@@ -522,14 +418,13 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             _operationMessage.value = when {
                 allPinned -> "پین ${conversations.size} مکالمه برداشته شد"
                 limitSkipped > 0 && pinnedCount > 0 -> "$pinnedCount مکالمه پین شد (حداکثر تعداد پین پر شد، $limitSkipped مکالمه دیگه پین نشد)"
-                limitSkipped > 0 -> "حداکثر تعداد پین (${AppSettings.getMaxPinnedConversations(app)} مکالمه) پره"
+                limitSkipped > 0 -> "حداکثر تعداد پین ($maxAllowed مکالمه) پره"
                 else -> "$pinnedCount مکالمه پین شد"
             }
             loadConversations()
         }
     }
 
-    /** لود کردن لیست پیام‌های سطل زباله - برای صفحه‌ی «سطل زباله» */
     fun loadTrash() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getTrashedMessages() }
@@ -537,7 +432,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** بازگردوندن یه پیام از سطل زباله - چون خودِ ردیف پاک نشده، دوباره تو لیست/چت نمایش داده میشه */
     fun restoreFromTrash(messageId: Long) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.restoreFromTrash(messageId) }
@@ -547,7 +441,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** حذف همیشگی از داخل صفحه‌ی سطل زباله (بعد از تائید کاربر) - این دیگه واقعاً فیزیکیه */
     fun permanentlyDeleteFromTrash(messageId: Long) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.permanentlyDelete(messageId) }
@@ -555,15 +448,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * بلاک‌کردن دسته‌جمعی چند مکالمه - از حالت «انتخاب چندتایی» توی لیست اصلی پیام‌ها،
-     * گزینه‌ی «بلاک کردن». هر مکالمه‌ی انتخاب‌شده به BlockStore اضافه میشه (که خودش باعث
-     * میشه دفعه‌ی بعد getConversations دیگه نشونش نده)، و لیست اصلی + شمارنده‌های بلاک
-     * دوباره لود میشن.
-     *
-     * یه شماره‌ی خصوصی نمی‌تونه هم‌زمان بلاک هم بشه (طبق درخواست کاربر) - قبل از بلاک‌کردن
-     * چک می‌کنیم؛ اگه از قبل خصوصی بود، رد میشه و توی پیام نتیجه بهش اشاره میشه.
-     */
     fun blockConversations(conversations: List<Conversation>) {
         if (conversations.isEmpty()) return
         viewModelScope.launch {
@@ -573,12 +457,11 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             var alreadyBlockedSkipped = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
-                    if (PrivateStore.isAddressPrivate(app, conversation.address)) {
+                    if (privateRepository.isAddressPrivate(conversation.address)) {
                         privateSkipped++
                         return@forEach
                     }
-                    val newlyBlocked = BlockStore.blockNumber(
-                        app,
+                    val newlyBlocked = blockRepository.blockNumber(
                         conversation.threadId,
                         conversation.address,
                         conversation.displayName
@@ -587,8 +470,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                         alreadyBlockedSkipped++
                         return@forEach
                     }
-                    // اگه نوتیف این شماره الان روی صفحه‌ست، بلافاصله پاک بشه - قبلاً صبر می‌کرد
-                    // تا یه اتفاق دیگه (رفتن به چت دیگه) خودش پاکش کنه، که کند به‌نظر می‌رسید
                     NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
                     blocked.add(conversation)
                 }
@@ -604,61 +485,44 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
 
             loadConversations()
-            loadBlockedNumbers()
             loadBlockedMessages()
         }
     }
 
-    /**
-     * بلاک کردن مستقیم یه شماره از صفحه‌ی «افزودن شماره‌ی بلاک» - برخلاف blockConversations
-     * که از لیست مکالمات موجود میاد، این شماره ممکنه اصلاً قبلاً باهاش مکالمه‌ای نداشته
-     * باشیم؛ برای همین اول getOrCreateThreadId یه thread براش می‌سازه (یا اگه از قبل بود،
-     * همون رو برمی‌گردونه).
-     */
     fun blockNumber(address: String, displayName: String) {
         if (address.isBlank()) return
         viewModelScope.launch {
             val app = getApplication<Application>()
-            if (withContext(Dispatchers.IO) { BlockStore.isAddressBlocked(app, address) }) {
+            if (withContext(Dispatchers.IO) { blockRepository.isAddressBlocked(address) }) {
                 _operationMessage.value = "این شماره از قبل بلاک بود"
                 return@launch
             }
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
-            val isPrivate = withContext(Dispatchers.IO) { PrivateStore.isAddressPrivate(app, address) }
+            val isPrivate = withContext(Dispatchers.IO) { privateRepository.isAddressPrivate(address) }
             if (isPrivate) {
                 _operationMessage.value = "این شماره خصوصیه - اول باید از بخش خصوصی خارجش کنی"
                 return@launch
             }
-            withContext(Dispatchers.IO) {
-                BlockStore.blockNumber(app, threadId, address, displayName)
-            }
+            withContext(Dispatchers.IO) { blockRepository.blockNumber(threadId, address, displayName) }
             NotificationManagerCompat.from(app).cancel(address.hashCode())
             _operationMessage.value = "$displayName بلاک شد"
             loadConversations()
-            loadBlockedNumbers()
             loadBlockedMessages()
         }
     }
 
-    /** آنبلاک‌کردن یه شماره از داخل صفحه‌ی «شماره‌های بلاک‌شده» - دوباره تو لیست اصلی برمی‌گرده */
     fun unblockNumber(threadId: Long) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { BlockStore.unblockThread(getApplication(), threadId) }
-            loadBlockedNumbers()
+            withContext(Dispatchers.IO) { blockRepository.unblockThread(threadId) }
             loadBlockedMessages()
             loadConversations()
         }
     }
 
-    /** لود کردن لیست شماره‌های بلاک‌شده - برای صفحه‌ی «شماره‌های بلاک‌شده» و بج شمارنده */
-    fun loadBlockedNumbers() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { BlockStore.getAllBlockedNumbers(getApplication()) }
-            _blockedNumbers.value = result
-        }
-    }
+    @Deprecated("دیگه لازم نیست - blockedNumbers خودش از Room reactive هست", ReplaceWith(""))
+    fun loadBlockedNumbers() { /* no-op */ }
 
-    /** لود کردن همه‌ی پیام‌های بلاک‌شده - برای صفحه‌ی «پیامک‌های بلاک‌شده» و بج شمارنده */
+    /** فقط بخشِ ترکیبیِ Telephony+Room؛ چیزی که واقعاً هنوز نیاز به load صریح داره */
     fun loadBlockedMessages() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForBlockedThreads() }
@@ -666,72 +530,36 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** لود کردن لیست کلمات کلیدی بلاک - برای صفحه‌ی «کلمات کلیدی بلاک» و بج شمارنده */
-    fun loadBlockKeywords() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { BlockKeywordStore.getAllKeywords(getApplication()) }
-            _blockKeywords.value = result
-        }
-    }
+    @Deprecated("دیگه لازم نیست - blockKeywords خودش از Room reactive هست", ReplaceWith(""))
+    fun loadBlockKeywords() { /* no-op */ }
 
-    /**
-     * افزودن یه کلمه‌ی کلیدیِ بلاک جدید - از این لحظه به بعد، هر پیام ورودیِ (از هر شماره‌ای)
-     * که شاملِ این عبارت باشه خودکار بلاک میشه. پیام‌های قبلی که قبل از افزودن این کلمه
-     * رسیده بودن، عقب‌گرد نمی‌خورن (فقط پیام‌های تازه از این به بعد رو تحت تأثیر قرار میده).
-     */
     fun addBlockKeyword(text: String) {
         if (text.isBlank()) return
         viewModelScope.launch {
-            val app = getApplication<Application>()
-            val added = withContext(Dispatchers.IO) { BlockKeywordStore.addKeyword(app, text) }
+            val added = withContext(Dispatchers.IO) { blockRepository.addKeyword(text) }
             _operationMessage.value = if (added) "کلمه‌ی «${text.trim()}» اضافه شد" else "این کلمه از قبل اضافه شده بود"
-            loadBlockKeywords()
         }
     }
 
-    /** حذف یه کلمه‌ی کلیدیِ بلاک - پیام‌هایی که قبلاً به‌خاطر همین کلمه بلاک شده بودن، دست‌نخورده می‌مونن */
     fun removeBlockKeyword(id: String) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { BlockKeywordStore.removeKeyword(getApplication(), id) }
-            loadBlockKeywords()
-        }
+        viewModelScope.launch { withContext(Dispatchers.IO) { blockRepository.removeKeyword(id) } }
     }
 
-    /** لود کردن لیست الگوهای بلاکِ شماره - برای صفحه‌ی «الگوهای بلاکِ شماره» و بج شمارنده */
-    fun loadBlockPatterns() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { BlockPatternStore.getAllPatterns(getApplication()) }
-            _blockPatterns.value = result
-        }
-    }
+    @Deprecated("دیگه لازم نیست - blockPatterns خودش از Room reactive هست", ReplaceWith(""))
+    fun loadBlockPatterns() { /* no-op */ }
 
-    /**
-     * افزودن یه الگوی بلاکِ شماره‌ی جدید (شروع/پایانِ شماره) - از این لحظه به بعد، هر پیام
-     * ورودی‌ای که شماره‌ی فرستنده‌ش با این الگو مچ بشه خودکار بلاک میشه. پیام‌های قبلی که
-     * قبل از افزودن این الگو رسیده بودن، عقب‌گرد نمی‌خورن.
-     */
     fun addBlockPattern(type: BlockPatternType, value: String) {
         if (value.isBlank()) return
         viewModelScope.launch {
-            val app = getApplication<Application>()
-            val added = withContext(Dispatchers.IO) { BlockPatternStore.addPattern(app, type, value) }
+            val added = withContext(Dispatchers.IO) { blockRepository.addPattern(type, value) }
             _operationMessage.value = if (added) "الگوی «${value.trim()}» اضافه شد" else "این الگو از قبل اضافه شده بود"
-            loadBlockPatterns()
         }
     }
 
-    /** حذف یه الگوی بلاکِ شماره - پیام‌هایی که قبلاً به‌خاطر همین الگو بلاک شده بودن، دست‌نخورده می‌مونن */
     fun removeBlockPattern(id: String) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { BlockPatternStore.removePattern(getApplication(), id) }
-            loadBlockPatterns()
-        }
+        viewModelScope.launch { withContext(Dispatchers.IO) { blockRepository.removePattern(id) } }
     }
 
-    /**
-     * خصوصی‌کردن دسته‌جمعی چند مکالمه - دقیقاً مثل blockConversations ولی با PrivateStore.
-     * یه شماره‌ی بلاک‌شده نمی‌تونه هم‌زمان خصوصی هم بشه - قبل از خصوصی‌کردن چک میشه.
-     */
     fun makeConversationsPrivate(conversations: List<Conversation>) {
         if (conversations.isEmpty()) return
         viewModelScope.launch {
@@ -741,12 +569,11 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             var alreadyPrivateSkipped = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
-                    if (BlockStore.isAddressBlocked(app, conversation.address)) {
+                    if (blockRepository.isAddressBlocked(conversation.address)) {
                         blockedSkipped++
                         return@forEach
                     }
-                    val newlyPrivate = PrivateStore.makePrivate(
-                        app,
+                    val newlyPrivate = privateRepository.makePrivate(
                         conversation.threadId,
                         conversation.address,
                         conversation.displayName
@@ -770,60 +597,43 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
 
             loadConversations()
-            loadPrivateNumbers()
             loadPrivateMessages()
         }
     }
 
-    /**
-     * خصوصی‌کردن مستقیم یه شماره از صفحه‌ی «افزودن شماره‌ی خصوصی» - دقیقاً هم‌خانواده‌ی
-     * blockNumber، فقط با PrivateStore. اگه شماره از قبل بلاک بوده، رد میشه (یه شماره
-     * نمی‌تونه هم‌زمان هم بلاک باشه هم خصوصی).
-     */
     fun makePrivateNumber(address: String, displayName: String) {
         if (address.isBlank()) return
         viewModelScope.launch {
             val app = getApplication<Application>()
-            if (withContext(Dispatchers.IO) { PrivateStore.isAddressPrivate(app, address) }) {
+            if (withContext(Dispatchers.IO) { privateRepository.isAddressPrivate(address) }) {
                 _operationMessage.value = "این شماره از قبل خصوصی بود"
                 return@launch
             }
-            val isBlocked = withContext(Dispatchers.IO) { BlockStore.isAddressBlocked(app, address) }
+            val isBlocked = withContext(Dispatchers.IO) { blockRepository.isAddressBlocked(address) }
             if (isBlocked) {
                 _operationMessage.value = "این شماره بلاکه - اول باید از بخش بلاک خارجش کنی"
                 return@launch
             }
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
-            withContext(Dispatchers.IO) {
-                PrivateStore.makePrivate(app, threadId, address, displayName)
-            }
+            withContext(Dispatchers.IO) { privateRepository.makePrivate(threadId, address, displayName) }
             NotificationManagerCompat.from(app).cancel(address.hashCode())
             _operationMessage.value = "$displayName خصوصی شد"
             loadConversations()
-            loadPrivateNumbers()
             loadPrivateMessages()
         }
     }
 
-    /** خارج کردن یه شماره از حالت خصوصی از داخل صفحه‌ی «شماره‌های خصوصی» - دوباره تو لیست اصلی برمی‌گرده */
     fun removePrivate(threadId: Long) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { PrivateStore.removePrivate(getApplication(), threadId) }
-            loadPrivateNumbers()
+            withContext(Dispatchers.IO) { privateRepository.removePrivate(threadId) }
             loadPrivateMessages()
             loadConversations()
         }
     }
 
-    /** لود کردن لیست شماره‌های خصوصی - برای صفحه‌ی «شماره‌های خصوصی» و بج شمارنده */
-    fun loadPrivateNumbers() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { PrivateStore.getAllPrivateNumbers(getApplication()) }
-            _privateNumbers.value = result
-        }
-    }
+    @Deprecated("دیگه لازم نیست - privateNumbers خودش از Room reactive هست", ReplaceWith(""))
+    fun loadPrivateNumbers() { /* no-op */ }
 
-    /** لود کردن همه‌ی پیام‌های خصوصی - برای صفحه‌ی «پیامک‌های خصوصی» و بج شمارنده */
     fun loadPrivateMessages() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getMessagesForPrivateThreads() }
@@ -831,31 +641,31 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** آیا از قبل رمزی برای بخش خصوصی ساخته شده - PrivatePinScreen بر اساس این تصمیم می‌گیره اول‌بار رمز بسازه یا بخواد */
-    fun hasPrivatePin(): Boolean = PrivateStore.hasPin(getApplication())
+    // ---- رمز بخش خصوصی - روی DataStore، suspend (UI باید async صداش بزنه) ----
 
-    /** ذخیره‌ی رمز جدید (هش‌شده) - فقط اولین بار که کاربر وارد بخش خصوصی میشه صدا زده میشه */
-    fun setPrivatePin(pin: String) {
-        PrivateStore.setPin(getApplication(), pin)
+    suspend fun hasPrivatePin(): Boolean =
+        withContext(Dispatchers.IO) { PrivatePinDataStore.hasPin(getApplication()) }
+
+    suspend fun setPrivatePin(pin: String) {
+        withContext(Dispatchers.IO) { PrivatePinDataStore.setPin(getApplication(), pin) }
     }
 
-    /** مقایسه‌ی رمز واردشده با رمز ذخیره‌شده - عملیات سریع و سبکه، نیازی به coroutine نداره */
-    fun verifyPrivatePin(pin: String): Boolean = PrivateStore.verifyPin(getApplication(), pin)
+    suspend fun verifyPrivatePin(pin: String): Boolean =
+        withContext(Dispatchers.IO) { PrivatePinDataStore.verifyPin(getApplication(), pin) }
 
-    /** وقتی رمز درست وارد شد (یا تازه ساخته شد) - برای همین session بخش خصوصی باز می‌مونه */
     fun unlockPrivate() {
         _privateUnlocked.value = true
     }
 
-    /** با خروج کامل از بخش خصوصی (دکمه‌ی برگشتِ هاب)، دوباره قفل میشه تا دفعه‌ی بعد رمز بخواد */
     fun lockPrivate() {
         _privateUnlocked.value = false
     }
 
-    /** حذف کامل رمز از صفحه‌ی تنظیمات رمز - بعدش خودکار قفل میشه (دفعه‌ی بعد باید رمز جدید بسازه) */
     fun removePrivatePin() {
-        PrivateStore.removePin(getApplication())
-        lockPrivate()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { PrivatePinDataStore.removePin(getApplication()) }
+            lockPrivate()
+        }
     }
 
     fun searchContacts(query: String) {
@@ -865,7 +675,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** موقع ورود به صفحه «پیام جدید»، thread قبلی که باز بوده رو فراموش کن */
     fun prepareNewMessage() {
         clearOpenThread()
         searchContacts("")
@@ -879,26 +688,16 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         _pickedContact.value = null
     }
 
-    /**
-     * برای صفحه "پیام جدید": پیام رو می‌فرسته، thread رو پیدا/می‌سازه
-     * و اطلاعاتش رو توی newConversationTarget می‌ذاره تا Navigation با آدرس درست بره صفحه چت
-     */
     fun sendNewMessage(address: String, displayName: String, body: String, subscriptionId: Int?) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.sendSms(address, body, subscriptionId) }
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
-            loadThread(threadId) // قبل از navigate لود میشه تا صفحه چت از همون لحظه‌ی اول پیام رو نشون بده
+            loadThread(threadId)
             loadConversations()
             _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
         }
     }
 
-    /**
-     * زمان‌بندی یه پیام برای ارسال بعداً (از صفحه‌ی «پیام جدید» -> گزینه‌ی «زمان‌بندی»).
-     * برخلاف sendNewMessage، اینجا واقعاً چیزی فرستاده نمیشه؛ فقط توی ScheduledMessageStore
-     * ذخیره و توی AlarmManager ثبت میشه، بعد می‌ریم صفحه‌ی چت تا حباب مجازی «ارسال در ساعت X»ـش
-     * دیده بشه. با فرارسیدن زمانش، ScheduledSmsReceiver واقعاً می‌فرستدش.
-     */
     fun scheduleMessage(address: String, displayName: String, body: String, subscriptionId: Int?, scheduledAt: Long) {
         viewModelScope.launch {
             val app = getApplication<Application>()
@@ -913,7 +712,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                 subscriptionId = subscriptionId
             )
             withContext(Dispatchers.IO) {
-                ScheduledMessageStore.save(app, message)
+                scheduledMessageRepository.save(message)
                 AlarmScheduler.schedule(app, message)
             }
             loadThread(threadId)
@@ -922,38 +721,35 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** لود کردن پیام‌های زمان‌بندی‌شده‌ی در انتظارِ یه مکالمه - برای حباب‌های مجازی توی صفحه‌ی چت */
     fun loadScheduledMessages(threadId: Long) {
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { ScheduledMessageStore.getForThread(getApplication(), threadId) }
+            val result = withContext(Dispatchers.IO) { scheduledMessageRepository.getForThreadOnce(threadId) }
             _scheduledMessages.value = result
         }
     }
 
-    /** ویرایش زمانِ یه پیام زمان‌بندی‌شده که هنوز ارسال نشده (از منوی کلیک روی حباب مجازی‌ش) */
     fun updateScheduledTime(id: Long, threadId: Long, newScheduledAt: Long) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             withContext(Dispatchers.IO) {
-                val existing = ScheduledMessageStore.get(app, id) ?: return@withContext
+                val existing = scheduledMessageRepository.get(id) ?: return@withContext
                 AlarmScheduler.cancel(app, id)
                 val updated = existing.copy(scheduledAt = newScheduledAt)
-                ScheduledMessageStore.save(app, updated)
+                scheduledMessageRepository.save(updated)
                 AlarmScheduler.schedule(app, updated)
             }
             loadScheduledMessages(threadId)
         }
     }
 
-    /** «اکنون ارسال شود» - به‌جای صبر کردن تا زمانش برسه، همین الان واقعاً می‌فرستدش */
     fun sendScheduledNow(id: Long, threadId: Long) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             withContext(Dispatchers.IO) {
-                val message = ScheduledMessageStore.get(app, id) ?: return@withContext
+                val message = scheduledMessageRepository.get(id) ?: return@withContext
                 AlarmScheduler.cancel(app, id)
                 repository.sendSms(message.address, message.body, message.subscriptionId)
-                ScheduledMessageStore.remove(app, id)
+                scheduledMessageRepository.remove(id)
             }
             refreshMessages(threadId)
             loadScheduledMessages(threadId)
@@ -961,13 +757,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** «لغو زمان‌بندی» - دیگه اصلاً ارسال نمیشه */
     fun cancelScheduledMessage(id: Long, threadId: Long) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             withContext(Dispatchers.IO) {
                 AlarmScheduler.cancel(app, id)
-                ScheduledMessageStore.remove(app, id)
+                scheduledMessageRepository.remove(id)
             }
             loadScheduledMessages(threadId)
         }
@@ -977,18 +772,14 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         _newConversationTarget.value = null
     }
 
-    /** وقتی کاربر روی نوتیف پیامک کلیک می‌کنه، مستقیم بره صفحه چت همون مخاطب (لود پیام‌ها رو
-     *  خودِ LaunchedEffect(newTarget) توی AppNavigation انجام میده) */
     fun openThreadFromNotification(threadId: Long, address: String, displayName: String) {
         _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
     }
 
-    /** باز کردن متن یه پیام توی صفحه‌ی نوت (از دابل‌کلیک روی حباب پیام یا از منوی کلیک روی پیام) */
     fun openNote(text: String) {
         _noteText.value = text
     }
 
-    /** وقتی از صفحه‌ی نوت با دکمه‌ی برگشت خارج میشیم */
     fun consumeNote() {
         _noteText.value = null
     }

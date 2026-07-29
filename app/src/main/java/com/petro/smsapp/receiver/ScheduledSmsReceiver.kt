@@ -4,14 +4,16 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.petro.smsapp.data.ScheduledMessageStore
+import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.SmsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
- * وقتی زمانِ یه پیام زمان‌بندی‌شده برسه، AlarmManager این ریسیور رو صدا می‌زنه. پیام رو
- * از ScheduledMessageStore می‌خونه (اگه کاربر قبلش لغوش کرده یا زودتر «اکنون ارسال شود»
- * زده باشه، دیگه توی استور نیست و اینجا کاری نمی‌کنیم)، واقعاً می‌فرستدش، و از لیست
- * انتظار درش میاره.
+ * وقتی زمانِ یه پیام زمان‌بندی‌شده برسه، AlarmManager این ریسیور رو صدا می‌زنه.
+ * چون خواندن/حذف از ScheduledMessageRepository حالا روی Room (suspend) ئه، از
+ * goAsync() + coroutine استفاده می‌کنیم.
  */
 class ScheduledSmsReceiver : BroadcastReceiver() {
 
@@ -20,15 +22,23 @@ class ScheduledSmsReceiver : BroadcastReceiver() {
         val id = intent.getLongExtra(EXTRA_SCHEDULED_ID, -1L)
         if (id == -1L) return
 
-        val message = ScheduledMessageStore.get(context, id)
-        if (message == null) {
-            Log.d("ScheduledSms", "پیام زمان‌بندی‌شده‌ی $id دیگه وجود نداره (لغو شده یا زودتر ارسال شده)")
-            return
-        }
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val scheduledMessageRepository = AppContainer.scheduledMessageRepository(context)
+                val message = scheduledMessageRepository.get(id)
+                if (message == null) {
+                    Log.d("ScheduledSms", "پیام زمان‌بندی‌شده‌ی $id دیگه وجود نداره (لغو شده یا زودتر ارسال شده)")
+                    return@launch
+                }
 
-        SmsRepository(context).sendSms(message.address, message.body, message.subscriptionId)
-        ScheduledMessageStore.remove(context, id)
-        Log.d("ScheduledSms", "پیام زمان‌بندی‌شده‌ی $id ارسال شد")
+                SmsRepository(context).sendSms(message.address, message.body, message.subscriptionId)
+                scheduledMessageRepository.remove(id)
+                Log.d("ScheduledSms", "پیام زمان‌بندی‌شده‌ی $id ارسال شد")
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 
     companion object {
