@@ -22,6 +22,8 @@ import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.FavoriteMessage
+import com.petro.smsapp.data.MessageGroupMember
+import com.petro.smsapp.data.MessageGroupSummary
 import com.petro.smsapp.data.PrivateMessageEntry
 import com.petro.smsapp.data.PrivateNumber
 import com.petro.smsapp.data.PrivatePinDataStore
@@ -32,6 +34,7 @@ import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.data.SmsRepository
 import com.petro.smsapp.data.TrashedMessage
 import com.petro.smsapp.data.repository.BlockRepository
+import com.petro.smsapp.data.repository.MessageGroupRepository
 import com.petro.smsapp.data.repository.PinRepository
 import com.petro.smsapp.data.repository.PrivateRepository
 import com.petro.smsapp.data.repository.FavoriteRepository
@@ -60,6 +63,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val privateRepository: PrivateRepository = AppContainer.privateRepository(application)
     private val pinRepository: PinRepository = AppContainer.pinRepository(application)
     private val scheduledMessageRepository: ScheduledMessageRepository = AppContainer.scheduledMessageRepository(application)
+    private val messageGroupRepository: MessageGroupRepository = AppContainer.messageGroupRepository(application)
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
@@ -76,11 +80,19 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _contacts = MutableStateFlow<List<ContactInfo>>(emptyList())
     val contacts: StateFlow<List<ContactInfo>> = _contacts.asStateFlow()
 
+    /** کل مخاطبینِ گوشی - فقط برای ContactPickerScreen، فقط با درخواستِ صریحِ کاربر لود میشه */
+    private val _allContactsForPicker = MutableStateFlow<List<ContactInfo>>(emptyList())
+    val allContactsForPicker: StateFlow<List<ContactInfo>> = _allContactsForPicker.asStateFlow()
+
     private val _sims = MutableStateFlow<List<SimInfo>>(emptyList())
     val sims: StateFlow<List<SimInfo>> = _sims.asStateFlow()
 
     private val _pickedContact = MutableStateFlow<ContactInfo?>(null)
     val pickedContact: StateFlow<ContactInfo?> = _pickedContact.asStateFlow()
+
+    /** نتیجه‌ی ContactPickerScreen (چندتایی) - جدا از pickedContact (که مالِ Intent سیستمیِ تک‌انتخابیه) */
+    private val _pickedContactsBatch = MutableStateFlow<List<ContactInfo>?>(null)
+    val pickedContactsBatch: StateFlow<List<ContactInfo>?> = _pickedContactsBatch.asStateFlow()
 
     private val _newConversationTarget = MutableStateFlow<NewConversationTarget?>(null)
     val newConversationTarget: StateFlow<NewConversationTarget?> = _newConversationTarget.asStateFlow()
@@ -113,6 +125,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     val allScheduledMessages: StateFlow<List<ScheduledMessage>> =
         scheduledMessageRepository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** خلاصه‌ی گروه‌های پیامکیِ ذخیره‌شده (اسم + تعداد اعضا) - برای نمایش توی صفحه‌ی «پیام جدید» */
+    val groupSummaries: StateFlow<List<MessageGroupSummary>> =
+        messageGroupRepository.observeGroupSummaries().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // ---- لیست‌های ترکیبیِ Telephony + Room - هم‌چنان trigger-based ----
 
@@ -655,9 +671,28 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** فقط با درخواستِ صریحِ کاربر (زدنِ دکمه‌ی «انتخاب از مخاطبین») صدا زده میشه - کل مخاطبینِ دارای شماره رو لود می‌کنه */
+    fun loadAllContactsForPicker() {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { contactsRepository.getAllContacts() }
+            _allContactsForPicker.value = result
+        }
+    }
+
+    fun setPickedContactsBatch(selected: List<ContactInfo>) {
+        _pickedContactsBatch.value = selected
+    }
+
+    fun consumePickedContactsBatch() {
+        _pickedContactsBatch.value = null
+    }
+
     fun prepareNewMessage() {
         clearOpenThread()
-        searchContacts("")
+        // قبلاً اینجا searchContacts("") صدا زده می‌شد، یعنی محضِ باز شدنِ صفحه‌ی «پیام
+        // جدید» کل مخاطبین گوشی لود می‌شدن. الان تا کاربر واقعاً چیزی تایپ نکنه، لیست
+        // خالی می‌مونه (ContactsRepository.searchContacts هم با کوئری خالی چیزی برنمی‌گردونه).
+        _contacts.value = emptyList()
     }
 
     fun setPickedContact(contact: ContactInfo) {
@@ -675,6 +710,25 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             loadThread(threadId)
             loadConversations()
             _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
+        }
+    }
+
+    /**
+     * ارسال گروهی: وقتی توی «پیام جدید» بیشتر از یک مخاطب انتخاب شده، پیام جدا-جدا
+     * (SMS مستقل، نه MMS) به تک‌تک شماره‌ها ارسال میشه - یعنی هر گیرنده یه thread
+     * جدا/موجودِ خودش رو می‌گیره، دقیقاً مثل اینکه پیام رو تک‌به‌تک براشون فرستاده باشی.
+     * چون اینجا دیگه یه thread واحد برای باز کردن نداریم، برخلاف sendNewMessage،
+     * _newConversationTarget ست نمیشه - صفحه‌ی «پیام جدید» بعدش برمی‌گرده به لیست مکالمات.
+     */
+    fun sendNewMessageToMultiple(recipients: List<Pair<String, String>>, body: String, subscriptionId: Int?) {
+        if (recipients.isEmpty() || body.isBlank()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                recipients.forEach { (address, _) ->
+                    repository.sendSms(address, body, subscriptionId)
+                }
+            }
+            loadConversations()
         }
     }
 
@@ -698,6 +752,39 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             loadThread(threadId)
             loadConversations()
             _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
+        }
+    }
+
+    /** نسخه‌ی گروهیِ scheduleMessage - همون منطق sendNewMessageToMultiple ولی برای پیامِ زمان‌بندی‌شده */
+    fun scheduleMessageToMultiple(
+        recipients: List<Pair<String, String>>,
+        body: String,
+        subscriptionId: Int?,
+        scheduledAt: Long
+    ) {
+        if (recipients.isEmpty() || body.isBlank()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                recipients.forEachIndexed { index, (address, displayName) ->
+                    val threadId = repository.getOrCreateThreadId(address)
+                    // id باید بین گیرنده‌های مختلف یکتا باشه؛ چون همه‌شون توی یه coroutine
+                    // پشتِ‌سرِهم ذخیره میشن، فقط currentTimeMillis ممکنه برای دوتاشون یکی
+                    // دربیاد - برای همین index هم بهش اضافه میشه
+                    val message = ScheduledMessage(
+                        id = System.currentTimeMillis() + index,
+                        threadId = threadId,
+                        address = address,
+                        displayName = displayName,
+                        body = body,
+                        scheduledAt = scheduledAt,
+                        subscriptionId = subscriptionId
+                    )
+                    scheduledMessageRepository.save(message)
+                    AlarmScheduler.schedule(app, message)
+                }
+            }
+            loadConversations()
         }
     }
 
@@ -782,6 +869,28 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                 AlarmScheduler.cancel(app, id)
                 scheduledMessageRepository.remove(id)
             }
+        }
+    }
+
+    /** خوندنِ اعضای یه گروهِ پیامکیِ ذخیره‌شده - فقط وقتی کاربر واقعاً یه گروه رو برای بارگذاری انتخاب کنه صدا زده میشه */
+    suspend fun getGroupMembers(groupId: Long): List<MessageGroupMember> =
+        withContext(Dispatchers.IO) { messageGroupRepository.getGroupMembers(groupId) }
+
+    /** ذخیره‌ی مخاطبینِ انتخاب‌شده‌ی فعلی (توی «پیام جدید») به‌عنوان یه گروهِ جدید */
+    fun saveMessageGroup(name: String, members: List<Pair<String, String>>) {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank() || members.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                messageGroupRepository.saveGroup(trimmedName, members.map { MessageGroupMember(it.first, it.second) })
+            }
+            _operationMessage.value = "گروه «$trimmedName» ذخیره شد"
+        }
+    }
+
+    fun deleteMessageGroup(groupId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { messageGroupRepository.deleteGroup(groupId) }
         }
     }
 

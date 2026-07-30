@@ -39,6 +39,7 @@ import com.petro.smsapp.ui.BlockPatternsScreen
 import com.petro.smsapp.ui.BlockSettingsScreen
 import com.petro.smsapp.ui.BlockedMessagesScreen
 import com.petro.smsapp.ui.BlockedNumbersScreen
+import com.petro.smsapp.ui.ContactPickerScreen
 import com.petro.smsapp.ui.ConversationListScreen
 import com.petro.smsapp.ui.FavoritesScreen
 import com.petro.smsapp.ui.NewMessageScreen
@@ -227,8 +228,10 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val scheduledMessages by viewModel.scheduledMessages.collectAsState()
     val draftText by viewModel.draftText.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
+    val allContactsForPicker by viewModel.allContactsForPicker.collectAsState()
     val newTarget by viewModel.newConversationTarget.collectAsState()
     val pickedContact by viewModel.pickedContact.collectAsState()
+    val pickedContactsBatch by viewModel.pickedContactsBatch.collectAsState()
     val sims by viewModel.sims.collectAsState()
     val noteText by viewModel.noteText.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
@@ -245,6 +248,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
     val privateUnlocked by viewModel.privateUnlocked.collectAsState()
     val operationMessage by viewModel.operationMessage.collectAsState()
     val allScheduledMessages by viewModel.allScheduledMessages.collectAsState()
+    val groupSummaries by viewModel.groupSummaries.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -350,7 +354,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     sims = sims,
                     pickedContact = pickedContact,
                     onPickedContactConsumed = { viewModel.consumePickedContact() },
-                    onPickFromContactsClick = onPickContactClick,
+                    pickedContactsBatch = pickedContactsBatch,
+                    onPickedContactsBatchConsumed = { viewModel.consumePickedContactsBatch() },
+                    onOpenContactPicker = {
+                        viewModel.loadAllContactsForPicker()
+                        navController.navigate("contact_picker")
+                    },
                     onSearchChange = { query -> viewModel.searchContacts(query) },
                     onSend = { address, displayName, body, subId ->
                         viewModel.sendNewMessage(address, displayName, body, subId)
@@ -358,8 +367,31 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onScheduleSend = { address, displayName, body, subId, scheduledAt ->
                         viewModel.scheduleMessage(address, displayName, body, subId, scheduledAt)
                     },
+                    onSendToMultiple = { recipients, body, subId ->
+                        viewModel.sendNewMessageToMultiple(recipients, body, subId)
+                        navController.popBackStack()
+                    },
+                    onScheduleToMultiple = { recipients, body, subId, scheduledAt ->
+                        viewModel.scheduleMessageToMultiple(recipients, body, subId, scheduledAt)
+                        navController.popBackStack()
+                    },
                     onLeaveWithDraft = { address, displayName, body ->
                         viewModel.saveDraftForNewConversation(address, displayName, body)
+                    },
+                    groupMessagingEnabled = appSettings.groupMessagingEnabled,
+                    groupSummaries = groupSummaries,
+                    onLoadGroupMembers = { groupId -> viewModel.getGroupMembers(groupId) },
+                    onSaveGroup = { name, members -> viewModel.saveMessageGroup(name, members) },
+                    onDeleteGroup = { groupId -> viewModel.deleteMessageGroup(groupId) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("contact_picker") {
+                ContactPickerScreen(
+                    contacts = allContactsForPicker,
+                    onConfirm = { selected ->
+                        viewModel.setPickedContactsBatch(selected)
+                        navController.popBackStack()
                     },
                     onBack = { navController.popBackStack() }
                 )

@@ -130,7 +130,12 @@ private fun AddBlockContactRow(contact: ContactInfo, onClick: () -> Unit) {
         Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(contact.name, style = MaterialTheme.typography.bodyLarge)
-            Text(contact.phoneNumber, style = MaterialTheme.typography.bodySmall)
+            // شماره‌ها همیشه چپ‌به‌راست نشون داده بشن - وگرنه شماره‌هایی که با +98
+            // شروع می‌شن توی چیدمانِ راست‌به‌چپِ برنامه برعکس (چپکی) نشون داده می‌شدن
+            Text(
+                text = contact.phoneNumber,
+                style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr)
+            )
         }
     }
 }

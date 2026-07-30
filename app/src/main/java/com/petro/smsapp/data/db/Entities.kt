@@ -120,3 +120,25 @@ data class DeliveryEntity(
     @PrimaryKey val messageId: Long,
     val deliveredAtMillis: Long
 )
+
+/**
+ * یه گروهِ پیامکیِ ذخیره‌شده - وقتی کاربر به چند مخاطب هم‌زمان پیام می‌فرسته (پیام
+ * گروهی) و می‌خواد بعداً بدونِ انتخابِ دوباره‌ی تک‌تکِ مخاطبین، همون گروه رو پیدا کنه.
+ * اعضای هر گروه توی MessageGroupMemberEntity جداگانه نگه داشته میشن (یک‌به‌چند
+ * ساده، بدون @Relation، چون تعداد اعضا معمولاً کمه و کوئری‌شون سبک و مستقله).
+ */
+@Entity(tableName = "message_groups")
+data class MessageGroupEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val createdAt: Long
+)
+
+/** عضوهای هر گروهِ پیامکی - groupId به MessageGroupEntity.id اشاره می‌کنه */
+@Entity(tableName = "message_group_members")
+data class MessageGroupMemberEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val groupId: Long,
+    val address: String,
+    val displayName: String
+)

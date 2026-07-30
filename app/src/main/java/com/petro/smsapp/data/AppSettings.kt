@@ -48,6 +48,7 @@ object AppSettings {
     private const val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST_NAME = "show_blocked_in_message_list_enabled"
     private const val KEY_BLOCK_NON_CONTACTS_NAME = "block_non_contacts_enabled"
     private const val KEY_MAX_PINNED_CONVERSATIONS_NAME = "max_pinned_conversations"
+    private const val KEY_GROUP_MESSAGING_ENABLED_NAME = "group_messaging_enabled"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -59,6 +60,7 @@ object AppSettings {
     private val KEY_SHOW_BLOCKED_IN_MESSAGE_LIST = booleanPreferencesKey(KEY_SHOW_BLOCKED_IN_MESSAGE_LIST_NAME)
     private val KEY_BLOCK_NON_CONTACTS = booleanPreferencesKey(KEY_BLOCK_NON_CONTACTS_NAME)
     private val KEY_MAX_PINNED_CONVERSATIONS = intPreferencesKey(KEY_MAX_PINNED_CONVERSATIONS_NAME)
+    private val KEY_GROUP_MESSAGING_ENABLED = booleanPreferencesKey(KEY_GROUP_MESSAGING_ENABLED_NAME)
 
     /** پیش‌فرض حداکثر تعداد مکالمه‌ی قابل‌پین در لیست اصلی - کاربر می‌تونه از تنظیمات عوضش کنه */
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
@@ -94,7 +96,10 @@ object AppSettings {
         val showBlockedNotificationsEnabled: Boolean = false,
         val showBlockedInMessageListEnabled: Boolean = false,
         val blockNonContactsEnabled: Boolean = false,
-        val maxPinnedConversations: Int = DEFAULT_MAX_PINNED_CONVERSATIONS
+        val maxPinnedConversations: Int = DEFAULT_MAX_PINNED_CONVERSATIONS,
+        // اگه فعال باشه، توی «پیام جدید» امکان ذخیره‌ی چند مخاطبِ انتخاب‌شده به‌عنوان یه
+        // «گروه» و بارگذاری دوباره‌شون در آینده فراهم میشه (بدونِ انتخابِ دوباره‌ی تک‌تکشون)
+        val groupMessagingEnabled: Boolean = false
     )
 
     private val _state = MutableStateFlow(State())
@@ -130,7 +135,8 @@ object AppSettings {
                         showBlockedNotificationsEnabled = prefs[KEY_SHOW_BLOCKED_NOTIFICATIONS] ?: false,
                         showBlockedInMessageListEnabled = prefs[KEY_SHOW_BLOCKED_IN_MESSAGE_LIST] ?: false,
                         blockNonContactsEnabled = prefs[KEY_BLOCK_NON_CONTACTS] ?: false,
-                        maxPinnedConversations = prefs[KEY_MAX_PINNED_CONVERSATIONS] ?: DEFAULT_MAX_PINNED_CONVERSATIONS
+                        maxPinnedConversations = prefs[KEY_MAX_PINNED_CONVERSATIONS] ?: DEFAULT_MAX_PINNED_CONVERSATIONS,
+                        groupMessagingEnabled = prefs[KEY_GROUP_MESSAGING_ENABLED] ?: false
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -187,6 +193,11 @@ object AppSettings {
         val clamped = count.coerceIn(1, 20)
         write(context) { it[KEY_MAX_PINNED_CONVERSATIONS] = clamped }
     }
+
+    fun isGroupMessagingEnabled(context: Context): Boolean = _state.value.groupMessagingEnabled
+
+    fun setGroupMessagingEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_GROUP_MESSAGING_ENABLED] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

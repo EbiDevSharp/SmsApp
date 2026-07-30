@@ -99,6 +99,21 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
             )
             Divider()
 
+            // امکان ارسال گروهی + ذخیره‌سازیِ گروه‌های پیامکی توی صفحه‌ی «پیام جدید»
+            ListItem(
+                headlineContent = { Text("گروه‌های پیامکی") },
+                supportingContent = {
+                    Text("توی «پیام جدید» بشه چند مخاطبِ انتخاب‌شده رو به‌عنوان یه گروه ذخیره کرد و بعداً دوباره براشون فرستاد")
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.groupMessagingEnabled,
+                        onCheckedChange = { enabled -> AppSettings.setGroupMessagingEnabled(context, enabled) }
+                    )
+                }
+            )
+            Divider()
+
             // نوع تقویم برای نمایش تاریخ توی کل برنامه
             ListItem(
                 headlineContent = { Text("نمایش تاریخ") },

@@ -225,3 +225,36 @@ interface DeliveryDao {
     @Query("DELETE FROM delivery_times WHERE messageId = :messageId")
     suspend fun delete(messageId: Long)
 }
+
+/** نتیجه‌ی خامِ کوئریِ JOIN برای شمارشِ تعداد اعضای هر گروه - Entity نیست، فقط یه POJO خروجیِ Room */
+data class GroupWithMemberCount(
+    val id: Long,
+    val name: String,
+    val createdAt: Long,
+    val memberCount: Int
+)
+
+@Dao
+interface MessageGroupDao {
+    @Query(
+        "SELECT g.id as id, g.name as name, g.createdAt as createdAt, COUNT(m.id) as memberCount " +
+            "FROM message_groups g LEFT JOIN message_group_members m ON m.groupId = g.id " +
+            "GROUP BY g.id ORDER BY g.createdAt DESC"
+    )
+    fun observeGroupsWithMemberCount(): Flow<List<GroupWithMemberCount>>
+
+    @Query("SELECT * FROM message_group_members WHERE groupId = :groupId")
+    suspend fun getMembers(groupId: Long): List<MessageGroupMemberEntity>
+
+    @Insert
+    suspend fun insertGroup(entity: MessageGroupEntity): Long
+
+    @Insert
+    suspend fun insertMembers(members: List<MessageGroupMemberEntity>)
+
+    @Query("DELETE FROM message_groups WHERE id = :groupId")
+    suspend fun deleteGroup(groupId: Long)
+
+    @Query("DELETE FROM message_group_members WHERE groupId = :groupId")
+    suspend fun deleteMembers(groupId: Long)
+}

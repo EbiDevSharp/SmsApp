@@ -4,11 +4,14 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * دیتابیس اصلی اپ - جایگزین همه‌ی SharedPreferences Storeهای قبلی (Favorite/Block/
- * Private/Trash/Pin/Scheduled/Delivery). یه instance واحد و singleton، بدون هیچ کش
- * میانی اضافه - خودِ Room منبعِ واقعیِ داده‌ست و از طریق Flow مستقیم reactive میشه.
+ * Private/Trash/Pin/Scheduled/Delivery) + گروه‌های پیامکی. یه instance واحد و
+ * singleton، بدون هیچ کش میانی اضافه - خودِ Room منبعِ واقعیِ داده‌ست و از طریق
+ * Flow مستقیم reactive میشه.
  */
 @Database(
     entities = [
@@ -24,9 +27,11 @@ import androidx.room.RoomDatabase
         PinEntity::class,
         PinnedMessageEntity::class,
         ScheduledMessageEntity::class,
-        DeliveryEntity::class
+        DeliveryEntity::class,
+        MessageGroupEntity::class,
+        MessageGroupMemberEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,9 +48,34 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pinnedMessageDao(): PinnedMessageDao
     abstract fun scheduledMessageDao(): ScheduledMessageDao
     abstract fun deliveryDao(): DeliveryDao
+    abstract fun messageGroupDao(): MessageGroupDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
+
+        /**
+         * نسخه‌ی ۱ -> ۲: اضافه شدنِ جدول‌های «گروه‌های پیامکی» (message_groups) و
+         * «اعضای گروه» (message_group_members). عمداً یه Migration دستی نوشته شده
+         * (نه fallbackToDestructiveMigration) چون پاک کردنِ کل دیتابیس یعنی از دست
+         * رفتنِ فیوریت‌ها/بلاک‌ها/پین‌ها/... کاربرهایی که از قبل از اپ استفاده می‌کردن.
+         */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `message_groups` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `message_group_members` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`groupId` INTEGER NOT NULL, " +
+                        "`address` TEXT NOT NULL, " +
+                        "`displayName` TEXT NOT NULL)"
+                )
+            }
+        }
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -53,7 +83,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "sms_app.db"
-                ).build().also { INSTANCE = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build().also { INSTANCE = it }
             }
         }
     }

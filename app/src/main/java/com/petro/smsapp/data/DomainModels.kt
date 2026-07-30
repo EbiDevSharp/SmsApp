@@ -64,3 +64,17 @@ data class ScheduledMessage(
     val scheduledAt: Long,
     val subscriptionId: Int?
 )
+
+/** یه عضوِ داخلِ یه گروهِ پیامکیِ ذخیره‌شده */
+data class MessageGroupMember(
+    val address: String,
+    val displayName: String
+)
+
+/** خلاصه‌ی یه گروهِ پیامکیِ ذخیره‌شده - برای نمایش توی لیستِ گروه‌ها (بدون نیاز به خوندنِ همه‌ی اعضا) */
+data class MessageGroupSummary(
+    val id: Long,
+    val name: String,
+    val memberCount: Int,
+    val createdAt: Long
+)

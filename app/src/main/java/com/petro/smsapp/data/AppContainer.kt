@@ -5,6 +5,7 @@ import com.petro.smsapp.data.db.AppDatabase
 import com.petro.smsapp.data.repository.BlockRepository
 import com.petro.smsapp.data.repository.DeliveryRepository
 import com.petro.smsapp.data.repository.FavoriteRepository
+import com.petro.smsapp.data.repository.MessageGroupRepository
 import com.petro.smsapp.data.repository.PinRepository
 import com.petro.smsapp.data.repository.PrivateRepository
 import com.petro.smsapp.data.repository.ScheduledMessageRepository
@@ -50,4 +51,6 @@ object AppContainer {
     fun scheduledMessageRepository(context: Context) = ScheduledMessageRepository(database(context).scheduledMessageDao())
 
     fun deliveryRepository(context: Context) = DeliveryRepository(database(context).deliveryDao())
+
+    fun messageGroupRepository(context: Context) = MessageGroupRepository(database(context).messageGroupDao())
 }
