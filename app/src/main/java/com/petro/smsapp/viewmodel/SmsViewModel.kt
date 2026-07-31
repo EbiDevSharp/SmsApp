@@ -909,6 +909,32 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     fun consumeNote() {
         _noteText.value = null
     }
+
+    // ---- عملیاتِ سویپ روی هر ردیفِ لیستِ مکالمات ----
+
+    /** سویپ -> «خوانده شدن»: فقط اون یه مکالمه رو خوانده‌شده می‌کنه (بدون باز کردنِ خودِ چت) */
+    fun markThreadReadFromSwipe(threadId: Long) {
+        viewModelScope.launch {
+            val marked = withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
+            if (marked) {
+                loadConversations()
+            } else {
+                _operationMessage.value = "اپ الان پیش‌فرض پیامک نیست، برای همین علامت «خوانده‌شده» ثبت نشد."
+            }
+        }
+    }
+
+    /** سویپ -> «ناخوانده شدن»: معکوسِ بالا - پیام‌های دریافتیِ اون مکالمه رو ناخوانده می‌کنه */
+    fun markThreadUnreadFromSwipe(threadId: Long) {
+        viewModelScope.launch {
+            val marked = withContext(Dispatchers.IO) { repository.markThreadAsUnread(threadId) }
+            if (marked) {
+                loadConversations()
+            } else {
+                _operationMessage.value = "اپ الان پیش‌فرض پیامک نیست، برای همین علامت «ناخوانده» ثبت نشد."
+            }
+        }
+    }
 }
 
 data class NewConversationTarget(

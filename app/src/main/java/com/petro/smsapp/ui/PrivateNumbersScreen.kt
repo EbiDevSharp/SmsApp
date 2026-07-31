@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.PrivateNumber
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «شماره‌های خصوصی» - عیناً هم‌خانواده‌ی BlockedNumbersScreen: جستجو + دکمه‌ی
@@ -114,7 +115,7 @@ private fun PrivateNumberRow(private: PrivateNumber, onRemove: () -> Unit) {
             Text(
                 text = private.displayName,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge.autoDirection()
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(

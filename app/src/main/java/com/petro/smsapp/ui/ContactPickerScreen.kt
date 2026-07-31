@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.ContactInfo
+import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «انتخاب چندتاییِ مخاطبین» - جایگزینِ Intent سیستمیِ ACTION_PICK فقط برای
@@ -137,7 +138,7 @@ private fun PickerContactRow(contact: ContactInfo, isSelected: Boolean, onClick:
         PickerAvatar(name = contact.name)
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(contact.name, style = MaterialTheme.typography.bodyLarge)
+            Text(contact.name, style = MaterialTheme.typography.bodyLarge.autoDirection())
             Text(
                 text = contact.phoneNumber,
                 style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr)

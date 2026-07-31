@@ -41,6 +41,7 @@ import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
+import com.petro.smsapp.util.autoDirection
 import kotlinx.coroutines.launch
 
 private sealed class ThreadListItem {
@@ -234,7 +235,7 @@ fun ThreadScreen(
                     )
                 } else {
                     TopAppBar(
-                        title = { Text(displayName) },
+                        title = { Text(displayName, style = LocalTextStyle.current.autoDirection()) },
                         navigationIcon = {
                             IconButton(onClick = onBack) { Text("←") }
                         }

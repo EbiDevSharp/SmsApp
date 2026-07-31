@@ -345,7 +345,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
                     onBlockConversations = { selectedConversations -> viewModel.blockConversations(selectedConversations) },
                     onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },
-                    onPinConversations = { selectedConversations -> viewModel.pinConversations(selectedConversations) }
+                    onPinConversations = { selectedConversations -> viewModel.pinConversations(selectedConversations) },
+                    swipeRightToLeftAction = appSettings.swipeRightToLeftAction,
+                    swipeLeftToRightAction = appSettings.swipeLeftToRightAction,
+                    swipeDeleteRequiresConfirmation = appSettings.swipeDeleteRequiresConfirmation,
+                    onMarkThreadRead = { threadId -> viewModel.markThreadReadFromSwipe(threadId) },
+                    onMarkThreadUnread = { threadId -> viewModel.markThreadUnreadFromSwipe(threadId) }
                 )
             }
             composable("new") {

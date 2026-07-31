@@ -49,6 +49,11 @@ object AppSettings {
     private const val KEY_BLOCK_NON_CONTACTS_NAME = "block_non_contacts_enabled"
     private const val KEY_MAX_PINNED_CONVERSATIONS_NAME = "max_pinned_conversations"
     private const val KEY_GROUP_MESSAGING_ENABLED_NAME = "group_messaging_enabled"
+    // جهتِ سویپ روی هر ردیفِ لیستِ مکالمات - هرکدوم یه SwipeAction.id ذخیره می‌کنه
+    private const val KEY_SWIPE_RIGHT_TO_LEFT_ACTION_NAME = "swipe_right_to_left_action"
+    private const val KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME = "swipe_left_to_right_action"
+    // قبل از اجرای واقعیِ عملیاتِ «حذف» با سویپ، از کاربر تأیید گرفته بشه یا نه
+    private const val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME = "swipe_delete_requires_confirmation"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -61,9 +66,16 @@ object AppSettings {
     private val KEY_BLOCK_NON_CONTACTS = booleanPreferencesKey(KEY_BLOCK_NON_CONTACTS_NAME)
     private val KEY_MAX_PINNED_CONVERSATIONS = intPreferencesKey(KEY_MAX_PINNED_CONVERSATIONS_NAME)
     private val KEY_GROUP_MESSAGING_ENABLED = booleanPreferencesKey(KEY_GROUP_MESSAGING_ENABLED_NAME)
+    private val KEY_SWIPE_RIGHT_TO_LEFT_ACTION = stringPreferencesKey(KEY_SWIPE_RIGHT_TO_LEFT_ACTION_NAME)
+    private val KEY_SWIPE_LEFT_TO_RIGHT_ACTION = stringPreferencesKey(KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME)
+    private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
 
     /** پیش‌فرض حداکثر تعداد مکالمه‌ی قابل‌پین در لیست اصلی - کاربر می‌تونه از تنظیمات عوضش کنه */
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
+
+    /** پیش‌فرض‌های عملیاتِ سویپ - کاربر می‌تونه هرکدوم رو از تنظیمات جدا عوض کنه */
+    val DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION = SwipeAction.DELETE
+    val DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION = SwipeAction.MARK_READ
 
     private fun defaultNotificationActionSettings(): List<NotificationActionSetting> = listOf(
         NotificationActionSetting(NotificationActionType.MARK_READ, true),
@@ -99,7 +111,13 @@ object AppSettings {
         val maxPinnedConversations: Int = DEFAULT_MAX_PINNED_CONVERSATIONS,
         // اگه فعال باشه، توی «پیام جدید» امکان ذخیره‌ی چند مخاطبِ انتخاب‌شده به‌عنوان یه
         // «گروه» و بارگذاری دوباره‌شون در آینده فراهم میشه (بدونِ انتخابِ دوباره‌ی تک‌تکشون)
-        val groupMessagingEnabled: Boolean = false
+        val groupMessagingEnabled: Boolean = false,
+        // عملیاتی که با کشیدنِ هر ردیفِ لیستِ مکالمات از راست به چپ اجرا میشه
+        val swipeRightToLeftAction: SwipeAction = DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION,
+        // عملیاتی که با کشیدنِ هر ردیفِ لیستِ مکالمات از چپ به راست اجرا میشه
+        val swipeLeftToRightAction: SwipeAction = DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION,
+        // قبل از اجرای واقعیِ حذف (وقتی یکی از دو جهتِ بالا روی «حذف» تنظیم شده باشه) دیالوگ تأیید نشون داده بشه
+        val swipeDeleteRequiresConfirmation: Boolean = true
     )
 
     private val _state = MutableStateFlow(State())
@@ -136,7 +154,10 @@ object AppSettings {
                         showBlockedInMessageListEnabled = prefs[KEY_SHOW_BLOCKED_IN_MESSAGE_LIST] ?: false,
                         blockNonContactsEnabled = prefs[KEY_BLOCK_NON_CONTACTS] ?: false,
                         maxPinnedConversations = prefs[KEY_MAX_PINNED_CONVERSATIONS] ?: DEFAULT_MAX_PINNED_CONVERSATIONS,
-                        groupMessagingEnabled = prefs[KEY_GROUP_MESSAGING_ENABLED] ?: false
+                        groupMessagingEnabled = prefs[KEY_GROUP_MESSAGING_ENABLED] ?: false,
+                        swipeRightToLeftAction = SwipeAction.fromId(prefs[KEY_SWIPE_RIGHT_TO_LEFT_ACTION], DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION),
+                        swipeLeftToRightAction = SwipeAction.fromId(prefs[KEY_SWIPE_LEFT_TO_RIGHT_ACTION], DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION),
+                        swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -198,6 +219,21 @@ object AppSettings {
 
     fun setGroupMessagingEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_GROUP_MESSAGING_ENABLED] = enabled }
+
+    fun getSwipeRightToLeftAction(context: Context): SwipeAction = _state.value.swipeRightToLeftAction
+
+    fun setSwipeRightToLeftAction(context: Context, action: SwipeAction) =
+        write(context) { it[KEY_SWIPE_RIGHT_TO_LEFT_ACTION] = action.id }
+
+    fun getSwipeLeftToRightAction(context: Context): SwipeAction = _state.value.swipeLeftToRightAction
+
+    fun setSwipeLeftToRightAction(context: Context, action: SwipeAction) =
+        write(context) { it[KEY_SWIPE_LEFT_TO_RIGHT_ACTION] = action.id }
+
+    fun isSwipeDeleteRequiresConfirmation(context: Context): Boolean = _state.value.swipeDeleteRequiresConfirmation
+
+    fun setSwipeDeleteRequiresConfirmation(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

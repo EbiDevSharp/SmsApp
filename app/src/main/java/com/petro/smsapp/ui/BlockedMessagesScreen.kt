@@ -25,6 +25,7 @@ import com.petro.smsapp.data.BlockPatternType
 import com.petro.smsapp.data.BlockSource
 import com.petro.smsapp.data.BlockedMessageEntry
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «پیامک‌های بلاک‌شده» - همه‌ی پیام‌های (قدیم + جدید) شماره‌های بلاک‌شده.
@@ -208,7 +209,7 @@ private fun BlockedMessageRow(
             Text(
                 text = entry.contactDisplayName,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge.autoDirection()
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(

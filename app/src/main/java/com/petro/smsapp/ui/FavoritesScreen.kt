@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.FavoriteMessage
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «علاقه‌مندی‌ها» - لیست پیام‌هایی که با یک‌کلیک از منوی اکشن پیام فیوریت شدن.
@@ -114,7 +115,7 @@ private fun FavoriteRow(
                 Text(
                     text = favorite.displayName,
                     fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge.autoDirection()
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Icon(

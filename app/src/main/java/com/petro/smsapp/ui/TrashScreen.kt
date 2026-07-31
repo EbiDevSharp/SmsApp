@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.TrashedMessage
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «سطل زباله» - پیام‌هایی که با تیک «سطل زباله»ی فعال توی تنظیمات حذف شدن.
@@ -111,7 +112,7 @@ private fun TrashRow(
             Text(
                 text = trashed.contactDisplayName,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge.autoDirection()
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(

@@ -663,6 +663,27 @@ class SmsRepository(
         return true
     }
 
+    /**
+     * معکوسِ markThreadAsRead - برای عملیاتِ سویپِ «ناخوانده شدن» روی لیستِ مکالمات.
+     * فقط پیام‌های *دریافتی* (نه ارسالی موفق) رو ناخوانده علامت می‌زنه، چون مفهومِ
+     * خوانده/ناخوانده منطقاً فقط برای پیام‌های ورودی معنی داره.
+     */
+    fun markThreadAsUnread(threadId: Long): Boolean {
+        if (!requireDefaultSmsApp("علامت‌گذاری مکالمه به‌عنوان ناخوانده")) return false
+        val values = ContentValues().apply { put(Telephony.Sms.READ, 0) }
+        try {
+            context.contentResolver.update(
+                Telephony.Sms.CONTENT_URI, values,
+                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} != ?",
+                arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_SENT.toString())
+            )
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع ناخوانده‌کردن مکالمه", e)
+            return false
+        }
+        return true
+    }
+
     /** suspend چون deliveryRepository.getDeliveredAt روی Room ئه - همه‌ی صداکننده‌هاش خودشون suspend هستن */
     private suspend fun cursorToMessage(cursor: Cursor): SmsMessage {
         fun col(name: String) = cursor.getColumnIndex(name)

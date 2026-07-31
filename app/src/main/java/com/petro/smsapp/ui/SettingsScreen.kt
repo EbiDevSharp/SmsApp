@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,10 +21,14 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.CalendarType
 import com.petro.smsapp.data.ClockFormat
+import com.petro.smsapp.data.SwipeAction
 import com.petro.smsapp.data.ThemeMode
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +51,26 @@ import androidx.compose.foundation.verticalScroll
 fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val settings by AppSettings.state.collectAsState()
+
+    var showSwipeRightToLeftDialog by remember { mutableStateOf(false) }
+    var showSwipeLeftToRightDialog by remember { mutableStateOf(false) }
+
+    if (showSwipeRightToLeftDialog) {
+        SwipeActionPickerDialog(
+            title = "عملیاتِ سویپِ راست‌به‌چپ",
+            current = settings.swipeRightToLeftAction,
+            onSelect = { action -> AppSettings.setSwipeRightToLeftAction(context, action) },
+            onDismiss = { showSwipeRightToLeftDialog = false }
+        )
+    }
+    if (showSwipeLeftToRightDialog) {
+        SwipeActionPickerDialog(
+            title = "عملیاتِ سویپِ چپ‌به‌راست",
+            current = settings.swipeLeftToRightAction,
+            onSelect = { action -> AppSettings.setSwipeLeftToRightAction(context, action) },
+            onDismiss = { showSwipeLeftToRightDialog = false }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -109,6 +135,33 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
                     Switch(
                         checked = settings.groupMessagingEnabled,
                         onCheckedChange = { enabled -> AppSettings.setGroupMessagingEnabled(context, enabled) }
+                    )
+                }
+            )
+            Divider()
+
+            // سویپِ ردیف‌های لیستِ مکالمات - جهتِ راست‌به‌چپ و چپ‌به‌راست هرکدوم جدا قابل‌تنظیمن
+            ListItem(
+                headlineContent = { Text("سویپِ لیستِ مکالمات") },
+                supportingContent = { Text("با کشیدنِ هر ردیفِ لیستِ اصلی، عملیاتِ زیر اجرا میشه") }
+            )
+            ListItem(
+                headlineContent = { Text("سویپِ راست‌به‌چپ") },
+                supportingContent = { Text(settings.swipeRightToLeftAction.label) },
+                modifier = Modifier.clickable { showSwipeRightToLeftDialog = true }
+            )
+            ListItem(
+                headlineContent = { Text("سویپِ چپ‌به‌راست") },
+                supportingContent = { Text(settings.swipeLeftToRightAction.label) },
+                modifier = Modifier.clickable { showSwipeLeftToRightDialog = true }
+            )
+            ListItem(
+                headlineContent = { Text("تأییدِ حذف با سویپ") },
+                supportingContent = { Text("قبل از حذفِ واقعی (وقتی یکی از دو جهتِ بالا روی «حذف» باشه) یه دیالوگِ تأیید نشون بده") },
+                trailingContent = {
+                    Switch(
+                        checked = settings.swipeDeleteRequiresConfirmation,
+                        onCheckedChange = { enabled -> AppSettings.setSwipeDeleteRequiresConfirmation(context, enabled) }
                     )
                 }
             )
@@ -186,6 +239,52 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
             Divider()
         }
     }
+}
+
+/** دیالوگِ رادیویی برای انتخاب اینکه یه جهتِ سویپ خاص، کدوم عملیات رو اجرا کنه */
+@Composable
+private fun SwipeActionPickerDialog(
+    title: String,
+    current: SwipeAction,
+    onSelect: (SwipeAction) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                SwipeAction.entries.forEach { action ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = current == action,
+                                onClick = {
+                                    onSelect(action)
+                                    onDismiss()
+                                }
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = current == action,
+                            onClick = {
+                                onSelect(action)
+                                onDismiss()
+                            }
+                        )
+                        Text(action.label, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("بستن") }
+        }
+    )
 }
 
 /** استپرِ ساده‌ی +/- برای تنظیمِ سقفِ تعداد پین - بین ۱ تا ۲۰ */

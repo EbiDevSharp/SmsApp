@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.ScheduledMessage
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «زمان‌بندی‌شده» - همه‌ی پیام‌های هنوز-ارسال‌نشده‌ی زمان‌بندی‌شده، از همه‌ی
@@ -104,7 +105,7 @@ private fun ScheduledRow(scheduled: ScheduledMessage, onClick: () -> Unit) {
         Avatar(name = scheduled.displayName)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(scheduled.displayName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+            Text(scheduled.displayName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge.autoDirection())
             Spacer(modifier = Modifier.height(2.dp))
             Text(scheduled.body, maxLines = 2, color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(2.dp))

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 @Composable
 fun BlockedNumbersScreen(
@@ -114,7 +115,7 @@ private fun BlockedNumberRow(blocked: BlockedNumber, onUnblock: () -> Unit) {
             Text(
                 text = blocked.displayName,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge.autoDirection()
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(

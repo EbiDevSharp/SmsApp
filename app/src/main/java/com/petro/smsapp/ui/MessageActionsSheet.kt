@@ -30,6 +30,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
+import com.petro.smsapp.util.autoDirection
 
 /**
  * منوی کلیک روی پیام: «جزئیات پیام»، «باز کردن در نوت»، «کپی»، «اشتراک‌گذاری»،
@@ -225,7 +226,7 @@ private fun DetailRow(icon: ImageVector, label: String, value: String) {
         Spacer(modifier = Modifier.width(14.dp))
         Column {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            Text(value, style = MaterialTheme.typography.bodyMedium)
+            Text(value, style = MaterialTheme.typography.bodyMedium.autoDirection())
         }
     }
 }

@@ -27,6 +27,7 @@ import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.MessageGroupMember
 import com.petro.smsapp.data.MessageGroupSummary
 import com.petro.smsapp.data.SimInfo
+import com.petro.smsapp.util.autoDirection
 import kotlinx.coroutines.launch
 
 /**
@@ -343,7 +344,8 @@ private fun SelectedContactsRow(selected: List<ContactInfo>, onRemove: (ContactI
                     Text(
                         text = contact.name,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        style = LocalTextStyle.current.autoDirection()
                     )
                 },
                 trailingIcon = {
@@ -423,7 +425,7 @@ private fun ContactRow(contact: ContactInfo, isSelected: Boolean, onClick: () ->
         ContactAvatar(name = contact.name)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(contact.name, style = MaterialTheme.typography.bodyLarge)
+            Text(contact.name, style = MaterialTheme.typography.bodyLarge.autoDirection())
             // شماره‌ها همیشه چپ‌به‌راست نشون داده بشن - وگرنه شماره‌هایی که با +98
             // شروع می‌شن توی چیدمانِ راست‌به‌چپِ برنامه برعکس (چپکی) نشون داده می‌شدن
             Text(
