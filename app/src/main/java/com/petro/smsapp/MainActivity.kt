@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -30,6 +31,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
+import com.petro.smsapp.data.ContactsCache
+import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddBlockedNumberScreen
 import com.petro.smsapp.ui.AddBlockedSenderScreen
@@ -59,7 +62,9 @@ import com.petro.smsapp.ui.ThreadScreen
 import com.petro.smsapp.ui.TrashScreen
 import com.petro.smsapp.ui.ScheduledMessagesScreen
 import com.petro.smsapp.viewmodel.SmsViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -113,7 +118,8 @@ class MainActivity : ComponentActivity() {
                                 pickContactLauncher.launch(
                                     Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
                                 )
-                            }
+                            },
+                            onOpenContactInfo = { address -> openContactInfo(address) }
                         )
                     }
                 }
@@ -214,6 +220,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * دکمه‌ی مخاطبِ بالای صفحه‌ی چت این تابع رو صدا می‌زنه. اول با یه کوئریِ سبک (روی
+     * Dispatchers.IO) چک می‌کنه آیا این آدرس تو مخاطبینِ گوشی هست یا نه:
+     * - اگه بود -> Intent.ACTION_VIEW با lookupUri واقعیِ مخاطب، صفحه‌ی کاملِ خودِ اپ
+     *   مخاطبین (با عکس، همه‌ی شماره‌ها، ایمیل و بقیه‌ی فیلدها) باز میشه.
+     * - اگه نبود -> Intent.ACTION_INSERT با شماره‌ی از پیش پرشده، صفحه‌ی «افزودن مخاطب
+     *   جدید»ِ خودِ اپ مخاطبین باز میشه.
+     */
+    private fun openContactInfo(address: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val lookupUri = ContactsRepository(this@MainActivity).getContactLookupUri(address)
+            withContext(Dispatchers.Main) {
+                if (lookupUri != null) {
+                    startActivity(Intent(Intent.ACTION_VIEW, lookupUri))
+                } else {
+                    val insertIntent = Intent(ContactsContract.Intents.Insert.ACTION).apply {
+                        type = ContactsContract.RawContacts.CONTENT_TYPE
+                        putExtra(ContactsContract.Intents.Insert.PHONE, address)
+                    }
+                    try {
+                        startActivity(insertIntent)
+                    } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, "برنامه‌ی مخاطبین پیدا نشد", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
         const val EXTRA_THREAD_ID = "extra_thread_id"
         const val EXTRA_ADDRESS = "extra_address"
@@ -222,7 +257,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
+fun AppNavigation(
+    viewModel: SmsViewModel,
+    onPickContactClick: () -> Unit,
+    onOpenContactInfo: (String) -> Unit
+) {
     val navController = rememberNavController()
     val conversations by viewModel.conversations.collectAsState()
     val messages by viewModel.messages.collectAsState()
@@ -414,6 +453,11 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                 val address = backStackEntry.arguments?.getString("address") ?: ""
                 val displayName = backStackEntry.arguments?.getString("displayName") ?: address
 
+                // چون ContactsCache تو کل عمرِ اپ کش‌شده، این چک عملاً یه HashMap.get سبکه -
+                // نیازی به suspend/withContext نداره (هم‌خانواده‌ی همون استفاده‌ای که
+                // ConversationListScreen و بقیه‌ی صفحات برای اسمِ مخاطب ازش می‌کنن)
+                val isKnownContact = remember(address) { ContactsCache.getName(context, address) != null }
+
                 LaunchedEffect(threadId, address) {
                     NotificationManagerCompat.from(context).cancel(address.hashCode())
                 }
@@ -427,6 +471,8 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     favoriteIds = favoriteIds,
                     pinnedMessageIds = pinnedMessageIds,
                     initialDraft = draftText,
+                    isKnownContact = isKnownContact,
+                    onOpenContactInfo = { onOpenContactInfo(address) },
                     onSend = { body, subId -> viewModel.sendMessage(address, body, threadId, subId) },
                     onScheduleSend = { body, subId, at -> viewModel.scheduleMessage(address, displayName, body, subId, at) },
                     onDeleteMessage = { messageId -> viewModel.deleteMessage(threadId, messageId) },

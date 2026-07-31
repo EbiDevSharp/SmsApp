@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SelectAll
@@ -64,6 +66,12 @@ fun ThreadScreen(
     favoriteIds: Set<Long>,
     pinnedMessageIds: Set<Long> = emptySet(),
     initialDraft: String = "",
+    // اینکه این آدرس همین الان تو مخاطبینِ گوشی ذخیره‌ست یا نه - برای انتخابِ آیکن/برچسبِ
+    // درستِ دکمه‌ی بالای صفحه (مشاهده‌ی مخاطب در برابرِ افزودنِ مخاطبِ جدید)
+    isKnownContact: Boolean = false,
+    // با کلیک روی دکمه‌ی مخاطبِ بالای صفحه صدا زده میشه - صداکننده (MainActivity) تصمیم
+    // می‌گیره که Intent.ACTION_VIEW (مشاهده) بزنه یا Intent.ACTION_INSERT (افزودن)
+    onOpenContactInfo: () -> Unit = {},
     onSend: (body: String, subscriptionId: Int?) -> Unit,
     onScheduleSend: (body: String, subscriptionId: Int?, scheduledAt: Long) -> Unit,
     onDeleteMessage: (messageId: Long) -> Unit,
@@ -238,6 +246,18 @@ fun ThreadScreen(
                         title = { Text(displayName, style = LocalTextStyle.current.autoDirection()) },
                         navigationIcon = {
                             IconButton(onClick = onBack) { Text("←") }
+                        },
+                        actions = {
+                            // فقط برای آدرس‌های واقعاً قابل‌ارسال (شماره) معنی داره - برای
+                            // Sender ID های حروفی (اسمِ اپراتور و ...) نه مشاهده معنی داره نه افزودن
+                            if (canSend) {
+                                IconButton(onClick = onOpenContactInfo) {
+                                    Icon(
+                                        imageVector = if (isKnownContact) Icons.Filled.Person else Icons.Filled.PersonAdd,
+                                        contentDescription = if (isKnownContact) "مشاهده اطلاعات مخاطب" else "افزودن به مخاطبین"
+                                    )
+                                }
+                            }
                         }
                     )
                     if (currentPinnedMessage != null) {

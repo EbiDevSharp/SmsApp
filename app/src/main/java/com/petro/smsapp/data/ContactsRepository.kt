@@ -1,7 +1,10 @@
 package com.petro.smsapp.data
 
 import android.content.Context
+import android.net.Uri
 import android.provider.ContactsContract
+import android.util.Log
+import com.petro.smsapp.util.PhoneNumberUtils
 
 class ContactsRepository(private val context: Context) {
 
@@ -51,6 +54,48 @@ class ContactsRepository(private val context: Context) {
      * نه به‌صورت خودکار موقع باز شدنِ صفحه‌ی «پیام جدید».
      */
     fun getAllContacts(): List<ContactInfo> = queryContacts(selection = null, selectionArgs = null)
+
+    /**
+     * پیدا کردنِ Uri (lookup) واقعیِ مخاطبِ گوشی که با این آدرس/شماره مچ میشه - برای
+     * باز کردنِ صفحه‌ی کاملِ جزئیاتِ مخاطب (عکس، همه‌ی شماره‌ها، ایمیل و هر فیلدِ دیگه‌ای
+     * که کاربر ذخیره کرده) با Intent.ACTION_VIEW.
+     *
+     * اگه آدرس اصلاً یه شماره‌ی قابل‌ارسال نباشه (Sender ID حروفی مثل اسمِ اپراتور)، یا
+     * مجوز READ_CONTACTS نباشه، یا هیچ مخاطبی باهاش پیدا نشه، null برمی‌گرده - صداکننده
+     * در این حالت باید فرآیندِ «افزودنِ مخاطبِ جدید» (ACTION_INSERT) رو نشون بده.
+     *
+     * از ContactsContract.PhoneLookup استفاده می‌کنیم چون خودِ اندروید نرمال‌سازیِ
+     * شماره (فرمت‌های مختلف +98/0098/0912/912) رو داخلی انجام میده - نیازی به تکرارِ
+     * منطقِ نرمال‌سازیِ دستیِ ContactsCache/BlockRepository اینجا نیست.
+     */
+    fun getContactLookupUri(address: String): Uri? {
+        if (!PhoneNumberUtils.isSendableAddress(address)) return null
+        if (!PermissionHelper.hasReadContactsPermission(context)) return null
+        return try {
+            val lookupSourceUri = Uri.withAppendedPath(
+                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                Uri.encode(address)
+            )
+            context.contentResolver.query(
+                lookupSourceUri,
+                arrayOf(ContactsContract.PhoneLookup._ID, ContactsContract.PhoneLookup.LOOKUP_KEY),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idIdx = cursor.getColumnIndexOrThrow(ContactsContract.PhoneLookup._ID)
+                    val lookupKeyIdx = cursor.getColumnIndexOrThrow(ContactsContract.PhoneLookup.LOOKUP_KEY)
+                    val contactId = cursor.getLong(idIdx)
+                    val lookupKey = cursor.getString(lookupKeyIdx)
+                    ContactsContract.Contacts.getLookupUri(contactId, lookupKey)
+                } else {
+                    null
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.w("ContactsRepository", "SecurityException موقع پیدا کردنِ Uri مخاطب", e)
+            null
+        }
+    }
 
     private fun queryContacts(selection: String?, selectionArgs: Array<String>?): List<ContactInfo> {
         val contacts = mutableListOf<ContactInfo>()
