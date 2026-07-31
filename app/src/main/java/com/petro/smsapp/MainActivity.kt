@@ -389,6 +389,7 @@ fun AppNavigation(
                     swipeRightToLeftAction = appSettings.swipeRightToLeftAction,
                     swipeLeftToRightAction = appSettings.swipeLeftToRightAction,
                     swipeDeleteRequiresConfirmation = appSettings.swipeDeleteRequiresConfirmation,
+                    showContactNumberEnabled = appSettings.showContactNumberInListEnabled,
                     onMarkThreadRead = { threadId -> viewModel.markThreadReadFromSwipe(threadId) },
                     onMarkThreadUnread = { threadId -> viewModel.markThreadUnreadFromSwipe(threadId) }
                 )
@@ -536,8 +537,14 @@ fun AppNavigation(
                     trashedMessages = trash,
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
+                    onOpenNote = { text ->
+                        viewModel.openNote(text)
+                        navController.navigate("note")
+                    },
                     onRestore = { messageId -> viewModel.restoreFromTrash(messageId) },
-                    onPermanentDelete = { messageId -> viewModel.permanentlyDeleteFromTrash(messageId) }
+                    onRestoreMultiple = { messageIds -> viewModel.restoreMultipleFromTrash(messageIds) },
+                    onPermanentDelete = { messageId -> viewModel.permanentlyDeleteFromTrash(messageId) },
+                    onPermanentDeleteMultiple = { messageIds -> viewModel.permanentlyDeleteMultipleFromTrash(messageIds) }
                 )
             }
             composable("scheduled") {

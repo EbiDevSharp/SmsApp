@@ -49,6 +49,8 @@ object AppSettings {
     private const val KEY_BLOCK_NON_CONTACTS_NAME = "block_non_contacts_enabled"
     private const val KEY_MAX_PINNED_CONVERSATIONS_NAME = "max_pinned_conversations"
     private const val KEY_GROUP_MESSAGING_ENABLED_NAME = "group_messaging_enabled"
+    // نمایشِ شماره‌ی مخاطبینِ ذخیره‌شده زیرِ اسمشون توی لیستِ اصلیِ مکالمات (با فونتِ کوچیک‌تر)
+    private const val KEY_SHOW_CONTACT_NUMBER_IN_LIST_NAME = "show_contact_number_in_list"
     // جهتِ سویپ روی هر ردیفِ لیستِ مکالمات - هرکدوم یه SwipeAction.id ذخیره می‌کنه
     private const val KEY_SWIPE_RIGHT_TO_LEFT_ACTION_NAME = "swipe_right_to_left_action"
     private const val KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME = "swipe_left_to_right_action"
@@ -66,6 +68,7 @@ object AppSettings {
     private val KEY_BLOCK_NON_CONTACTS = booleanPreferencesKey(KEY_BLOCK_NON_CONTACTS_NAME)
     private val KEY_MAX_PINNED_CONVERSATIONS = intPreferencesKey(KEY_MAX_PINNED_CONVERSATIONS_NAME)
     private val KEY_GROUP_MESSAGING_ENABLED = booleanPreferencesKey(KEY_GROUP_MESSAGING_ENABLED_NAME)
+    private val KEY_SHOW_CONTACT_NUMBER_IN_LIST = booleanPreferencesKey(KEY_SHOW_CONTACT_NUMBER_IN_LIST_NAME)
     private val KEY_SWIPE_RIGHT_TO_LEFT_ACTION = stringPreferencesKey(KEY_SWIPE_RIGHT_TO_LEFT_ACTION_NAME)
     private val KEY_SWIPE_LEFT_TO_RIGHT_ACTION = stringPreferencesKey(KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME)
     private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
@@ -112,6 +115,9 @@ object AppSettings {
         // اگه فعال باشه، توی «پیام جدید» امکان ذخیره‌ی چند مخاطبِ انتخاب‌شده به‌عنوان یه
         // «گروه» و بارگذاری دوباره‌شون در آینده فراهم میشه (بدونِ انتخابِ دوباره‌ی تک‌تکشون)
         val groupMessagingEnabled: Boolean = false,
+        // اگه فعال باشه، زیرِ اسمِ مخاطبینِ ذخیره‌شده (تو لیستِ اصلیِ مکالمات) شماره‌شون هم
+        // با فونتِ کوچیک‌تر نشون داده میشه
+        val showContactNumberInListEnabled: Boolean = false,
         // عملیاتی که با کشیدنِ هر ردیفِ لیستِ مکالمات از راست به چپ اجرا میشه
         val swipeRightToLeftAction: SwipeAction = DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION,
         // عملیاتی که با کشیدنِ هر ردیفِ لیستِ مکالمات از چپ به راست اجرا میشه
@@ -155,6 +161,7 @@ object AppSettings {
                         blockNonContactsEnabled = prefs[KEY_BLOCK_NON_CONTACTS] ?: false,
                         maxPinnedConversations = prefs[KEY_MAX_PINNED_CONVERSATIONS] ?: DEFAULT_MAX_PINNED_CONVERSATIONS,
                         groupMessagingEnabled = prefs[KEY_GROUP_MESSAGING_ENABLED] ?: false,
+                        showContactNumberInListEnabled = prefs[KEY_SHOW_CONTACT_NUMBER_IN_LIST] ?: false,
                         swipeRightToLeftAction = SwipeAction.fromId(prefs[KEY_SWIPE_RIGHT_TO_LEFT_ACTION], DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION),
                         swipeLeftToRightAction = SwipeAction.fromId(prefs[KEY_SWIPE_LEFT_TO_RIGHT_ACTION], DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION),
                         swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true
@@ -219,6 +226,11 @@ object AppSettings {
 
     fun setGroupMessagingEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_GROUP_MESSAGING_ENABLED] = enabled }
+
+    fun isShowContactNumberInListEnabled(context: Context): Boolean = _state.value.showContactNumberInListEnabled
+
+    fun setShowContactNumberInListEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SHOW_CONTACT_NUMBER_IN_LIST] = enabled }
 
     fun getSwipeRightToLeftAction(context: Context): SwipeAction = _state.value.swipeRightToLeftAction
 

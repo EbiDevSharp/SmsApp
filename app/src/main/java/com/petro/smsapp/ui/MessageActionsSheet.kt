@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.util.DateFormatter
@@ -212,12 +213,19 @@ private fun MessageDetailsContent(message: SmsMessage, contactDisplayName: Strin
             DetailRow(Icons.Filled.Done, "زمان دریافت", DateFormatter.formatFull(message.date))
         }
         DetailRow(Icons.Filled.Info, "نوع", typeLabel(message))
-        DetailRow(Icons.Filled.Person, "فرستنده", if (message.isOutgoing) "شما" else contactDisplayName)
+        // برای پیامِ دریافتی، اگه اسمِ نمایشی واقعاً یه اسمِ مخاطبِ ذخیره‌شده باشه (نه خودِ
+        // شماره)، شماره‌ی طرف رو هم به‌عنوانِ زیرمقدار (کوچیک‌تر و چپ‌به‌راست) نشون بده
+        DetailRow(
+            icon = Icons.Filled.Person,
+            label = "فرستنده",
+            value = if (message.isOutgoing) "شما" else contactDisplayName,
+            subValue = if (!message.isOutgoing && contactDisplayName != message.address) message.address else null
+        )
     }
 }
 
 @Composable
-private fun DetailRow(icon: ImageVector, label: String, value: String) {
+private fun DetailRow(icon: ImageVector, label: String, value: String, subValue: String? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = 10.dp)
@@ -227,6 +235,13 @@ private fun DetailRow(icon: ImageVector, label: String, value: String) {
         Column {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             Text(value, style = MaterialTheme.typography.bodyMedium.autoDirection())
+            if (subValue != null) {
+                Text(
+                    text = subValue,
+                    style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+                    color = Color.Gray
+                )
+            }
         }
     }
 }

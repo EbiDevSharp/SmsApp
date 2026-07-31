@@ -243,7 +243,20 @@ fun ThreadScreen(
                     )
                 } else {
                     TopAppBar(
-                        title = { Text(displayName, style = LocalTextStyle.current.autoDirection()) },
+                        title = {
+                            Column {
+                                Text(displayName, style = LocalTextStyle.current.autoDirection())
+                                // فقط وقتی این آدرس واقعاً تو مخاطبینِ گوشی ذخیره‌ست، شماره‌ش
+                                // رو هم زیرِ اسم نشون بده - همیشه چپ‌به‌راست
+                                if (isKnownContact) {
+                                    Text(
+                                        text = address,
+                                        style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
+                        },
                         navigationIcon = {
                             IconButton(onClick = onBack) { Text("←") }
                         },

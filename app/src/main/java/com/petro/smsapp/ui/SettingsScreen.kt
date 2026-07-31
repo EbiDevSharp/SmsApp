@@ -140,6 +140,21 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
             )
             Divider()
 
+            // نمایشِ شماره‌ی مخاطبینِ ذخیره‌شده زیرِ اسمشون توی لیستِ اصلیِ مکالمات
+            ListItem(
+                headlineContent = { Text("نمایش شماره‌ی مخاطب در لیست چت‌ها") },
+                supportingContent = {
+                    Text("زیرِ اسمِ مخاطبینِ ذخیره‌شده، توی لیستِ اصلیِ مکالمات، شماره‌شون هم با فونتِ کوچیک‌تر نشون داده بشه")
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.showContactNumberInListEnabled,
+                        onCheckedChange = { enabled -> AppSettings.setShowContactNumberInListEnabled(context, enabled) }
+                    )
+                }
+            )
+            Divider()
+
             // سویپِ ردیف‌های لیستِ مکالمات - جهتِ راست‌به‌چپ و چپ‌به‌راست هرکدوم جدا قابل‌تنظیمن
             ListItem(
                 headlineContent = { Text("سویپِ لیستِ مکالمات") },

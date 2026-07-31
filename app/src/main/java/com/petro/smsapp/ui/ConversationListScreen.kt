@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -70,6 +71,9 @@ import kotlin.math.roundToInt
  *   قابل‌تنظیم از صفحه‌ی تنظیمات دارن (خوانده/ناخوانده‌شدن، حذف، تماس، بلاک). حین
  *   کشیدن، پس‌زمینه‌ی ردیف رنگِ همون عملیات رو می‌گیره و آیکنش نزدیکِ لبه‌ی
  *   بازشده (جایی که کشیدن از اونجا شروع شده) نشون داده میشه.
+ * - اگه از تنظیمات «نمایش شماره‌ی مخاطب در لیست چت‌ها» فعال شده باشه، زیرِ اسمِ
+ *   مخاطبینی که واقعاً تو گوشی ذخیره‌ن (یعنی address با displayName فرق داره) شماره‌شون
+ *   هم با فونتِ کوچیک‌تر و همیشه چپ‌به‌راست نشون داده میشه.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -85,6 +89,7 @@ fun ConversationListScreen(
     swipeRightToLeftAction: SwipeAction = SwipeAction.NONE,
     swipeLeftToRightAction: SwipeAction = SwipeAction.NONE,
     swipeDeleteRequiresConfirmation: Boolean = true,
+    showContactNumberEnabled: Boolean = false,
     onMarkThreadRead: (threadId: Long) -> Unit = {},
     onMarkThreadUnread: (threadId: Long) -> Unit = {}
 ) {
@@ -233,12 +238,12 @@ fun ConversationListScreen(
                 TopAppBar(
                     title = {
                         Text("پیام‌ها", fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable {
-                            scope.launch { listState.animateScrollToItem(0) }
-                        })
+                            modifier = Modifier.clickable {
+                                scope.launch { listState.animateScrollToItem(0) }
+                            })
 
 
-                            },
+                    },
                     navigationIcon = {
                         IconButton(onClick = onMenuClick) {
                             Icon(Icons.Filled.Menu, contentDescription = "منو")
@@ -275,6 +280,7 @@ fun ConversationListScreen(
                         isSelected = selectedIds.contains(conversation.threadId),
                         rightToLeftAction = swipeRightToLeftAction,
                         leftToRightAction = swipeLeftToRightAction,
+                        showContactNumberEnabled = showContactNumberEnabled,
                         onClick = {
                             if (selectionMode) {
                                 selectedIds = if (selectedIds.contains(conversation.threadId)) {
@@ -351,6 +357,7 @@ private fun SwipeableConversationRow(
     isSelected: Boolean,
     rightToLeftAction: SwipeAction,
     leftToRightAction: SwipeAction,
+    showContactNumberEnabled: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onMarkRead: () -> Unit,
@@ -455,6 +462,7 @@ private fun SwipeableConversationRow(
                 conversation = conversation,
                 selectionMode = selectionMode,
                 isSelected = isSelected,
+                showContactNumberEnabled = showContactNumberEnabled,
                 onClick = onClick,
                 onLongClick = onLongClick
             )
@@ -486,6 +494,7 @@ private fun ConversationRow(
     conversation: Conversation,
     selectionMode: Boolean,
     isSelected: Boolean,
+    showContactNumberEnabled: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -520,6 +529,15 @@ private fun ConversationRow(
                     text = conversation.displayName,
                     fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal,
                     style = MaterialTheme.typography.bodyLarge.autoDirection()
+                )
+            }
+            // فقط وقتی این آدرس واقعاً یه مخاطبِ ذخیره‌شده‌ست (یعنی اسمِ نمایشی با خودِ
+            // شماره فرق داره) و کاربر از تنظیمات این گزینه رو فعال کرده باشه
+            if (showContactNumberEnabled && conversation.address.isNotBlank() && conversation.address != conversation.displayName) {
+                Text(
+                    text = conversation.address,
+                    style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+                    color = Color.Gray
                 )
             }
             Spacer(modifier = Modifier.height(2.dp))

@@ -440,9 +440,33 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** نسخه‌ی گروهیِ restoreFromTrash - برای دکمه‌ی «بازگردانی» تو حالت انتخاب‌چندتاییِ سطل زباله */
+    fun restoreMultipleFromTrash(messageIds: Set<Long>) {
+        if (messageIds.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                messageIds.forEach { repository.restoreFromTrash(it) }
+            }
+            loadTrash()
+            loadConversations()
+            openThreadId?.let { refreshMessages(it) }
+        }
+    }
+
     fun permanentlyDeleteFromTrash(messageId: Long) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.permanentlyDelete(messageId) }
+            loadTrash()
+        }
+    }
+
+    /** نسخه‌ی گروهیِ permanentlyDeleteFromTrash - برای دکمه‌ی «حذف همیشگی» تو حالت انتخاب‌چندتاییِ سطل زباله */
+    fun permanentlyDeleteMultipleFromTrash(messageIds: Set<Long>) {
+        if (messageIds.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                messageIds.forEach { repository.permanentlyDelete(it) }
+            }
             loadTrash()
         }
     }
