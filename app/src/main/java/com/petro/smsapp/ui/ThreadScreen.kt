@@ -533,14 +533,15 @@ private fun MessageBubble(
 ) {
     val alignment = if (message.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = when {
-        message.isFailed -> Color(0xFFFFCDD2)
+        message.isFailed -> MaterialTheme.colorScheme.errorContainer
         message.isOutgoing -> MaterialTheme.colorScheme.primary
-        else -> Color(0xFFE5E5EA)
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
+
     val textColor = when {
-        message.isFailed -> Color(0xFFB71C1C)
-        message.isOutgoing -> Color.White
-        else -> Color.Black
+        message.isFailed -> MaterialTheme.colorScheme.onErrorContainer
+        message.isOutgoing -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val fontSize = (16 * fontScale).sp
 

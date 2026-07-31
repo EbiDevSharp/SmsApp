@@ -548,8 +548,8 @@ private fun ConversationRow(
                 maxLines = 1,
                 color = when {
                     conversation.isDraft -> MaterialTheme.colorScheme.error
-                    conversation.unreadCount > 0 -> Color.Black
-                    else -> Color.Gray
+                    conversation.unreadCount > 0 -> MaterialTheme.colorScheme.onSurface
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 fontWeight = if (conversation.isDraft) FontWeight.Medium else FontWeight.Normal,
                 style = MaterialTheme.typography.bodyMedium
