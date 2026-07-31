@@ -593,7 +593,7 @@ private fun MessageBubble(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(text = "•", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 Spacer(modifier = Modifier.width(4.dp))
-                SmsSegmentIndicator(text = message.body)
+                SmsSegmentIndicator(text = message.body, showRemaining = false)
                 if (message.isOutgoing) {
                     Spacer(modifier = Modifier.width(4.dp))
                     when {

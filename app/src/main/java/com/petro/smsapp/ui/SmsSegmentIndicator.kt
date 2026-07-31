@@ -22,13 +22,16 @@ fun SmsSegmentIndicator(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = Color.Gray,
-    fontSize: androidx.compose.ui.unit.TextUnit = 11.sp
+    fontSize: androidx.compose.ui.unit.TextUnit = 11.sp,
+    showRemaining: Boolean = true   // ← جدید: true = باقی‌مونده (نوار ارسال)، false = کلِ کاراکتر (حباب پیام)
 ) {
     val info = remember(text) { SmsSegmentCalculator.calculate(text) }
+    val count = if (showRemaining) info.remainingChars else info.totalLength
     Text(
-        text = "${info.remainingChars}/${info.segmentCount}",
+        text = "$count/${info.segmentCount}",
         color = color,
         fontSize = fontSize,
-        style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr)
+        style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+        modifier = modifier
     )
 }

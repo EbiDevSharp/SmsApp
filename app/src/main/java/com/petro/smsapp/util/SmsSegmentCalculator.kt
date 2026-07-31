@@ -26,7 +26,8 @@ object SmsSegmentCalculator {
         // تعداد پیامکی که برای ارسال این متن لازمه (حداقل ۱، حتی برای متن خالی)
         val segmentCount: Int,
         // true یعنی متن به‌خاطر داشتنِ کاراکتر غیرِ GSM-7 (مثلاً فارسی) به‌صورت UCS-2 ارسال میشه
-        val isUnicode: Boolean
+        val isUnicode: Boolean,
+        val totalLength: Int   // ← جدید: تعداد کاراکتر واقعیِ مصرف‌شده (برای حباب پیام‌ها)
     )
 
     private const val SINGLE_SEGMENT_GSM7 = 160
@@ -74,7 +75,8 @@ object SmsSegmentCalculator {
         return SmsSegmentInfo(
             remainingChars = remainingChars,
             segmentCount = segmentCount,
-            isUnicode = isUnicode
+            isUnicode = isUnicode,
+            totalLength = length   // ← جدید
         )
     }
 }

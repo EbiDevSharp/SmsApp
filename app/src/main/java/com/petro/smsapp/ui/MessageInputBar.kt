@@ -94,18 +94,7 @@ fun MessageInputBar(
             }
         }
 
-        // شمارنده‌ی کوچیکِ کاراکتر/پیامک - فقط وقتی متنی تایپ شده نشون داده میشه، تا
-        // وقتی کادر خالیه چیزِ اضافه‌ای شلوغش نکنه
-        if (value.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                SmsSegmentIndicator(text = value)
-            }
-        }
+
 
         Row(
             modifier = Modifier
@@ -114,19 +103,36 @@ fun MessageInputBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // اول میاد تا توی چیدمان راست‌به‌چپ سمت راستِ کادر بشینه (دقیقاً هم‌جهت با قبل)
-            FilledIconButton(
-                onClick = onSendClick,
-                enabled = value.isNotBlank(),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = if (scheduledAt != null) "زمان‌بندی ارسال" else "ارسال",
-                    tint = Color.White
-                )
+            Box(contentAlignment = Alignment.TopCenter) {
+                FilledIconButton(
+                    onClick = onSendClick,
+                    enabled = value.isNotBlank(),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = if (scheduledAt != null) "زمان‌بندی ارسال" else "ارسال",
+                        tint = Color.White
+                    )
+                }
+                if (value.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.offset(y = (-12).dp)
+                    ) {
+                        SmsSegmentIndicator(
+                            text = value,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
             }
+
             Spacer(modifier = Modifier.width(8.dp))
             OutlinedTextField(
                 value = value,
