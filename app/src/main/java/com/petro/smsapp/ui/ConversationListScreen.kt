@@ -74,6 +74,8 @@ import kotlin.math.roundToInt
  * - اگه از تنظیمات «نمایش شماره‌ی مخاطب در لیست چت‌ها» فعال شده باشه، زیرِ اسمِ
  *   مخاطبینی که واقعاً تو گوشی ذخیره‌ن (یعنی address با displayName فرق داره) شماره‌شون
  *   هم با فونتِ کوچیک‌تر و همیشه چپ‌به‌راست نشون داده میشه.
+ * - آواتارِ هر ردیف (ContactAvatar) اگه مخاطب تو گوشی عکس داشته باشه، همون عکسِ واقعی
+ *   رو نشون میده؛ وگرنه دایره‌ی رنگی با حرفِ اول (رفتار قبلی).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -509,7 +511,7 @@ private fun ConversationRow(
         if (selectionMode) {
             SelectionAvatar(isSelected = isSelected)
         } else {
-            Avatar(name = conversation.displayName)
+            ContactAvatar(name = conversation.displayName, address = conversation.address)
         }
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -579,20 +581,6 @@ private fun ConversationRow(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun Avatar(name: String) {
-    val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(initial, color = Color.White, style = MaterialTheme.typography.titleMedium)
     }
 }
 

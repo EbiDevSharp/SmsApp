@@ -34,10 +34,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.petro.smsapp.data.ScheduledMessage
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
@@ -98,8 +101,25 @@ fun ThreadScreen(
     }
     val latestInput = rememberUpdatedState(input)
     val latestOnLeave = rememberUpdatedState(onLeaveWithDraft)
+    // حالتِ اول: کاربر از داخلِ اپ به صفحه‌ی دیگه‌ای میره (این Composable کامل از
+    // ترکیب خارج میشه) -> onDispose فوراً صدا زده میشه.
     DisposableEffect(Unit) {
         onDispose { latestOnLeave.value(latestInput.value) }
+    }
+    // حالتِ دوم (که قبلاً اصلاً پوشش داده نمی‌شد): کاربر بدونِ خارج شدن از این صفحه،
+    // کلِ اپ رو ترک می‌کنه (دکمه‌ی Home، سوییچ به اپِ دیگه، خاموش‌شدنِ صفحه و ...).
+    // توی این حالت Composable هنوز از ترکیب خارج نشده، پس onDispose بالا صدا زده
+    // نمیشه و متنِ تایپ‌شده بدونِ ذخیره از دست می‌رفت. با گوش‌دادن به ON_STOP چرخه‌ی
+    // عمرِ صفحه، همینجا هم پیش‌نویس ذخیره میشه.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                latestOnLeave.value(latestInput.value)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val canSend = remember(address) { PhoneNumberUtils.isSendableAddress(address) }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
@@ -244,16 +264,26 @@ fun ThreadScreen(
                 } else {
                     TopAppBar(
                         title = {
-                            Column {
-                                Text(displayName, style = LocalTextStyle.current.autoDirection())
-                                // فقط وقتی این آدرس واقعاً تو مخاطبینِ گوشی ذخیره‌ست، شماره‌ش
-                                // رو هم زیرِ اسم نشون بده - همیشه چپ‌به‌راست
-                                if (isKnownContact) {
-                                    Text(
-                                        text = address,
-                                        style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
-                                        color = Color.Gray
-                                    )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // عکسِ واقعیِ مخاطب (اگه تو گوشی ذخیره باشه و عکس داشته باشه)،
+                                // وگرنه دایره‌ی رنگی با حرفِ اول - قبلاً این آواتار اصلاً اینجا نبود
+                                ContactAvatar(
+                                    name = displayName,
+                                    address = address,
+                                    size = 36.dp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(displayName, style = LocalTextStyle.current.autoDirection())
+                                    // فقط وقتی این آدرس واقعاً یه مخاطبِ ذخیره‌شده‌ی گوشیه، شماره‌ش
+                                    // رو هم زیرِ اسم نشون بده - همیشه چپ‌به‌راست
+                                    if (isKnownContact) {
+                                        Text(
+                                            text = address,
+                                            style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+                                            color = Color.Gray
+                                        )
+                                    }
                                 }
                             }
                         },

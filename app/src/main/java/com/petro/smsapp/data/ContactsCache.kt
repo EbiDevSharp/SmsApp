@@ -16,6 +16,11 @@ import android.util.Log
  * (مثلاً +98912...، 0912...، یا 912...) ممکنه دقیقاً با فرمتی که تو مخاطبین ذخیره شده یکی
  * نباشه؛ همون کاری که خودِ PhoneLookup داخلی انجام میده رو با یه نسخه‌ی ساده‌شده شبیه‌سازی می‌کنیم.
  *
+ * علاوه بر اسم، آدرسِ عکسِ پروفایلِ مخاطب (ستونِ PHOTO_URI که خودِ Contacts Provider
+ * برمی‌گردونه) هم همینجا کش میشه - قبلاً اصلاً خونده نمی‌شد و برای همین هیچ‌جای برنامه
+ * (نه لیست مکالمات، نه خودِ چت) عکسِ واقعیِ مخاطب نشون داده نمی‌شد، همیشه فقط دایره‌ی
+ * رنگی با حرفِ اول اسم بود.
+ *
  * object هست (نه یه کلاس معمولی) چون باید در طول عمر اپ یه کش مشترک باشه، نه اینکه هر بار
  * SmsRepository جدید ساخته میشه از اول خونده بشه.
  *
@@ -28,7 +33,10 @@ import android.util.Log
  */
 object ContactsCache {
 
-    @Volatile private var cache: Map<String, String> = emptyMap()
+    /** اطلاعاتِ کش‌شده‌ی هر مخاطب - name همیشه پره، photoUri فقط اگه مخاطب واقعاً عکس داشته باشه */
+    data class Entry(val name: String, val photoUri: String?)
+
+    @Volatile private var cache: Map<String, Entry> = emptyMap()
     @Volatile private var isLoaded = false
 
     /** موقعی صدا زده میشه که مخاطبین گوشی عوض شده باشن (اضافه/حذف/ادیت) تا دفعه‌ی بعد دوباره خونده بشن */
@@ -40,14 +48,22 @@ object ContactsCache {
         ensureLoaded(context)
         val key = normalize(address)
         if (key.isBlank()) return null
-        return cache[key]
+        return cache[key]?.name
+    }
+
+    /** آدرسِ (content://) عکسِ پروفایلِ مخاطب - null اگه مخاطب پیدا نشه یا عکسی نداشته باشه */
+    fun getPhotoUri(context: Context, address: String): String? {
+        ensureLoaded(context)
+        val key = normalize(address)
+        if (key.isBlank()) return null
+        return cache[key]?.photoUri
     }
 
     @Synchronized
     private fun ensureLoaded(context: Context) {
         if (isLoaded) return
         if (!PermissionHelper.hasReadContactsPermission(context)) {
-            Log.w("ContactsCache", "مجوز READ_CONTACTS نیست - اسم مخاطبین لود نمیشه (به‌جاش خودِ شماره نشون داده میشه)")
+            Log.w("ContactsCache", "مجوز READ_CONTACTS نیست - اسم/عکس مخاطبین لود نمیشه (به‌جاش خودِ شماره نشون داده میشه)")
             cache = emptyMap()
             return // isLoaded=false می‌مونه، دفعه‌ی بعد که مجوز داده بشه دوباره تلاش میشه
         }
@@ -55,24 +71,27 @@ object ContactsCache {
         isLoaded = true
     }
 
-    private fun loadAllContacts(context: Context): Map<String, String> {
-        val map = HashMap<String, String>()
+    private fun loadAllContacts(context: Context): Map<String, Entry> {
+        val map = HashMap<String, Entry>()
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-            ContactsContract.CommonDataKinds.Phone.NUMBER
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_URI
         )
         try {
             context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                 val nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                 val numberIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val photoIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
                 if (nameIdx < 0 || numberIdx < 0) return@use
                 while (cursor.moveToNext()) {
                     val number = cursor.getString(numberIdx) ?: continue
                     val name = cursor.getString(nameIdx) ?: continue
+                    val photoUri = if (photoIdx >= 0) cursor.getString(photoIdx) else null
                     val key = normalize(number)
-                    // اگه یه شماره تکراری با دو اسم مختلف بود (بعیده ولی ممکنه)، اولی رو نگه می‌داریم
-                    if (key.isNotBlank()) map.putIfAbsent(key, name)
+                    // اگه یه شماره تکراری با دو اسم/عکس مختلف بود (بعیده ولی ممکنه)، اولی رو نگه می‌داریم
+                    if (key.isNotBlank()) map.putIfAbsent(key, Entry(name, photoUri))
                 }
             }
         } catch (e: SecurityException) {
@@ -87,4 +106,3 @@ object ContactsCache {
         return if (digitsOnly.length > 9) digitsOnly.takeLast(9) else digitsOnly
     }
 }
-

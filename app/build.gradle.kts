@@ -58,4 +58,7 @@ dependencies {
 
     // DataStore (Preferences) - جایگزین AppSettings و رمز بخش خصوصی
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Coil - برای نمایش عکسِ پروفایلِ مخاطبین (لیست مکالمات و صفحه‌ی چت) از content:// URI
+    implementation("io.coil-kt:coil-compose:2.6.0")
 }
