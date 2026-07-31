@@ -588,6 +588,12 @@ private fun MessageBubble(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray
                 )
+                // شمارنده‌ی ریزِ تعداد کاراکتر/تعداد پیامک، کنارِ تاریخ - برای هر دو پیامِ
+                // ارسالی و دریافتی، تا کاربر بتونه ببینه مثلاً یه پیامِ طولانی چند پیامک حساب شده
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "•", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Spacer(modifier = Modifier.width(4.dp))
+                SmsSegmentIndicator(text = message.body)
                 if (message.isOutgoing) {
                     Spacer(modifier = Modifier.width(4.dp))
                     when {

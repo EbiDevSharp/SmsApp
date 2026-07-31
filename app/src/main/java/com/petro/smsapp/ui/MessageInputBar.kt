@@ -28,6 +28,11 @@ import com.petro.smsapp.util.DateFormatter
  * اگه یه زمان انتخاب شده باشه، یه چیپ بالای کادر نشونش میده (کلیک روش = ویرایش زمان،
  * ضربدر کنارش = لغوِ زمان‌بندی و برگشت به ارسال فوری). خودِ تصمیم اینکه ارسال فوری بشه
  * یا زمان‌بندی‌شده، با صداکننده‌ست (توی onSendClick مقدار فعلیِ scheduledAt رو خودش چک می‌کنه).
+ *
+ * یه ردیفِ کوچیکِ «تعداد کاراکترِ باقی‌مونده/تعداد پیامک» (مثلاً 160/1) هم بالای کادرِ
+ * متن، سمتِ چپ (چون همیشه چپ‌به‌راست نشون داده میشه) اضافه شده - از همون
+ * SmsSegmentCalculator/SmsSegmentIndicator که زیرِ هر حباب پیام هم استفاده میشه، پس
+ * منطقش دقیقاً یکیه و اگه بعداً بخواد عوض بشه فقط یه‌جا لازمه تغییر کنه.
  */
 @Composable
 fun MessageInputBar(
@@ -86,6 +91,19 @@ fun MessageInputBar(
                 IconButton(onClick = { onScheduledAtChange(null) }) {
                     Icon(Icons.Filled.Close, contentDescription = "لغو زمان‌بندی", modifier = Modifier.size(18.dp))
                 }
+            }
+        }
+
+        // شمارنده‌ی کوچیکِ کاراکتر/پیامک - فقط وقتی متنی تایپ شده نشون داده میشه، تا
+        // وقتی کادر خالیه چیزِ اضافه‌ای شلوغش نکنه
+        if (value.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                SmsSegmentIndicator(text = value)
             }
         }
 
