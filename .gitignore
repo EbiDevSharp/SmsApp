@@ -10,3 +10,4 @@ local.properties
 /app/release/baselineProfiles/1/app-release.dm
 /key
 /app/release/output-metadata.json
+/gradle/gradle-daemon-jvm.properties
