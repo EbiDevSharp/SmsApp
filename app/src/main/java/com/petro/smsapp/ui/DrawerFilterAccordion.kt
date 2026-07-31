@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MarkChatUnread
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -135,4 +137,6 @@ fun DrawerFilterAccordion(
 /** آیکنِ هر نوع فیلتر - آیتم‌های بعدی که اضافه بشن، فقط یه شاخه‌ی when جدید اینجا لازم دارن */
 private fun iconForFilter(type: ConversationFilterType): ImageVector = when (type) {
     ConversationFilterType.UNREAD -> Icons.Filled.MarkChatUnread
+    ConversationFilterType.PINNED -> Icons.Filled.PushPin
+    ConversationFilterType.NON_CONTACT -> Icons.Filled.PersonOff
 }
