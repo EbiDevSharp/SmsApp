@@ -20,9 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.MessageGroupMember
 import com.petro.smsapp.data.MessageGroupSummary
@@ -55,6 +58,16 @@ import kotlinx.coroutines.launch
  *    onScheduleSend) میره - یعنی بعدش دقیقاً مثلِ قبل میره تو چتِ همون مخاطب. اگه
  *    بیشتر از یکی انتخاب شده باشه، پیام جدا-جدا به تک‌تکشون ارسال میشه
  *    (onSendToMultiple/onScheduleToMultiple) و صفحه برمی‌گرده به لیست مکالمات.
+ *
+ * ۶) ذخیره‌ی پیش‌نویس (فقط وقتی دقیقاً یک گیرنده انتخاب شده) دو مسیرِ خروج رو پوشش
+ *    میده - عیناً هم‌خانواده‌ی همون منطقِ ThreadScreen:
+ *    - خروجِ داخلِ اپ (کاربر با دکمه‌ی برگشتِ بالای صفحه یا Navigation از این Composable
+ *      خارج میشه) -> DisposableEffect(Unit) با onDispose فوراً صدا زده میشه.
+ *    - خروجِ کامل از اپ بدونِ خارج شدن از این صفحه (دکمه‌ی Home، سوییچ به اپِ دیگه،
+ *      خاموش‌شدنِ صفحه و ...) -> قبلاً اصلاً پوشش داده نمی‌شد، چون این صفحه فقط اون
+ *      DisposableEffect بالا رو داشت (که با ترکِ اپ از این طریق، Composable هنوز از
+ *      ترکیب خارج نشده و onDispose صدا زده نمیشه). با گوش‌دادن به رویدادِ ON_STOP
+ *      چرخه‌ی عمرِ صفحه (دقیقاً همون الگوی ThreadScreen)، همینجا هم پیش‌نویس ذخیره میشه.
  */
 @Composable
 fun NewMessageScreen(
@@ -113,13 +126,33 @@ fun NewMessageScreen(
     val latestSelected = rememberUpdatedState(selectedContacts)
     val latestBody = rememberUpdatedState(messageBody)
     val latestOnLeave = rememberUpdatedState(onLeaveWithDraft)
+
+    fun saveDraftIfNeeded() {
+        val single = latestSelected.value.singleOrNull()
+        if (single != null) {
+            latestOnLeave.value(single.phoneNumber, single.name, latestBody.value)
+        }
+    }
+
+    // حالتِ اول: کاربر از داخلِ اپ به صفحه‌ی دیگه‌ای میره (این Composable کامل از
+    // ترکیب خارج میشه) -> onDispose فوراً صدا زده میشه.
     DisposableEffect(Unit) {
-        onDispose {
-            val single = latestSelected.value.singleOrNull()
-            if (single != null) {
-                latestOnLeave.value(single.phoneNumber, single.name, latestBody.value)
+        onDispose { saveDraftIfNeeded() }
+    }
+    // حالتِ دوم (که قبلاً اصلاً پوشش داده نمی‌شد): کاربر بدونِ خارج شدن از این صفحه،
+    // کلِ اپ رو ترک می‌کنه (دکمه‌ی Home، سوییچ به اپِ دیگه، خاموش‌شدنِ صفحه و ...).
+    // توی این حالت Composable هنوز از ترکیب خارج نشده، پس onDispose بالا صدا زده
+    // نمیشه و متنِ تایپ‌شده بدونِ ذخیره از دست می‌رفت. با گوش‌دادن به ON_STOP چرخه‌ی
+    // عمرِ صفحه، همینجا هم پیش‌نویس ذخیره میشه.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                saveDraftIfNeeded()
             }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(pickedContact) {

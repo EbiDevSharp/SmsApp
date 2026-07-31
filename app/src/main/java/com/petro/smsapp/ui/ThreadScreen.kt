@@ -393,6 +393,9 @@ fun ThreadScreen(
             LazyColumn(
                 state = listState,
                 reverseLayout = true,
+                contentPadding = PaddingValues(
+                    bottom = 60.dp
+                ),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 8.dp)

@@ -122,7 +122,7 @@ fun MessageInputBar(
                         shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.surface,
                         shadowElevation = 2.dp,
-                        modifier = Modifier.offset(y = (-12).dp)
+                        modifier = Modifier.offset(y = (-18).dp)
                     ) {
                         SmsSegmentIndicator(
                             text = value,
