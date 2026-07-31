@@ -95,10 +95,17 @@ data class PinEntity(
     val pinnedAt: Long
 )
 
-/** جایگزین PinnedMessageStore (پین یه پیام خاص داخل چت) */
+/**
+ * جایگزین PinnedMessageStore (پین یه پیام خاص داخل چت).
+ *
+ * فیلدِ threadId بعداً اضافه شد (نسخه‌ی ۳ دیتابیس - MIGRATION_2_3 توی AppDatabase) تا
+ * بشه فهمید هر پیامِ پین‌شده مالِ کدوم مکالمه‌ست، بدونِ نیاز به کوئری اضافه به Telephony
+ * Provider - برای فیلترِ «دارای پیام سنجاق‌شده» توی آکاردئونِ درآور لازم شد.
+ */
 @Entity(tableName = "pinned_messages")
 data class PinnedMessageEntity(
-    @PrimaryKey val messageId: Long
+    @PrimaryKey val messageId: Long,
+    val threadId: Long = 0L
 )
 
 /** جایگزین ScheduledMessageStore */

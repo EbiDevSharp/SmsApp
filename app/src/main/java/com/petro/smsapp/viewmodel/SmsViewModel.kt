@@ -111,6 +111,23 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     val pinnedMessageIds: StateFlow<Set<Long>> =
         pinRepository.observePinnedMessageIds().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    /**
+     * threadId هایی که حداقل یه پیامِ پین‌شده دارن - برای فیلترِ «دارای پیام سنجاق‌شده»
+     * توی آکاردئونِ درآور. جدا از pinnedMessageIds (که سطحِ خودِ پیامه، برای نمایشِ
+     * بج/بوردر روی حبابِ پیام داخل ThreadScreen استفاده میشه).
+     */
+    val pinnedMessageThreadIds: StateFlow<Set<Long>> =
+        pinRepository.observePinnedMessageThreadIds().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    /**
+     * threadId هایی که حداقل یه پیامِ فیوریت‌شده دارن - برای فیلترِ «دارای پیام علاقه‌مند»
+     * توی آکاردئونِ درآور. چون FavoriteMessage از قبل threadId رو داره، نیازی به کوئریِ
+     * جداگانه به دیتابیس نیست - فقط از روی همون لیستِ favorites که reactive هست map میشه.
+     */
+    val favoriteThreadIds: StateFlow<Set<Long>> =
+        favorites.map { list -> list.map { it.threadId }.toSet() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
     val blockedNumbers: StateFlow<List<BlockedNumber>> =
         blockRepository.observeBlockedNumbers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -389,7 +406,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePinMessage(message: SmsMessage) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { pinRepository.togglePinMessage(message.id) }
+            withContext(Dispatchers.IO) { pinRepository.togglePinMessage(message.threadId, message.id) }
         }
     }
 

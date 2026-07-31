@@ -33,6 +33,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.ContactsRepository
+import com.petro.smsapp.data.ConversationFilterContext
 import com.petro.smsapp.data.ConversationFilterType
 import com.petro.smsapp.data.applyConversationFilters
 import com.petro.smsapp.ui.AppDrawerContent
@@ -279,6 +280,11 @@ fun AppNavigation(
     val favorites by viewModel.favorites.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val pinnedMessageIds by viewModel.pinnedMessageIds.collectAsState()
+    // برای فیلترهای «دارای پیام سنجاق‌شده» و «دارای پیام علاقه‌مند» توی آکاردئونِ درآور -
+    // برخلافِ pinnedMessageIds/favoriteIds (که سطحِ خودِ پیام‌ها هستن)، این دوتا سطحِ
+    // مکالمه‌ان (threadId هایی که حداقل یه پیامِ پین/فیوریت‌شده دارن)
+    val pinnedMessageThreadIds by viewModel.pinnedMessageThreadIds.collectAsState()
+    val favoriteThreadIds by viewModel.favoriteThreadIds.collectAsState()
     val trash by viewModel.trash.collectAsState()
     val blockedNumbers by viewModel.blockedNumbers.collectAsState()
     val blockedMessages by viewModel.blockedMessages.collectAsState()
@@ -302,9 +308,18 @@ fun AppNavigation(
     // StateFlow از ViewModel/DataStore کافیه - بقیه‌ی مسیر (DrawerFilterAccordion،
     // applyConversationFilters) دست‌نخورده می‌مونه.
     var selectedFilterIds by remember { mutableStateOf(setOf<String>()) }
-    val filteredConversations = remember(conversations, selectedFilterIds) {
+    val filteredConversations = remember(
+        conversations,
+        selectedFilterIds,
+        pinnedMessageThreadIds,
+        favoriteThreadIds
+    ) {
         conversations.applyConversationFilters(
-            selectedFilterIds.mapNotNull { ConversationFilterType.fromId(it) }.toSet()
+            selectedFilterIds.mapNotNull { ConversationFilterType.fromId(it) }.toSet(),
+            ConversationFilterContext(
+                pinnedMessageThreadIds = pinnedMessageThreadIds,
+                favoriteThreadIds = favoriteThreadIds
+            )
         )
     }
 

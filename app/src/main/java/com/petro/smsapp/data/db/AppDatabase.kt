@@ -31,7 +31,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MessageGroupEntity::class,
         MessageGroupMemberEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -63,17 +63,30 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `message_groups` (" +
-                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                        "`name` TEXT NOT NULL, " +
-                        "`createdAt` INTEGER NOT NULL)"
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`name` TEXT NOT NULL, " +
+                            "`createdAt` INTEGER NOT NULL)"
                 )
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `message_group_members` (" +
-                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                        "`groupId` INTEGER NOT NULL, " +
-                        "`address` TEXT NOT NULL, " +
-                        "`displayName` TEXT NOT NULL)"
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`groupId` INTEGER NOT NULL, " +
+                            "`address` TEXT NOT NULL, " +
+                            "`displayName` TEXT NOT NULL)"
                 )
+            }
+        }
+
+        /**
+         * نسخه‌ی ۲ -> ۳: اضافه شدنِ ستونِ threadId به جدولِ pinned_messages (پین یه پیامِ
+         * خاص داخل چت). قبلاً این جدول فقط messageId داشت و هیچ‌جا مشخص نمی‌کرد این پیامِ
+         * پین‌شده مالِ کدوم مکالمه‌ست - برای فیلترِ جدیدِ «دارای پیام سنجاق‌شده» توی
+         * آکاردئونِ درآور، نیاز شد بشه بدونِ کوئری اضافه به Telephony Provider فهمید کدوم
+         * threadId ها حداقل یه پیامِ پین‌شده دارن.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pinned_messages ADD COLUMN threadId INTEGER NOT NULL DEFAULT 0")
             }
         }
 
@@ -84,7 +97,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sms_app.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build().also { INSTANCE = it }
             }
         }

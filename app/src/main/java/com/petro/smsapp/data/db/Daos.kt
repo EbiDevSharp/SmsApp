@@ -180,6 +180,10 @@ interface PinnedMessageDao {
     @Query("SELECT messageId FROM pinned_messages")
     fun observeAllIds(): Flow<List<Long>>
 
+    /** برای فیلترِ «دارای پیام سنجاق‌شده» - همه‌ی threadId های متمایزی که حداقل یه پیامِ پین‌شده دارن */
+    @Query("SELECT DISTINCT threadId FROM pinned_messages")
+    fun observeThreadIds(): Flow<List<Long>>
+
     @Query("SELECT EXISTS(SELECT 1 FROM pinned_messages WHERE messageId = :messageId)")
     suspend fun isPinned(messageId: Long): Boolean
 
@@ -238,8 +242,8 @@ data class GroupWithMemberCount(
 interface MessageGroupDao {
     @Query(
         "SELECT g.id as id, g.name as name, g.createdAt as createdAt, COUNT(m.id) as memberCount " +
-            "FROM message_groups g LEFT JOIN message_group_members m ON m.groupId = g.id " +
-            "GROUP BY g.id ORDER BY g.createdAt DESC"
+                "FROM message_groups g LEFT JOIN message_group_members m ON m.groupId = g.id " +
+                "GROUP BY g.id ORDER BY g.createdAt DESC"
     )
     fun observeGroupsWithMemberCount(): Flow<List<GroupWithMemberCount>>
 

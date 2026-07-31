@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MarkChatUnread
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -139,4 +141,7 @@ private fun iconForFilter(type: ConversationFilterType): ImageVector = when (typ
     ConversationFilterType.UNREAD -> Icons.Filled.MarkChatUnread
     ConversationFilterType.PINNED -> Icons.Filled.PushPin
     ConversationFilterType.NON_CONTACT -> Icons.Filled.PersonOff
+    // آیکنِ توخالی برای تمایز از فیلترِ PINNED (سنجاق‌شدنِ خودِ چت) که آیکنِ توپر داره
+    ConversationFilterType.HAS_PINNED_MESSAGE -> Icons.Outlined.PushPin
+    ConversationFilterType.HAS_FAVORITE_MESSAGE -> Icons.Filled.Star
 }

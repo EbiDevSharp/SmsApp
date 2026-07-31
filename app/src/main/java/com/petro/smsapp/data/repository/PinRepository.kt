@@ -34,11 +34,14 @@ class PinRepository(
 
     fun observePinnedMessageIds(): Flow<Set<Long>> = messageDao.observeAllIds().map { it.toSet() }
 
-    suspend fun togglePinMessage(messageId: Long) {
+    /** برای فیلترِ «دارای پیام سنجاق‌شده» توی آکاردئونِ درآور - همه‌ی threadId هایی که حداقل یه پیامِ پین‌شده دارن */
+    fun observePinnedMessageThreadIds(): Flow<Set<Long>> = messageDao.observeThreadIds().map { it.toSet() }
+
+    suspend fun togglePinMessage(threadId: Long, messageId: Long) {
         if (messageDao.isPinned(messageId)) {
             messageDao.delete(messageId)
         } else {
-            messageDao.insert(PinnedMessageEntity(messageId))
+            messageDao.insert(PinnedMessageEntity(messageId, threadId))
         }
     }
 
