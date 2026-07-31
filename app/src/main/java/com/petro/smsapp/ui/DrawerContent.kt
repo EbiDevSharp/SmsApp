@@ -18,6 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.R
+import com.petro.smsapp.data.ConversationFilterType
 
 data class DrawerItem(
     val route: String,
@@ -35,12 +36,20 @@ val drawerItems = listOf(
     DrawerItem("settings", "تنظیمات", Icons.Filled.Build, androidx.compose.ui.graphics.Color(0xFFA9A6A6)),
 )
 
+/**
+ * محتوای درآورِ برنامه. عمداً یه بخشِ «آکاردئونِ فیلترِ لیست چت‌ها» (DrawerFilterAccordion،
+ * ماژولِ جدا در فایل DrawerFilterAccordion.kt) بالای همه‌ی آیتم‌های ثابتِ درآور اضافه شده -
+ * انتخاب‌های فیلتر (selectedFilterIds) و منطقِ toggle کردنشون (onToggleFilter) بیرون از
+ * این Composable (توی AppNavigation) نگه داشته میشن، دقیقاً هم‌قاعده‌ی isDarkTheme/onToggleTheme.
+ */
 @Composable
 fun AppDrawerContent(
     currentRoute: String?,
     onItemClick: (String) -> Unit,
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    selectedFilterIds: Set<String> = emptySet(),
+    onToggleFilter: (ConversationFilterType) -> Unit = {}
 ) {
     // ===== Header =====
     Row(
@@ -86,7 +95,13 @@ fun AppDrawerContent(
         }
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
+    // ===== آکاردئونِ فیلترِ لیست چت‌ها - بالای همه‌ی آیتم‌های ثابتِ درآور =====
+    DrawerFilterAccordion(
+        selectedIds = selectedFilterIds,
+        onToggle = onToggleFilter
+    )
+
+    Spacer(modifier = Modifier.height(4.dp))
 
     drawerItems.forEach { item ->
         NavigationDrawerItem(

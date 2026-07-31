@@ -33,6 +33,8 @@ import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.ContactsRepository
+import com.petro.smsapp.data.ConversationFilterType
+import com.petro.smsapp.data.applyConversationFilters
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddBlockedNumberScreen
 import com.petro.smsapp.ui.AddBlockedSenderScreen
@@ -294,6 +296,18 @@ fun AppNavigation(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    // فیلترهای فعالِ آکاردئونِ بالای درآور (مثلاً «خوانده‌نشده») - فعلاً فقط یه State
+    // محلیه (نه پایدار/DataStore)، چون تا وقتی خودِ لیستِ آیتم‌ها هم داینامیک نشده معنی
+    // نداره ذخیره‌ش کنیم؛ وقتی بعداً از تنظیمات داینامیک شد، همینجا جایگزینش با یه
+    // StateFlow از ViewModel/DataStore کافیه - بقیه‌ی مسیر (DrawerFilterAccordion،
+    // applyConversationFilters) دست‌نخورده می‌مونه.
+    var selectedFilterIds by remember { mutableStateOf(setOf<String>()) }
+    val filteredConversations = remember(conversations, selectedFilterIds) {
+        conversations.applyConversationFilters(
+            selectedFilterIds.mapNotNull { ConversationFilterType.fromId(it) }.toSet()
+        )
+    }
+
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
 
@@ -362,6 +376,14 @@ fun AppNavigation(
                     onToggleTheme = {
                         val newMode = if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK
                         AppSettings.setThemeMode(context, newMode)
+                    },
+                    selectedFilterIds = selectedFilterIds,
+                    onToggleFilter = { filterType ->
+                        selectedFilterIds = if (selectedFilterIds.contains(filterType.id)) {
+                            selectedFilterIds - filterType.id
+                        } else {
+                            selectedFilterIds + filterType.id
+                        }
                     }
                 )
             }
@@ -370,7 +392,7 @@ fun AppNavigation(
         NavHost(navController = navController, startDestination = "list") {
             composable("list") {
                 ConversationListScreen(
-                    conversations = conversations,
+                    conversations = filteredConversations,
                     onConversationClick = { conversation ->
                         if (conversation.address.isNotBlank()) {
                             viewModel.loadThread(conversation.threadId)
