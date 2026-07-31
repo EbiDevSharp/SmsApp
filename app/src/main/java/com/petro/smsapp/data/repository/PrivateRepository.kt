@@ -3,6 +3,7 @@ package com.petro.smsapp.data.repository
 import com.petro.smsapp.data.PrivateNumber
 import com.petro.smsapp.data.db.PrivateNumberDao
 import com.petro.smsapp.data.db.PrivateNumberEntity
+import com.petro.smsapp.util.PhoneNumberUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -38,9 +39,21 @@ class PrivateRepository(private val dao: PrivateNumberDao) {
         dao.deleteByKey(entity.normalizedAddress)
     }
 
+    /**
+     * هم‌خانواده‌ی normalize توی BlockRepository - همون دلیل: آدرس‌های واقعاً شماره‌ای
+     * (طبق PhoneNumberUtils.isSendableAddress) بر اساس آخرین ۹ رقم نرمال میشن، ولی
+     * Sender ID های حروفی (اسم اپراتور یا Sender ID انگلیسی) که رقمی توشون نیست، بدونِ
+     * این تغییر کلیدشون همیشه خالی درمی‌اومد و اصلاً قابل‌خصوصی‌کردن نبودن.
+     */
     private fun normalize(number: String): String {
-        val digitsOnly = number.filter { it.isDigit() }
-        return if (digitsOnly.length > 9) digitsOnly.takeLast(9) else digitsOnly
+        val trimmed = number.trim()
+        if (trimmed.isBlank()) return ""
+        return if (PhoneNumberUtils.isSendableAddress(trimmed)) {
+            val digits = trimmed.filter { it.isDigit() }
+            if (digits.length > 9) digits.takeLast(9) else digits
+        } else {
+            trimmed.uppercase()
+        }
     }
 
     private fun PrivateNumberEntity.toDomain() = PrivateNumber(threadId, address, displayName, madePrivateAt)

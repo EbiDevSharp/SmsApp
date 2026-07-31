@@ -32,6 +32,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddBlockedNumberScreen
+import com.petro.smsapp.ui.AddBlockedSenderScreen
 import com.petro.smsapp.ui.AddPrivateNumberScreen
 import com.petro.smsapp.ui.BlockScreen
 import com.petro.smsapp.ui.BlockKeywordsScreen
@@ -518,6 +519,7 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onOpenBlockedNumbers = { navController.navigate("blocked_numbers") },
                     onOpenBlockKeywords = { navController.navigate("block_keywords") },
                     onOpenBlockPatterns = { navController.navigate("block_patterns") },
+                    onOpenAddSender = { navController.navigate("block_add_sender") },
                     onOpenBlockSettings = { navController.navigate("block_settings") }
                 )
             }
@@ -555,6 +557,12 @@ fun AppNavigation(viewModel: SmsViewModel, onPickContactClick: () -> Unit) {
                     onPickFromContactsClick = onPickContactClick,
                     onSearchChange = { query -> viewModel.searchContacts(query) },
                     onBlockNumber = { address, displayName -> viewModel.blockNumber(address, displayName) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("block_add_sender") {
+                AddBlockedSenderScreen(
+                    onBlockSender = { sender -> viewModel.blockNumber(sender, sender) },
                     onBack = { navController.popBackStack() }
                 )
             }

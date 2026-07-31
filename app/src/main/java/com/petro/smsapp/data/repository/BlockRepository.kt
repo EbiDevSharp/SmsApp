@@ -17,6 +17,7 @@ import com.petro.smsapp.data.db.BlockedNumberDao
 import com.petro.smsapp.data.db.BlockedNumberEntity
 import com.petro.smsapp.data.db.BlockedPatternMessageDao
 import com.petro.smsapp.data.db.BlockedPatternMessageEntity
+import com.petro.smsapp.util.PhoneNumberUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -144,10 +145,30 @@ class BlockRepository(
 
     private fun digitsOnly(value: String): String = value.filter { it.isDigit() }
 
-    /** هم‌خانواده‌ی نرمال‌سازیِ قبلی: آخرین ۹ رقم شماره */
+    /**
+     * نرمال‌سازیِ کلیدِ ذخیره‌سازیِ شماره/فرستنده‌ی بلاک‌شده:
+     * - اگه آدرس واقعاً یه شماره‌ی قابل‌ارسال باشه (طبق PhoneNumberUtils.isSendableAddress،
+     *   یعنی فقط رقم/+/-/فاصله/پرانتز و حداقل یه رقم داره)، مثلِ قبل فقط آخرین ۹ رقمش
+     *   کلید میشه.
+     * - اگه آدرس یه Sender ID حروفی باشه (مثلاً اسم اپراتور «ایرانسل»/«همراه‌اول» یا یه
+     *   Sender ID انگلیسیِ سرویس‌ها مثل «GOOGLE»)، اصلاً رقمی نداره که بشه آخرین ۹ رقمشو
+     *   گرفت. قبلاً همچین آدرسی نرمال‌سازی‌ش رشته‌ی خالی می‌شد و چون کلیدِ خالی همیشه
+     *   مجاز نبود (blockNumber/isAddressBlocked با key.isBlank() فوراً false برمی‌گردوندن)،
+     *   این‌جور فرستنده‌ها هیچ‌وقت واقعاً بلاک نمی‌شدن - بدونِ کرش یا خطای قابل‌مشاهده،
+     *   فقط بی‌صدا شکست می‌خورد و توی SmsViewModel.blockConversations هم چون newlyBlocked
+     *   همیشه false بود، به‌اشتباه به‌عنوانِ «از قبل بلاک بوده» شمارش می‌شد. الان برای این
+     *   حالت، خودِ متنِ فرستنده (trim‌شده و بزرگ‌شده، برای یکسان‌بودنِ کوچک/بزرگیِ حروف)
+     *   مستقیماً به‌عنوانِ کلید استفاده میشه.
+     */
     private fun normalize(number: String): String {
-        val digitsOnly = number.filter { it.isDigit() }
-        return if (digitsOnly.length > 9) digitsOnly.takeLast(9) else digitsOnly
+        val trimmed = number.trim()
+        if (trimmed.isBlank()) return ""
+        return if (PhoneNumberUtils.isSendableAddress(trimmed)) {
+            val digits = trimmed.filter { it.isDigit() }
+            if (digits.length > 9) digits.takeLast(9) else digits
+        } else {
+            trimmed.uppercase()
+        }
     }
 
     private fun BlockedNumberEntity.toDomain() = BlockedNumber(threadId, address, displayName, blockedAt)

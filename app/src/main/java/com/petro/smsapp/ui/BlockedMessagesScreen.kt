@@ -230,17 +230,22 @@ private fun BlockedMessageRow(
     }
 }
 
-/** نشون میده این پیام از چه طریقی بلاک شده: بر اساس خودِ شماره یا بر اساس یه کلمه‌ی کلیدی */
+/**
+ * نشون میده این پیام از چه طریقی بلاک شده. برای PHONE_NUMBER و NOT_IN_CONTACTS هم -
+ * که قبلاً فقط یه برچسبِ کلی («بر اساس: شماره») بودن بدونِ اینکه بگن دقیقاً کدوم
+ * شماره/فرستنده - الان خودِ آدرس/فرستنده هم کنارش نشون داده میشه؛ دقیقاً هم‌خانواده‌ی
+ * KEYWORD و PATTERN که از اول این‌جوری بودن.
+ */
 @Composable
 private fun BlockSourceLabel(entry: BlockedMessageEntry) {
     val text = when (entry.blockSource) {
-        BlockSource.PHONE_NUMBER -> "بلاک‌شده بر اساس: شماره"
+        BlockSource.PHONE_NUMBER -> "بلاک‌شده بر اساس: شماره «${entry.message.address}»"
         BlockSource.KEYWORD -> "بلاک‌شده بر اساس: کلمه‌ی «${entry.matchedKeyword ?: ""}»"
         BlockSource.PATTERN -> {
             val label = if (entry.matchedPatternType == BlockPatternType.STARTS_WITH) "شروع شماره با" else "پایان شماره با"
             "بلاک‌شده بر اساس: $label «${entry.matchedPatternValue ?: ""}»"
         }
-        BlockSource.NOT_IN_CONTACTS -> "بلاک‌شده بر اساس: خارج از مخاطبین"
+        BlockSource.NOT_IN_CONTACTS -> "بلاک‌شده بر اساس: خارج از مخاطبین «${entry.message.address}»"
     }
     Text(
         text = text,
