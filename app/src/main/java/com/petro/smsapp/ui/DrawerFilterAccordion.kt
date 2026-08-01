@@ -3,24 +3,16 @@ package com.petro.smsapp.ui
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MarkChatUnread
-import androidx.compose.material.icons.filled.PersonOff
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,6 +28,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.ConversationFilterType
@@ -45,19 +39,6 @@ import com.petro.smsapp.data.TimeFilterSelection
 import com.petro.smsapp.data.TimeRangePreset
 import com.petro.smsapp.util.DateFormatter
 
-/**
- * آکاردئونِ فیلترِ لیستِ چت‌ها - بالای همه‌ی آیتم‌های درآور قرار می‌گیره. سه بخشِ
- * مستقل داره، همه به‌شکلِ چیپ‌های کنارِ‌هم و wrap-شونده (FlowRow):
- *
- * ۱) «وضعیت پیام» - چندتایی‌انتخاب (خوانده‌نشده، سنجاق‌شده و ...).
- * ۲) «زمان» - تک‌انتخابی: چهارتا بازه‌ی آماده + یه چیپِ «بازه‌ی دلخواه» که دیالوگِ
- *    از‌تاریخ/تا‌تاریخ رو باز می‌کنه.
- * ۳) «مرتب‌سازی» - تک‌انتخابی: وقتی هیچی انتخاب نشده باشه، ترتیبِ پیش‌فرض (پین بالا)
- *    دست‌نخورده می‌مونه؛ با انتخابِ هرکدوم، پین‌بودن دیگه اولویتی نداره.
- *
- * این کامپوننت یه ماژولِ کاملاً مستقله - فقط state/callback ها رو از بیرون می‌گیره،
- * خودش هیچ منطق ذخیره‌سازی/فیلترِ واقعی نداره.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DrawerFilterAccordion(
@@ -75,8 +56,8 @@ fun DrawerFilterAccordion(
     val chevronRotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "drawer_filter_chevron")
 
     val activeCount = selectedIds.size +
-        (if (timeSelection != TimeFilterSelection.None) 1 else 0) +
-        (if (sortType != null) 1 else 0)
+            (if (timeSelection != TimeFilterSelection.None) 1 else 0) +
+            (if (sortType != null) 1 else 0)
 
     if (showCustomTimeDialog) {
         val existingCustom = (timeSelection as? TimeFilterSelection.Custom)?.range
@@ -154,19 +135,11 @@ fun DrawerFilterAccordion(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items.forEach { item ->
-                            val isChecked = selectedIds.contains(item.id)
-                            FilterChip(
-                                selected = isChecked,
-                                onClick = { onToggle(item) },
-                                label = { Text(item.label, style = MaterialTheme.typography.bodyMedium) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = iconForFilter(item),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = chipColors()
+                            IconFilterChip(
+                                icon = iconForFilter(item),
+                                contentDescription = item.label,
+                                selected = selectedIds.contains(item.id),
+                                onClick = { onToggle(item) }
                             )
                         }
                     }
@@ -181,50 +154,32 @@ fun DrawerFilterAccordion(
                     ) {
                         TimeRangePreset.entries.forEach { preset ->
                             val isSelected = (timeSelection as? TimeFilterSelection.Preset)?.preset == preset
-                            FilterChip(
+                            IconFilterChip(
+                                icon = iconForTimePreset(preset),
+                                contentDescription = preset.label,
                                 selected = isSelected,
                                 onClick = {
                                     onTimeSelectionChange(
                                         if (isSelected) TimeFilterSelection.None else TimeFilterSelection.Preset(preset)
                                     )
-                                },
-                                label = { Text(preset.label, style = MaterialTheme.typography.bodyMedium) },
-                                leadingIcon = {
-                                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                colors = chipColors()
+                                }
                             )
                         }
 
                         val customSelection = timeSelection as? TimeFilterSelection.Custom
-                        FilterChip(
+                        IconFilterChip(
+                            icon = Icons.Filled.DateRange,
+                            contentDescription = if (customSelection != null) {
+                                "${DateFormatter.formatDayMonth(customSelection.range.fromMillis)} تا ${DateFormatter.formatDayMonth(customSelection.range.toMillis)}"
+                            } else {
+                                "بازه‌ی دلخواه"
+                            },
                             selected = customSelection != null,
                             onClick = { showCustomTimeDialog = true },
-                            label = {
-                                Text(
-                                    text = if (customSelection != null) {
-                                        "${DateFormatter.formatDayMonth(customSelection.range.fromMillis)} تا ${DateFormatter.formatDayMonth(customSelection.range.toMillis)}"
-                                    } else {
-                                        "بازه‌ی دلخواه"
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
-                            },
-                            trailingIcon = if (customSelection != null) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = "پاک کردنِ بازه‌ی دلخواه",
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable { onTimeSelectionChange(TimeFilterSelection.None) }
-                                    )
-                                }
-                            } else null,
-                            colors = chipColors()
+                            trailingIcon = if (customSelection != null) Icons.Filled.Close else null,
+                            onTrailingClick = if (customSelection != null) {
+                                { onTimeSelectionChange(TimeFilterSelection.None) }
+                            } else null
                         )
                     }
 
@@ -238,14 +193,11 @@ fun DrawerFilterAccordion(
                     ) {
                         ConversationSortType.entries.forEach { type ->
                             val isSelected = sortType == type
-                            FilterChip(
+                            IconFilterChip(
+                                icon = iconForSort(type),
+                                contentDescription = type.label,
                                 selected = isSelected,
-                                onClick = { onSortTypeChange(if (isSelected) null else type) },
-                                label = { Text(type.label, style = MaterialTheme.typography.bodyMedium) },
-                                leadingIcon = {
-                                    Icon(Icons.Filled.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                colors = chipColors()
+                                onClick = { onSortTypeChange(if (isSelected) null else type) }
                             )
                         }
                     }
@@ -255,15 +207,59 @@ fun DrawerFilterAccordion(
     }
 }
 
-/** رنگ‌بندیِ مشترکِ همه‌ی چیپ‌های آکاردئون - یه‌جا تعریف شده تا هر سه بخش دقیقاً یکی باشن */
 @Composable
-private fun chipColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-    selectedLabelColor = MaterialTheme.colorScheme.primary,
-    selectedLeadingIconColor = MaterialTheme.colorScheme.primary
-)
+private fun IconFilterChip(
+    icon: ImageVector,
+    contentDescription: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    trailingIcon: ImageVector? = null,
+    onTrailingClick: (() -> Unit)? = null
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val bgColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
+    val iconTint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
-/** برچسبِ کوچیکِ بالای هر بخش (وضعیتِ پیام / زمان / مرتب‌سازی) */
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(shape)
+            .background(bgColor)
+            .border(1.dp, borderColor, shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = rememberRipple(bounded = true, color = MaterialTheme.colorScheme.primary),
+                onClick = onClick
+            )
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(22.dp)
+        )
+        if (trailingIcon != null && onTrailingClick != null) {
+            Icon(
+                imageVector = trailingIcon,
+                contentDescription = "پاک کردن",
+                tint = iconTint,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(14.dp)
+                    .offset(x = (-2).dp, y = 2.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onTrailingClick
+                    )
+            )
+        }
+    }
+}
+
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -275,12 +271,25 @@ private fun SectionLabel(text: String) {
     )
 }
 
-/** آیکنِ هر نوع فیلترِ وضعیتِ پیام - آیتم‌های بعدی که اضافه بشن، فقط یه شاخه‌ی when جدید اینجا لازم دارن */
 private fun iconForFilter(type: ConversationFilterType): ImageVector = when (type) {
     ConversationFilterType.UNREAD -> Icons.Filled.MarkChatUnread
     ConversationFilterType.PINNED -> Icons.Filled.PushPin
     ConversationFilterType.NON_CONTACT -> Icons.Filled.PersonOff
-    // آیکنِ توخالی برای تمایز از فیلترِ PINNED (سنجاق‌شدنِ خودِ چت) که آیکنِ توپر داره
     ConversationFilterType.HAS_PINNED_MESSAGE -> Icons.Outlined.PushPin
     ConversationFilterType.HAS_FAVORITE_MESSAGE -> Icons.Filled.Star
+}
+
+private fun iconForTimePreset(preset: TimeRangePreset): ImageVector = when (preset.ordinal) {
+    0 -> Icons.Filled.Today
+    1 -> Icons.Filled.History
+    2 -> Icons.Filled.DateRange
+    3 -> Icons.Filled.CalendarMonth
+    else -> Icons.Filled.CalendarToday
+}
+
+private fun iconForSort(type: ConversationSortType): ImageVector = when (type.ordinal) {
+    0 -> Icons.Filled.ArrowDownward
+    1 -> Icons.Filled.ArrowUpward
+    2 -> Icons.Filled.MarkChatUnread
+    else -> Icons.Filled.Sort
 }
