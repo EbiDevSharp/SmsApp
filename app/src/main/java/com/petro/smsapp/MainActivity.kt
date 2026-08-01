@@ -81,6 +81,8 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
+        // اگه کاربر همینجا مجوزِ مخاطبین رو داد، observer رو (بدونِ نیازِ ری‌استارتِ اپ) ثبت کن
+        (application as SmsApplication).ensureContactsObserverRegistered()
         if (result.values.all { it }) {
             viewModel.loadConversations()
             viewModel.loadSims()
@@ -427,6 +429,7 @@ fun AppNavigation(
                     swipeLeftToRightAction = appSettings.swipeLeftToRightAction,
                     swipeDeleteRequiresConfirmation = appSettings.swipeDeleteRequiresConfirmation,
                     showContactNumberEnabled = appSettings.showContactNumberInListEnabled,
+                    alphabetIndexBarEnabled = appSettings.alphabetIndexBarEnabled,
                     onMarkThreadRead = { threadId -> viewModel.markThreadReadFromSwipe(threadId) },
                     onMarkThreadUnread = { threadId -> viewModel.markThreadUnreadFromSwipe(threadId) }
                 )

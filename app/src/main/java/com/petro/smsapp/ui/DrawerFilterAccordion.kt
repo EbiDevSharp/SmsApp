@@ -15,7 +15,8 @@ import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,16 +37,19 @@ import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.ConversationFilterType
 
 /**
- * آکاردئونِ فیلترِ لیست چت‌ها - بالای همه‌ی آیتم‌های درآور قرار می‌گیره. با کلیک روی
- * هدر رو به پایین باز میشه و آیتم‌های چک‌باکسی (چندتایی‌قابل‌انتخاب) رو نشون میده.
+ * آکاردئونِ فیلترِ لیستِ چت‌ها - بالای همه‌ی آیتم‌های درآور قرار می‌گیره. با کلیک روی
+ * هدر رو به پایین باز میشه و آیتم‌ها به شکلِ چیپ‌های کنارِ‌هم (نه چک‌باکسِ عمودی) نشون
+ * داده میشن - با FlowRow خودکار به خطِ بعدی wrap میشن، پس اضافه‌کردنِ آیتم‌های بیشتر
+ * در آینده فقط باعثِ بلندتر شدنِ آکاردئون میشه، نه به‌هم‌ریختنِ چیدمان.
  *
  * این کامپوننت یه ماژولِ کاملاً مستقله - فقط items/selectedIds/onToggle رو از بیرون
  * می‌گیره و خودش هیچ منطق ذخیره‌سازی/فیلترِ واقعی نداره. بعداً که لیستِ آیتم‌ها از
  * تنظیمات داینامیک بشه (کاربر بتونه آیتم‌ها رو کم/زیاد یا مرتب کنه)، کافیه پارامترِ
  * items از یه StateFlow/DataStore پر بشه - خودِ این فایل نیازی به تغییر نداره.
  *
- * انتخاب چندتایی: هر آیتم مستقل تیک می‌خوره/برمی‌داره (Checkbox)، نه رادیویی.
+ * انتخاب چندتایی: هر چیپ مستقل انتخاب/عدم‌انتخاب میشه، نه رادیویی.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DrawerFilterAccordion(
     items: List<ConversationFilterType> = ConversationFilterType.entries,
@@ -108,27 +112,32 @@ fun DrawerFilterAccordion(
             }
 
             if (expanded) {
-                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items.forEach { item ->
                         val isChecked = selectedIds.contains(item.id)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggle(item) }
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(checked = isChecked, onCheckedChange = { onToggle(item) })
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = iconForFilter(item),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        FilterChip(
+                            selected = isChecked,
+                            onClick = { onToggle(item) },
+                            label = { Text(item.label, style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = iconForFilter(item),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(item.label, style = MaterialTheme.typography.bodyMedium)
-                        }
+                        )
                     }
                 }
             }

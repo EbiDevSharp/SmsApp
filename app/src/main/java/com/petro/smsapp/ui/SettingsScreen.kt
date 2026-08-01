@@ -155,6 +155,21 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
             )
             Divider()
 
+            // نوارِ کناریِ پرشِ سریعِ الفبا (Alphabet Index Bar) روی لیستِ اصلیِ مکالمات
+            ListItem(
+                headlineContent = { Text("نوار حروف الفبا در لیست چت‌ها") },
+                supportingContent = {
+                    Text("یه نوار کناری سمتِ چپِ صفحه برای پرشِ سریع به مخاطبین بر اساسِ حرفِ اولِ اسمشون")
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.alphabetIndexBarEnabled,
+                        onCheckedChange = { enabled -> AppSettings.setAlphabetIndexBarEnabled(context, enabled) }
+                    )
+                }
+            )
+            Divider()
+
             // سویپِ ردیف‌های لیستِ مکالمات - جهتِ راست‌به‌چپ و چپ‌به‌راست هرکدوم جدا قابل‌تنظیمن
             ListItem(
                 headlineContent = { Text("سویپِ لیستِ مکالمات") },

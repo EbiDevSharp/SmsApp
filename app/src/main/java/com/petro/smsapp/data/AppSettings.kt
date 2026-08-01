@@ -56,6 +56,8 @@ object AppSettings {
     private const val KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME = "swipe_left_to_right_action"
     // قبل از اجرای واقعیِ عملیاتِ «حذف» با سویپ، از کاربر تأیید گرفته بشه یا نه
     private const val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME = "swipe_delete_requires_confirmation"
+    // نمایشِ نوارِ کناریِ پرشِ سریعِ الفبا (Alphabet Index Bar) روی لیستِ اصلیِ مکالمات
+    private const val KEY_ALPHABET_INDEX_BAR_ENABLED_NAME = "alphabet_index_bar_enabled"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -72,6 +74,7 @@ object AppSettings {
     private val KEY_SWIPE_RIGHT_TO_LEFT_ACTION = stringPreferencesKey(KEY_SWIPE_RIGHT_TO_LEFT_ACTION_NAME)
     private val KEY_SWIPE_LEFT_TO_RIGHT_ACTION = stringPreferencesKey(KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME)
     private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
+    private val KEY_ALPHABET_INDEX_BAR_ENABLED = booleanPreferencesKey(KEY_ALPHABET_INDEX_BAR_ENABLED_NAME)
 
     /** پیش‌فرض حداکثر تعداد مکالمه‌ی قابل‌پین در لیست اصلی - کاربر می‌تونه از تنظیمات عوضش کنه */
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
@@ -123,7 +126,9 @@ object AppSettings {
         // عملیاتی که با کشیدنِ هر ردیفِ لیستِ مکالمات از چپ به راست اجرا میشه
         val swipeLeftToRightAction: SwipeAction = DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION,
         // قبل از اجرای واقعیِ حذف (وقتی یکی از دو جهتِ بالا روی «حذف» تنظیم شده باشه) دیالوگ تأیید نشون داده بشه
-        val swipeDeleteRequiresConfirmation: Boolean = true
+        val swipeDeleteRequiresConfirmation: Boolean = true,
+        // نوارِ کناریِ پرشِ سریعِ الفبا روی لیستِ اصلیِ مکالمات - پیش‌فرض روشن
+        val alphabetIndexBarEnabled: Boolean = true
     )
 
     private val _state = MutableStateFlow(State())
@@ -164,7 +169,8 @@ object AppSettings {
                         showContactNumberInListEnabled = prefs[KEY_SHOW_CONTACT_NUMBER_IN_LIST] ?: false,
                         swipeRightToLeftAction = SwipeAction.fromId(prefs[KEY_SWIPE_RIGHT_TO_LEFT_ACTION], DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION),
                         swipeLeftToRightAction = SwipeAction.fromId(prefs[KEY_SWIPE_LEFT_TO_RIGHT_ACTION], DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION),
-                        swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true
+                        swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true,
+                        alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -246,6 +252,11 @@ object AppSettings {
 
     fun setSwipeDeleteRequiresConfirmation(context: Context, enabled: Boolean) =
         write(context) { it[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] = enabled }
+
+    fun isAlphabetIndexBarEnabled(context: Context): Boolean = _state.value.alphabetIndexBarEnabled
+
+    fun setAlphabetIndexBarEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_ALPHABET_INDEX_BAR_ENABLED] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

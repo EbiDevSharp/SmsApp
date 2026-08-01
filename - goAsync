@@ -1,0 +1,48 @@
+[33ma040ffa[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/room-datastore-migration[m[33m, [m[1;31morigin/feature/room-datastore-migration[m[33m)[m HEAD@{0}: checkout: moving from main to feature/room-datastore-migration
+[33m1ed452e[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{1}: checkout: moving from feature/scheduled-messages-inbox to main
+[33mfc1c65a[m HEAD@{2}: reset: moving to HEAD
+[33mfc1c65a[m HEAD@{3}: commit: افزودن زمان‌بندی ارسال به چت‌های قبلی، نوار ارسال مشترک با دکمه‌ی + و آیکن پیکان، صفحه‌ی زمان‌بندی‌شده
+[33ma040ffa[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/room-datastore-migration[m[33m, [m[1;31morigin/feature/room-datastore-migration[m[33m)[m HEAD@{4}: checkout: moving from feature/room-datastore-migration to feature/scheduled-messages-inbox
+[33ma040ffa[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/room-datastore-migration[m[33m, [m[1;31morigin/feature/room-datastore-migration[m[33m)[m HEAD@{5}: commit: update
+[33m631a937[m HEAD@{6}: commit: migrate: SharedPreferences stores -> Room+Flow, settings -> DataStore, receivers -> goAsync
+[33m1ed452e[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{7}: checkout: moving from main to feature/room-datastore-migration
+[33m1ed452e[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{8}: commit: Pin Message-Block None Contact
+[33m7a643dc[m HEAD@{9}: commit: Add Theme icon In menu
+[33m4bc243f[m HEAD@{10}: commit: Change Setting Notification to drag Drop
+[33m283fda7[m HEAD@{11}: commit: Add theme to setting
+[33md9c9767[m HEAD@{12}: commit: Fix Dark Theme And Scroll Message To Up
+[33mca8ca24[m HEAD@{13}: commit: Change Icon Menu
+[33mdc9a86f[m HEAD@{14}: commit: Add Setting For Block Message
+[33m88c16aa[m HEAD@{15}: commit: Add Block By Pattern Number End Or Start
+[33m166c8ef[m HEAD@{16}: commit: ScheduledMessage
+[33mfc736db[m HEAD@{17}: commit: Add Patern For Block Message
+[33m5261d6e[m HEAD@{18}: commit: Fixed navigation white screen bug.
+[33m2833539[m HEAD@{19}: commit: Change icon Send And delivery
+[33m557e85b[m HEAD@{20}: pull --no-stat -v --progress origin main: Fast-forward
+[33m368ed41[m HEAD@{21}: commit: Daynamic Notif Icon
+[33me31f14c[m HEAD@{22}: commit: Check Crash UI
+[33m59e5164[m HEAD@{23}: commit: Private-Fix
+[33mcf6cae4[m HEAD@{24}: commit: Private-Fix Crash
+[33mf88ce0a[m HEAD@{25}: commit: Add Block List
+[33m3d69bae[m HEAD@{26}: commit: Add Select SMS and multi select And Zoom Font
+[33mf863b9d[m HEAD@{27}: commit: Add Select conversation and multi select
+[33mb2f98d2[m HEAD@{28}: commit: Add Trash SMS
+[33mb62f3ea[m HEAD@{29}: commit: Add Copy And Share SMS
+[33meb0c8e7[m HEAD@{30}: commit: Fix Bug Read SMS
+[33m4c7063b[m HEAD@{31}: commit: Fix Bug Load SMS
+[33m134fe23[m HEAD@{32}: commit: Fix Bug Load SMS
+[33mf56e2f7[m HEAD@{33}: commit: Favorite-Trash
+[33m4a3a514[m HEAD@{34}: commit: Open Message In Note
+[33md7ebf3f[m HEAD@{35}: commit: Delivery-Delete SMS
+[33m2398e2e[m HEAD@{36}: commit: Version1.6
+[33m12783ab[m HEAD@{37}: commit: Version1.6
+[33mb559829[m HEAD@{38}: commit: Version1.6
+[33mb906cf0[m HEAD@{39}: commit: Version1.6
+[33mf1de6c5[m HEAD@{40}: commit: Version1.6
+[33m0e785df[m HEAD@{41}: commit: Version1.6
+[33mbd1d5d4[m HEAD@{42}: commit: Version1.5
+[33m475342f[m HEAD@{43}: commit: Version1.5
+[33md5e8494[m HEAD@{44}: commit: Remove generated files from repository
+[33m746f4d7[m HEAD@{45}: commit: Version1
+[33md1383f6[m HEAD@{46}: Branch: renamed refs/heads/master to refs/heads/main
+[33md1383f6[m HEAD@{48}: commit (initial): Initial commit

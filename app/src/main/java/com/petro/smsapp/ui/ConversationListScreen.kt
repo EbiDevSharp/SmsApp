@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.petro.smsapp.data.Conversation
 import com.petro.smsapp.data.SwipeAction
+import com.petro.smsapp.util.AlphabetIndexHelper
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
 import androidx.compose.foundation.clickable
@@ -76,6 +78,9 @@ import kotlin.math.roundToInt
  *   هم با فونتِ کوچیک‌تر و همیشه چپ‌به‌راست نشون داده میشه.
  * - آواتارِ هر ردیف (ContactAvatar) اگه مخاطب تو گوشی عکس داشته باشه، همون عکسِ واقعی
  *   رو نشون میده؛ وگرنه دایره‌ی رنگی با حرفِ اول (رفتار قبلی).
+ * - اگه از تنظیمات «نوار حروف الفبا» فعال شده باشه، یه نوارِ کناریِ پرشِ سریع (سمتِ
+ *   چپِ فیزیکیِ صفحه) نشون داده میشه که با لمس/درگ روی حرفِ موردنظر، مستقیم به اولین
+ *   مخاطبِ همون حرف اسکرول می‌کنه - بدونِ اینکه ترتیبِ فعلیِ لیست (پین/تاریخ) عوض بشه.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -92,6 +97,7 @@ fun ConversationListScreen(
     swipeLeftToRightAction: SwipeAction = SwipeAction.NONE,
     swipeDeleteRequiresConfirmation: Boolean = true,
     showContactNumberEnabled: Boolean = false,
+    alphabetIndexBarEnabled: Boolean = true,
     onMarkThreadRead: (threadId: Long) -> Unit = {},
     onMarkThreadUnread: (threadId: Long) -> Unit = {}
 ) {
@@ -160,6 +166,20 @@ fun ConversationListScreen(
                 }
             }
         )
+    }
+
+    // نگاشتِ «حرف -> اولین ایندکسِ اون حرف توی conversations» - فقط با تغییرِ خودِ
+    // لیست دوباره محاسبه میشه، هیچ کوئری‌ای به دیتابیس/Provider نمی‌زنه (کاملاً درحافظه)
+    val letterToFirstIndex = remember(conversations) {
+        val map = LinkedHashMap<String, Int>()
+        conversations.forEachIndexed { index, conversation ->
+            val letter = AlphabetIndexHelper.groupFor(conversation.displayName, conversation.address)
+            if (!map.containsKey(letter)) map[letter] = index
+        }
+        map
+    }
+    val sortedIndexLetters = remember(letterToFirstIndex) {
+        AlphabetIndexHelper.sortPresentLetters(letterToFirstIndex.keys)
     }
 
     Scaffold(
@@ -262,62 +282,84 @@ fun ConversationListScreen(
             }
         }
     ) { padding ->
-        if (conversations.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("هنوز مکالمه‌ای نداری", color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.padding(padding)) {
-                items(conversations, key = { it.threadId }) { conversation ->
-                    SwipeableConversationRow(
-                        conversation = conversation,
-                        selectionMode = selectionMode,
-                        isSelected = selectedIds.contains(conversation.threadId),
-                        rightToLeftAction = swipeRightToLeftAction,
-                        leftToRightAction = swipeLeftToRightAction,
-                        showContactNumberEnabled = showContactNumberEnabled,
-                        onClick = {
-                            if (selectionMode) {
-                                selectedIds = if (selectedIds.contains(conversation.threadId)) {
-                                    selectedIds - conversation.threadId
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            if (conversations.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("هنوز مکالمه‌ای نداری", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(state = listState) {
+                    items(conversations, key = { it.threadId }) { conversation ->
+                        SwipeableConversationRow(
+                            conversation = conversation,
+                            selectionMode = selectionMode,
+                            isSelected = selectedIds.contains(conversation.threadId),
+                            rightToLeftAction = swipeRightToLeftAction,
+                            leftToRightAction = swipeLeftToRightAction,
+                            showContactNumberEnabled = showContactNumberEnabled,
+                            onClick = {
+                                if (selectionMode) {
+                                    selectedIds = if (selectedIds.contains(conversation.threadId)) {
+                                        selectedIds - conversation.threadId
+                                    } else {
+                                        selectedIds + conversation.threadId
+                                    }
                                 } else {
-                                    selectedIds + conversation.threadId
+                                    onConversationClick(conversation)
                                 }
-                            } else {
-                                onConversationClick(conversation)
+                            },
+                            onLongClick = {
+                                if (!selectionMode) {
+                                    selectedIds = setOf(conversation.threadId)
+                                }
+                            },
+                            onMarkRead = { onMarkThreadRead(conversation.threadId) },
+                            onMarkUnread = { onMarkThreadUnread(conversation.threadId) },
+                            onRequestDelete = {
+                                if (swipeDeleteRequiresConfirmation) {
+                                    swipeDeleteTarget = conversation
+                                } else {
+                                    onDeleteConversations(setOf(conversation.threadId))
+                                }
+                            },
+                            onBlock = { onBlockConversations(listOf(conversation)) },
+                            onCall = {
+                                if (PhoneNumberUtils.isSendableAddress(conversation.address)) {
+                                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${conversation.address}")))
+                                } else {
+                                    Toast.makeText(context, "این آدرس قابلِ تماس نیست", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                        Divider(modifier = Modifier.padding(start = 72.dp))
+                    }
+                }
+            }
+
+            // نوارِ کناریِ پرشِ سریعِ الفبا - همیشه سمتِ چپِ فیزیکیِ صفحه، مستقل از
+            // راست‌چینِ کلیِ برنامه. فقط وقتی هم از تنظیمات فعاله و هم لیست خالی نیست نشون داده میشه.
+            if (alphabetIndexBarEnabled && sortedIndexLetters.isNotEmpty() && !selectionMode) {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    AlphabetIndexBar(
+                        letters = sortedIndexLetters,
+                        onLetterChange = { letter ->
+                            val targetIndex = letterToFirstIndex[letter]
+                            if (targetIndex != null) {
+                                scope.launch { listState.scrollToItem(targetIndex) }
                             }
                         },
-                        onLongClick = {
-                            if (!selectionMode) {
-                                selectedIds = setOf(conversation.threadId)
-                            }
-                        },
-                        onMarkRead = { onMarkThreadRead(conversation.threadId) },
-                        onMarkUnread = { onMarkThreadUnread(conversation.threadId) },
-                        onRequestDelete = {
-                            if (swipeDeleteRequiresConfirmation) {
-                                swipeDeleteTarget = conversation
-                            } else {
-                                onDeleteConversations(setOf(conversation.threadId))
-                            }
-                        },
-                        onBlock = { onBlockConversations(listOf(conversation)) },
-                        onCall = {
-                            if (PhoneNumberUtils.isSendableAddress(conversation.address)) {
-                                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${conversation.address}")))
-                            } else {
-                                Toast.makeText(context, "این آدرس قابلِ تماس نیست", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        onDragEnd = {},
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight()
                     )
-                    Divider(modifier = Modifier.padding(start = 72.dp))
                 }
             }
         }
