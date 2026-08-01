@@ -44,6 +44,17 @@ object DateFormatter {
         return "$day $monthName $year - ${formatTime(millis)}"
     }
 
+    /**
+     * فقط روز/ماه (بدونِ سال، بدونِ ساعت) - برای نمایشِ کوتاهِ بازه‌های زمانی (مثلاً
+     * ماژولِ «زمان» توی آکاردئونِ فیلترِ درآور: «۱ فروردین تا ۱۰ فروردین»).
+     */
+    fun formatDayMonth(millis: Long): String {
+        if (millis <= 0L) return "-"
+        val cal = Calendar.getInstance().apply { timeInMillis = millis }
+        val (day, monthName) = dayAndMonthName(cal)
+        return "$day $monthName"
+    }
+
     /** ساعت به‌تنهایی، با توجه به تنظیم ۱۲/۲۴ ساعته */
     fun formatTime(millis: Long): String {
         val cal = Calendar.getInstance().apply { timeInMillis = millis }

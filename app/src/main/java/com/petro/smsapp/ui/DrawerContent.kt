@@ -19,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.R
 import com.petro.smsapp.data.ConversationFilterType
+import com.petro.smsapp.data.ConversationSortType
+import com.petro.smsapp.data.TimeFilterSelection
 
 data class DrawerItem(
     val route: String,
@@ -37,10 +39,11 @@ val drawerItems = listOf(
 )
 
 /**
- * محتوای درآورِ برنامه. عمداً یه بخشِ «آکاردئونِ فیلترِ لیست چت‌ها» (DrawerFilterAccordion،
- * ماژولِ جدا در فایل DrawerFilterAccordion.kt) بالای همه‌ی آیتم‌های ثابتِ درآور اضافه شده -
- * انتخاب‌های فیلتر (selectedFilterIds) و منطقِ toggle کردنشون (onToggleFilter) بیرون از
- * این Composable (توی AppNavigation) نگه داشته میشن، دقیقاً هم‌قاعده‌ی isDarkTheme/onToggleTheme.
+ * محتوای درآورِ برنامه. بخشِ «آکاردئونِ فیلترِ لیستِ چت‌ها» (DrawerFilterAccordion،
+ * ماژولِ جدا در فایل DrawerFilterAccordion.kt) بالای همه‌ی آیتم‌های ثابتِ درآور قرار
+ * می‌گیره - سه زیرِ بخشِ «وضعیت پیام»/«زمان»/«مرتب‌سازی» داره؛ انتخاب‌های هرکدوم و
+ * منطقِ toggle/change کردنشون بیرون از این Composable (توی AppNavigation) نگه داشته
+ * میشن، دقیقاً هم‌قاعده‌ی isDarkTheme/onToggleTheme.
  */
 @Composable
 fun AppDrawerContent(
@@ -49,7 +52,11 @@ fun AppDrawerContent(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
     selectedFilterIds: Set<String> = emptySet(),
-    onToggleFilter: (ConversationFilterType) -> Unit = {}
+    onToggleFilter: (ConversationFilterType) -> Unit = {},
+    timeSelection: TimeFilterSelection = TimeFilterSelection.None,
+    onTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
+    sortType: ConversationSortType? = null,
+    onSortTypeChange: (ConversationSortType?) -> Unit = {}
 ) {
     // ===== Header =====
     Row(
@@ -98,7 +105,11 @@ fun AppDrawerContent(
     // ===== آکاردئونِ فیلترِ لیست چت‌ها - بالای همه‌ی آیتم‌های ثابتِ درآور =====
     DrawerFilterAccordion(
         selectedIds = selectedFilterIds,
-        onToggle = onToggleFilter
+        onToggle = onToggleFilter,
+        timeSelection = timeSelection,
+        onTimeSelectionChange = onTimeSelectionChange,
+        sortType = sortType,
+        onSortTypeChange = onSortTypeChange
     )
 
     Spacer(modifier = Modifier.height(4.dp))

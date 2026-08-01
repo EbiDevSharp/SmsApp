@@ -35,7 +35,11 @@ import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.ConversationFilterContext
 import com.petro.smsapp.data.ConversationFilterType
+import com.petro.smsapp.data.ConversationSortType
+import com.petro.smsapp.data.TimeFilterSelection
 import com.petro.smsapp.data.applyConversationFilters
+import com.petro.smsapp.data.applySort
+import com.petro.smsapp.data.applyTimeFilter
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddBlockedNumberScreen
 import com.petro.smsapp.ui.AddBlockedSenderScreen
@@ -310,11 +314,15 @@ fun AppNavigation(
     // StateFlow از ViewModel/DataStore کافیه - بقیه‌ی مسیر (DrawerFilterAccordion،
     // applyConversationFilters) دست‌نخورده می‌مونه.
     var selectedFilterIds by remember { mutableStateOf(setOf<String>()) }
+    var timeSelection by remember { mutableStateOf<TimeFilterSelection>(TimeFilterSelection.None) }
+    var sortType by remember { mutableStateOf<ConversationSortType?>(null) }
     val filteredConversations = remember(
         conversations,
         selectedFilterIds,
         pinnedMessageThreadIds,
-        favoriteThreadIds
+        favoriteThreadIds,
+        timeSelection,
+        sortType
     ) {
         conversations.applyConversationFilters(
             selectedFilterIds.mapNotNull { ConversationFilterType.fromId(it) }.toSet(),
@@ -323,6 +331,8 @@ fun AppNavigation(
                 favoriteThreadIds = favoriteThreadIds
             )
         )
+            .applyTimeFilter(timeSelection)
+            .applySort(sortType)
     }
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
@@ -401,7 +411,11 @@ fun AppNavigation(
                         } else {
                             selectedFilterIds + filterType.id
                         }
-                    }
+                    },
+                    timeSelection = timeSelection,
+                    onTimeSelectionChange = { timeSelection = it },
+                    sortType = sortType,
+                    onSortTypeChange = { sortType = it }
                 )
             }
         }

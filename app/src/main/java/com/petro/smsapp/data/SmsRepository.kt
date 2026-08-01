@@ -87,7 +87,8 @@ class SmsRepository(
                 date = maxOf(meta?.date ?: 0L, draft?.date ?: 0L),
                 unreadCount = meta?.unreadCount ?: 0,
                 isDraft = draftIsNewer,
-                isPinned = pinRepository.isThreadPinned(threadId)
+                isPinned = pinRepository.isThreadPinned(threadId),
+                messageCount = meta?.messageCount ?: 0
             )
         }
         val pinnedAtByThread = conversations.filter { it.isPinned }
@@ -100,12 +101,16 @@ class SmsRepository(
         )
     }
 
-    private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val snippet: String)
+    private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val messageCount: Int, val snippet: String)
     private data class DraftMeta(val address: String, val body: String, val date: Long)
 
     private suspend fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
+        // تعدادِ کلِ پیام‌های هر thread - برای گزینه‌ی مرتب‌سازیِ «پرپیام‌ترین اول».
+        // توی همین یه کوئریِ فعلی (که هرحال همه‌ی ردیف‌ها رو یه‌بار می‌خونه) شمرده
+        // میشه، بدونِ نیاز به هیچ کوئریِ اضافه‌ی جدا.
+        val messageCounts = mutableMapOf<Long, Int>()
         val trashedIds = trashRepository.getTrashedIds()
         val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
         val keywordBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getKeywordBlockedMessageIds()
@@ -136,6 +141,7 @@ class SmsRepository(
                     if (typeIdx >= 0 && cursor.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT) continue
 
                     val threadId = cursor.getLong(threadIdIdx)
+                    messageCounts[threadId] = (messageCounts[threadId] ?: 0) + 1
                     if (cursor.getInt(readIdx) == 0) {
                         unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
                     }
@@ -144,6 +150,7 @@ class SmsRepository(
                             address = cursor.getStringOrNull(addressIdx) ?: "",
                             date = cursor.getLong(dateIdx),
                             unreadCount = 0,
+                            messageCount = 0,
                             snippet = cursor.getStringOrNull(bodyIdx) ?: ""
                         )
                     }
@@ -153,7 +160,9 @@ class SmsRepository(
             Log.w("SmsRepository", "SecurityException موقع خوندن لیست مکالمات - مجوز احتمالاً همین لحظه برداشته شده", e)
             return emptyMap()
         }
-        return result.mapValues { (threadId, meta) -> meta.copy(unreadCount = unreadCounts[threadId] ?: 0) }
+        return result.mapValues { (threadId, meta) ->
+            meta.copy(unreadCount = unreadCounts[threadId] ?: 0, messageCount = messageCounts[threadId] ?: 0)
+        }
     }
 
     private fun getAllDrafts(): Map<Long, DraftMeta> {

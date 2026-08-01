@@ -14,7 +14,11 @@ data class Conversation(
     val isDraft: Boolean = false,
     // یعنی این مکالمه از تنظیمات پین شده و باید بالای لیست اصلی (قبل از بقیه) نشون داده بشه -
     // از PinStore میاد، برای همینه که getConversations لیست رو بر این اساس مرتب می‌کنه
-    val isPinned: Boolean = false
+    val isPinned: Boolean = false,
+    // تعداد کلِ پیام‌های این مکالمه (نه فقط خوانده‌نشده‌ها) - برای گزینه‌ی مرتب‌سازیِ
+    // «پرپیام‌ترین اول» توی آکاردئونِ فیلترِ درآور. توی همون یه‌بار کوئری‌ای که
+    // SmsRepository.getAllThreadsMeta هرحال می‌زنه شمرده میشه، بدونِ کوئریِ اضافه.
+    val messageCount: Int = 0
 )
 
 data class SmsMessage(
