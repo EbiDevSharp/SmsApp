@@ -61,130 +61,74 @@ fun BlockScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
+                .padding(horizontal = 48.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 BlockHubCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.Sms,
-                    label = "پیامک‌های بلاک‌شده",
+                    label = "پیامک‌های",
                     count = blockedMessageCount,
                     onClick = onOpenBlockedMessages
                 )
                 BlockHubCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.Block,
-                    label = "شماره‌های بلاک‌شده",
+                    label = "شماره ها",
                     count = blockedNumberCount,
                     onClick = onOpenBlockedNumbers
                 )
             }
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 BlockHubCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.TextFields,
-                    label = "کلمات کلیدی بلاک",
+                    label = "کلمات کلیدی",
                     count = blockKeywordCount,
                     onClick = onOpenBlockKeywords
                 )
                 BlockHubCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.Rule,
-                    label = "الگوهای بلاکِ شماره",
+                    label = "الگوها",
                     count = blockPatternCount,
                     onClick = onOpenBlockPatterns
                 )
             }
 
-            AddSenderRow(onClick = onOpenAddSender)
-            BlockSettingsRow(onClick = onOpenBlockSettings)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                BlockHubCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Add,
+                    label = "افزودن فرستنده",
+                    count = 0,
+                    onClick = onOpenAddSender
+                )
+
+                BlockHubCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Settings,
+                    label = "تنظیمات",
+                    count = 0,
+                    onClick = onOpenBlockSettings
+                )
+            }
         }
     }
 }
 
 /** ردیفِ افزودنِ فرستنده‌ی غیرشماره (اسمِ اپراتور یا Sender ID انگلیسی) - بدونِ شمارنده، چون خودش صرفاً یه اکشنه نه یه لیست */
-@Composable
-private fun AddSenderRow(onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "افزودن فرستنده‌ی غیرشماره",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "برای اسمِ اپراتور یا Sender ID های انگلیسی (مثل GOOGLE)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
-                )
-            }
-            Icon(
-                imageVector = Icons.Filled.ChevronLeft,
-                contentDescription = null,
-                tint = Color.Gray
-            )
-        }
-    }
-}
 
-@Composable
-private fun BlockSettingsRow(onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Settings,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = "تنظیمات بلاک",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Filled.ChevronLeft,
-                contentDescription = null,
-                tint = Color.Gray
-            )
-        }
-    }
-}
 
 @Composable
 private fun BlockHubCard(
