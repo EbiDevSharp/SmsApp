@@ -1,6 +1,7 @@
 package com.petro.smsapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -39,10 +42,12 @@ import kotlinx.coroutines.launch
  * ۱) لیستِ نتایجِ جستجو دیگه با باز شدنِ صفحه لود نمیشه؛ فقط با تایپ کردن کاربر
  *    یه کوئری زده میشه.
  *
- * ۲) لیستِ نتایج واقعاً چندانتخابیه: با تپ روی هر مخاطب، تیک می‌خوره و به لیستِ
- *    «انتخاب‌شده‌ها»ی بالای صفحه اضافه میشه - بدونِ اینکه لیستِ جستجو خالی بشه یا
- *    مجبور باشی برای مخاطبِ بعدی از اول جستجو کنی. تپِ دوباره روی یه مخاطبِ
- *    انتخاب‌شده هم از انتخاب درش میاره.
+ * ۲) لیستِ نتایج واقعاً چندانتخابیه: با تپ روی هر مخاطب، تیک می‌خوره و به‌صورتِ
+ *    یه چیپِ کوچیک داخلِ همون کادرِ جستجو (کنارِ هم، قبل از متنِ تایپ‌شده) نشون داده
+ *    میشه - بدونِ اینکه لیستِ جستجو خالی بشه یا مجبور باشی برای مخاطبِ بعدی از اول
+ *    جستجو کنی. تپِ دوباره روی یه مخاطبِ انتخاب‌شده هم از انتخاب درش میاره. قبلاً این
+ *    چیپ‌ها یه ردیفِ کاملاً جدا بالای کادرِ جستجو بودن؛ الان دیگه ردیفِ جدا نیست و
+ *    خودِ چیپ‌ها (با گوشه‌های گردتر) داخلِ همون کادر می‌شینن.
  *
  * ۳) دکمه‌ی «انتخاب از مخاطبین گوشی» (آیکنِ شخص) دیگه Intent سیستمیِ ACTION_PICK
  *    رو باز نمی‌کنه - چون اون Intent محدودیتِ خودِ اندرویده و همیشه فقط یک مخاطب
@@ -289,40 +294,34 @@ fun NewMessageScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (selectedContacts.isNotEmpty()) {
-                SelectedContactsRow(
-                    selected = selectedContacts,
-                    onRemove = { contact -> removeContact(contact) }
-                )
-                if (groupMessagingEnabled && selectedContacts.size > 1) {
-                    TextButton(
-                        onClick = { showSaveGroupDialog = true },
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    ) {
-                        Text("ذخیره به‌عنوان گروه")
-                    }
-                }
-                Divider()
-            }
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = {
+            // چیپ‌های مخاطبینِ انتخاب‌شده دیگه ردیفِ جدا نیستن - داخلِ همین کادرِ
+            // جستجو، کنارِ متنِ تایپ‌شده نشون داده میشن (ContactChipsSearchField پایین‌تر).
+            ContactChipsSearchField(
+                selectedContacts = selectedContacts,
+                searchQuery = searchQuery,
+                onQueryChange = {
                     searchQuery = it
                     onSearchChange(it)
                 },
-                label = { Text("جستجوی نام یا شماره") },
+                onRemoveContact = { contact -> removeContact(contact) },
+                onOpenContactPicker = onOpenContactPicker,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
-                leadingIcon = {
-                    IconButton(onClick = onOpenContactPicker) {
-                        Icon(Icons.Filled.Person, contentDescription = "انتخاب از مخاطبین گوشی")
-                    }
-                }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             )
+
+            if (groupMessagingEnabled && selectedContacts.size > 1) {
+                TextButton(
+                    onClick = { showSaveGroupDialog = true },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                ) {
+                    Text("ذخیره به‌عنوان گروه")
+                }
+            }
+
+            if (selectedContacts.isNotEmpty()) {
+                Divider()
+            }
 
             if (searchQuery.isNotBlank() && searchQuery.any { it.isDigit() }) {
                 val manualEntry = ContactInfo(contactId = -1, name = searchQuery, phoneNumber = searchQuery)
@@ -360,37 +359,110 @@ fun NewMessageScreen(
     }
 }
 
-/** ردیفِ افقیِ چیپ‌های مخاطبینِ انتخاب‌شده برای ارسال گروهی، با دکمه‌ی ضربدر برای حذف هرکدوم */
+/**
+ * کادرِ جستجو + چیپ‌های مخاطبینِ انتخاب‌شده، همه داخلِ یه کادرِ واحد (شبیهِ فیلدهای
+ * "To" تو اپ‌های ایمیل). قبلاً چیپ‌ها یه ردیفِ کاملاً جدا (SelectedContactsRow) بالای
+ * این کادر بودن؛ الان همه‌چی تو یه جعبه‌ست: آیکنِ انتخاب از مخاطبین، بعدش چیپ‌های
+ * انتخاب‌شده (هرکدوم با ضربدرِ حذف)، بعدش خودِ فیلدِ متنیِ جستجو - همه کنارِ هم و اگه
+ * جا نشن به خط بعد می‌رن (FlowRow).
+ *
+ * چیپ‌ها و متنِ جستجو با autoDirection/ContentOrLtr نمایش داده میشن - یعنی اسم‌های
+ * فارسی راست‌به‌چپ می‌مونن و شماره‌ها (چه تو چیپ چه تو متنِ تایپ‌شده) همیشه چپ‌به‌راستن،
+ * دقیقاً هم‌قاعده‌ی بقیه‌ی کادرهای متنی/جستجوی برنامه.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun SelectedContactsRow(selected: List<ContactInfo>, onRemove: (ContactInfo) -> Unit) {
+private fun ContactChipsSearchField(
+    selectedContacts: List<ContactInfo>,
+    searchQuery: String,
+    onQueryChange: (String) -> Unit,
+    onRemoveContact: (ContactInfo) -> Unit,
+    onOpenContactPicker: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(18.dp)
+    val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = modifier
+            .border(1.dp, borderColor, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        selected.forEach { contact ->
-            InputChip(
-                selected = false,
-                onClick = {},
-                label = {
-                    Text(
-                        text = contact.name,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = LocalTextStyle.current.autoDirection()
-                    )
-                },
-                trailingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "حذف ${contact.name}",
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clickable { onRemove(contact) }
-                    )
-                }
+        IconButton(onClick = onOpenContactPicker, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Person, contentDescription = "انتخاب از مخاطبین گوشی")
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            selectedContacts.forEach { contact ->
+                ContactChip(contact = contact, onRemove = { onRemoveContact(contact) })
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterVertically)
+                    .widthIn(min = 110.dp)
+                    .padding(vertical = 4.dp)
+            ) {
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(
+                        color = LocalContentColor.current,
+                        textDirection = TextDirection.ContentOrLtr
+                    ),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { innerTextField ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = if (selectedContacts.isEmpty()) "جستجوی نام یا شماره" else "افزودنِ مخاطبِ دیگر",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** چیپِ یه مخاطبِ انتخاب‌شده - گوشه‌های گردتر از یه دکمه‌ی معمولی، با دکمه‌ی ضربدرِ حذف کنارش */
+@Composable
+private fun ContactChip(contact: ContactInfo, onRemove: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 6.dp, end = 10.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "حذف ${contact.name}",
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier
+                    .size(16.dp)
+                    .clickable(onClick = onRemove)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = contact.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                style = MaterialTheme.typography.bodyMedium.autoDirection()
             )
         }
     }
