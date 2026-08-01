@@ -2,6 +2,7 @@ package com.petro.smsapp.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -13,8 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
+import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.util.DateFormatter
 
 /**
@@ -33,6 +36,11 @@ import com.petro.smsapp.util.DateFormatter
  * متن، سمتِ چپ (چون همیشه چپ‌به‌راست نشون داده میشه) اضافه شده - از همون
  * SmsSegmentCalculator/SmsSegmentIndicator که زیرِ هر حباب پیام هم استفاده میشه، پس
  * منطقش دقیقاً یکیه و اگه بعداً بخواد عوض بشه فقط یه‌جا لازمه تغییر کنه.
+ *
+ * انتخابِ سیم‌کارت: قبلاً یه ردیفِ جدا (SimSelector) بالای این نوار نشون داده می‌شد.
+ * الان به‌جاش یه دکمه‌ی کوچیکِ دایره‌ای (شماره‌ی سیمِ فعال: ۱ یا ۲) خودِ همین نوار،
+ * کنارِ دکمه‌ی ارسال، نشون داده میشه - با کلیک روش یه منوی کشویی برای تعویضِ سیم باز
+ * میشه. فقط وقتی گوشی حداقل دو سیم‌کارتِ فعال داشته باشه نشون داده میشه.
  */
 @Composable
 fun MessageInputBar(
@@ -42,7 +50,10 @@ fun MessageInputBar(
     scheduledAt: Long?,
     onScheduledAtChange: (Long?) -> Unit,
     placeholder: String = "پیام...",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sims: List<SimInfo> = emptyList(),
+    selectedSubscriptionId: Int? = null,
+    onSimSelect: (Int) -> Unit = {}
 ) {
     var showAttachMenu by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -133,19 +144,77 @@ fun MessageInputBar(
 
             }
 
+            if (sims.size >= 2) {
+                Spacer(modifier = Modifier.width(6.dp))
+                SimQuickSelectButton(
+                    sims = sims,
+                    selectedSubscriptionId = selectedSubscriptionId,
+                    onSelect = onSimSelect
+                )
+            }
+
             Spacer(modifier = Modifier.width(8.dp))
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
                 placeholder = { Text(placeholder) },
                 maxLines = 5,
+                shape = RoundedCornerShape(22.dp),
                 textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
             )
             Spacer(modifier = Modifier.width(4.dp))
             // آخرین آیتم -> توی چیدمانِ راست‌به‌چپ سمتِ چپِ کادر می‌شینه
             IconButton(onClick = { showAttachMenu = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "افزودن")
+            }
+        }
+    }
+}
+
+/**
+ * دکمه‌ی کوچیکِ دایره‌ای داخلِ نوارِ ارسال که شماره‌ی سیمِ فعال (بر اساسِ slotIndex، نه
+ * subscriptionId که یه عددِ سیستمیِ بی‌معنی برای کاربره) رو نشون میده. کلیک روش یه
+ * DropdownMenu با اسمِ هر سیم (displayName) باز می‌کنه.
+ */
+@Composable
+private fun SimQuickSelectButton(
+    sims: List<SimInfo>,
+    selectedSubscriptionId: Int?,
+    onSelect: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedSim = sims.find { it.subscriptionId == selectedSubscriptionId } ?: sims.firstOrNull()
+    val label = selectedSim?.let { (it.slotIndex + 1).toString() } ?: "?"
+
+    Box {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            modifier = Modifier
+                .size(38.dp)
+                .clickable { expanded = true }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = label,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            sims.forEach { sim ->
+                DropdownMenuItem(
+                    text = { Text(sim.displayName) },
+                    onClick = {
+                        onSelect(sim.subscriptionId)
+                        expanded = false
+                    }
+                )
             }
         }
     }

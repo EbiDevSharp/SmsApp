@@ -68,6 +68,9 @@ import kotlinx.coroutines.launch
  *      DisposableEffect بالا رو داشت (که با ترکِ اپ از این طریق، Composable هنوز از
  *      ترکیب خارج نشده و onDispose صدا زده نمیشه). با گوش‌دادن به رویدادِ ON_STOP
  *      چرخه‌ی عمرِ صفحه (دقیقاً همون الگوی ThreadScreen)، همینجا هم پیش‌نویس ذخیره میشه.
+ *
+ * ۷) انتخابِ سیم‌کارت دیگه یه ردیفِ جدا (SimSelector) بالای کیبورد نیست - یه دکمه‌ی
+ *    کوچیکِ داخلِ خودِ MessageInputBar شده (کنارِ دکمه‌ی ارسال).
  */
 @Composable
 fun NewMessageScreen(
@@ -266,18 +269,16 @@ fun NewMessageScreen(
                         .fillMaxWidth()
                         .imePadding()
                 ) {
-                    SimSelector(
-                        sims = sims,
-                        selectedSubscriptionId = selectedSimId,
-                        onSelect = { selectedSimId = it }
-                    )
                     MessageInputBar(
                         value = messageBody,
                         onValueChange = { messageBody = it },
                         onSendClick = { performSend() },
                         scheduledAt = scheduledAt,
                         onScheduledAtChange = { scheduledAt = it },
-                        placeholder = "متن پیام"
+                        placeholder = "متن پیام",
+                        sims = sims,
+                        selectedSubscriptionId = selectedSimId,
+                        onSimSelect = { selectedSimId = it }
                     )
                 }
             }

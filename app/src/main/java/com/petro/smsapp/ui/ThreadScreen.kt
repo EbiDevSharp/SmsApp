@@ -331,11 +331,6 @@ fun ThreadScreen(
                         .imePadding()
                 ) {
                     if (canSend) {
-                        SimSelector(
-                            sims = sims,
-                            selectedSubscriptionId = selectedSimId,
-                            onSelect = { selectedSimId = it }
-                        )
                         MessageInputBar(
                             value = input,
                             onValueChange = { input = it },
@@ -352,7 +347,10 @@ fun ThreadScreen(
                                 }
                             },
                             scheduledAt = scheduledAt,
-                            onScheduledAtChange = { scheduledAt = it }
+                            onScheduledAtChange = { scheduledAt = it },
+                            sims = sims,
+                            selectedSubscriptionId = selectedSimId,
+                            onSimSelect = { selectedSimId = it }
                         )
                     } else {
                         Row(
@@ -517,6 +515,16 @@ private fun PinnedMessageBanner(
     }
 }
 
+/**
+ * شکلِ حبابِ پیام - شبیه اپ‌های پیام‌رسانِ معروف، یه گوشه (سمتِ نزدیک‌تر به لبه‌ی
+ * صفحه‌ی همون پیام) کمتر گرد میشه تا حسِ «دم» بگیره؛ بقیه‌ی گوشه‌ها گردترن.
+ */
+private fun bubbleShape(isOutgoing: Boolean) = if (isOutgoing) {
+    RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 4.dp)
+} else {
+    RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 4.dp, bottomEnd = 18.dp)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
@@ -565,7 +573,8 @@ private fun MessageBubble(
             Box(contentAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
                 Surface(
                     color = bubbleColor,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = bubbleShape(message.isOutgoing),
+                    shadowElevation = 0.5.dp,
                     border = if (isPinned) BorderStroke(1.5.dp, Color(0xFFFFA000)) else null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -579,7 +588,7 @@ private fun MessageBubble(
                         text = message.body,
                         color = textColor,
                         fontSize = fontSize,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                     )
                 }
             }
@@ -694,12 +703,12 @@ private fun PendingScheduledBubble(scheduled: ScheduledMessage, onClick: () -> U
             Box(contentAlignment = Alignment.CenterEnd, modifier = Modifier.fillMaxWidth()) {
                 Surface(
                     color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = bubbleShape(isOutgoing = true),
                     modifier = Modifier
                         .padding(4.dp)
                         .clickable(onClick = onClick)
                 ) {
-                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Filled.Alarm,
