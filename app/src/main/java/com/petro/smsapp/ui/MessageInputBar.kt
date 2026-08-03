@@ -1,8 +1,8 @@
 package com.petro.smsapp.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
@@ -26,21 +27,28 @@ import com.petro.smsapp.util.DateFormatter
  * دکمه‌ی «+» چون آخرین آیتمِ Row هست، توی چیدمانِ راست‌به‌چپِ برنامه سمتِ چپِ کادر متن
  * می‌شینه (دقیقاً همونجایی که خواسته شده بود) و با زدنش یه منوی پایین‌صفحه باز میشه؛
  * فعلاً فقط «زمان‌بندی ارسال» توش هست، آیتم‌های بعدی (پیوست عکس/فایل و ...) همینجا
- * اضافه میشن. دکمه‌ی ارسال هم یه دایره‌ی پر با آیکنِ پیکان (Send) شبیه Google Messages ئه.
+ * اضافه میشن. هرکدوم به‌صورتِ یه چیپِ مربعیِ کوچیک - فعلاً فقط آیکن، بدونِ متن - نشون
+ * داده میشن؛ اگه بعداً لازم شد، یه برچسبِ کوچیک زیرِ هرکدوم اضافه میشه. دکمه‌ی ارسال
+ * هم یه دایره‌ی پر با آیکنِ پیکان (Send) شبیه Google Messages ئه.
  *
- * اگه یه زمان انتخاب شده باشه، یه چیپ بالای کادر نشونش میده (کلیک روش = ویرایش زمان،
- * ضربدر کنارش = لغوِ زمان‌بندی و برگشت به ارسال فوری). خودِ تصمیم اینکه ارسال فوری بشه
- * یا زمان‌بندی‌شده، با صداکننده‌ست (توی onSendClick مقدار فعلیِ scheduledAt رو خودش چک می‌کنه).
+ * چیپِ زمان‌بندی: قبلاً یه ردیفِ جدا بالای کادرِ متن بود (بیرونِ خودِ باکس). الان
+ * به‌عنوانِ leadingIcon خودِ OutlinedTextField تعریف شده - یعنی کاملاً داخلِ خودِ
+ * باکسِ متن می‌مونه و «بیرون نمی‌پره»، دقیقاً تا لحظه‌ی ارسالِ واقعی. کلیک روی خودِ
+ * چیپ = ویرایشِ زمان، دکمه‌ی ضربدرِ کوچیکِ کنارش = لغوِ زمان‌بندی و برگشت به ارسالِ
+ * فوری. خودِ متنِ تایپ‌شده و زمانِ انتخابی، تا قبل از زدنِ دکمه‌ی ارسال هیچ‌وقت به‌شکلِ
+ * حبابِ پیام نمایش داده نمیشن؛ فقط بعد از ارسالِ واقعی (یا رسیدنِ زمانِ زمان‌بندی)
+ * تبدیل به یه پیامِ واقعی/زمان‌بندی‌شده تو لیستِ پیام‌ها میشن.
  *
  * یه ردیفِ کوچیکِ «تعداد کاراکترِ باقی‌مونده/تعداد پیامک» (مثلاً 160/1) هم بالای کادرِ
  * متن، سمتِ چپ (چون همیشه چپ‌به‌راست نشون داده میشه) اضافه شده - از همون
  * SmsSegmentCalculator/SmsSegmentIndicator که زیرِ هر حباب پیام هم استفاده میشه، پس
  * منطقش دقیقاً یکیه و اگه بعداً بخواد عوض بشه فقط یه‌جا لازمه تغییر کنه.
  *
- * انتخابِ سیم‌کارت: قبلاً یه ردیفِ جدا (SimSelector) بالای این نوار نشون داده می‌شد.
- * الان به‌جاش یه دکمه‌ی کوچیکِ دایره‌ای (شماره‌ی سیمِ فعال: ۱ یا ۲) خودِ همین نوار،
- * کنارِ دکمه‌ی ارسال، نشون داده میشه - با کلیک روش یه منوی کشویی برای تعویضِ سیم باز
- * میشه. فقط وقتی گوشی حداقل دو سیم‌کارتِ فعال داشته باشه نشون داده میشه.
+ * انتخابِ سیم‌کارت: به‌عنوانِ trailingIcon خودِ OutlinedTextField تعریف شده - یعنی
+ * داخلِ خودِ کادر، گوشه‌ی «انتهای» متن که چون کلِ چیدمانِ برنامه راست‌به‌چپه، دقیقاً
+ * همون گوشه‌ی فیزیکیِ چپِ کادر میشه. یه چیپِ کوچیکِ مستطیلی با شماره‌ی سیمِ فعال (۱ یا
+ * ۲) نشون داده میشه؛ کلیک روش همون منوی قبلی (DropdownMenu با اسمِ هر سیم) رو باز
+ * می‌کنه. فقط وقتی گوشی حداقل دو سیم‌کارتِ فعال داشته باشه نشون داده میشه.
  */
 @Composable
 fun MessageInputBar(
@@ -79,108 +87,124 @@ fun MessageInputBar(
         )
     }
 
-    Column(modifier = modifier) {
-        if (scheduledAt != null) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // اول میاد تا توی چیدمان راست‌به‌چپ سمت راستِ کادر بشینه (دقیقاً هم‌جهت با قبل)
+        Box(contentAlignment = Alignment.TopCenter) {
+            FilledIconButton(
+                onClick = onSendClick,
+                enabled = value.isNotBlank(),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.clickable { showTimePicker = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("ارسال در ${DateFormatter.formatFull(scheduledAt)}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                IconButton(onClick = { onScheduledAtChange(null) }) {
-                    Icon(Icons.Filled.Close, contentDescription = "لغو زمان‌بندی", modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-
-
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // اول میاد تا توی چیدمان راست‌به‌چپ سمت راستِ کادر بشینه (دقیقاً هم‌جهت با قبل)
-            Box(contentAlignment = Alignment.TopCenter) {
-                FilledIconButton(
-                    onClick = onSendClick,
-                    enabled = value.isNotBlank(),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = if (scheduledAt != null) "زمان‌بندی ارسال" else "ارسال",
-                        tint = Color.White
-                    )
-                }
-                if (value.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 2.dp,
-                        modifier = Modifier.offset(y = (-18).dp)
-                    ) {
-                        SmsSegmentIndicator(
-                            text = value,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                        )
-                    }
-                }
-
-            }
-
-            if (sims.size >= 2) {
-                Spacer(modifier = Modifier.width(6.dp))
-                SimQuickSelectButton(
-                    sims = sims,
-                    selectedSubscriptionId = selectedSubscriptionId,
-                    onSelect = onSimSelect
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = if (scheduledAt != null) "زمان‌بندی ارسال" else "ارسال",
+                    tint = Color.White
                 )
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp),
-                placeholder = { Text(placeholder) },
-                maxLines = 5,
-                shape = RoundedCornerShape(22.dp),
-                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            // آخرین آیتم -> توی چیدمانِ راست‌به‌چپ سمتِ چپِ کادر می‌شینه
-            IconButton(onClick = { showAttachMenu = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "افزودن")
+            if (value.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.offset(y = (-18).dp)
+                ) {
+                    SmsSegmentIndicator(
+                        text = value,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                    )
+                }
             }
+
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp),
+            placeholder = { Text(placeholder) },
+            maxLines = 5,
+            shape = RoundedCornerShape(22.dp),
+            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
+            // چیپِ زمان‌بندی - کاملاً داخلِ خودِ باکسِ متن، تا قبل از ارسال بیرون نمی‌پره
+            leadingIcon = {
+                if (scheduledAt != null) {
+                    ScheduledInlineChip(
+                        scheduledAt = scheduledAt,
+                        onClick = { showTimePicker = true },
+                        onCancel = { onScheduledAtChange(null) }
+                    )
+                }
+            },
+            // چیپِ کوچیکِ انتخابِ سیم - داخلِ خودِ کادر، گوشه‌ی «انتها»یِ متن که تو
+            // چیدمانِ راست‌به‌چپِ برنامه دقیقاً گوشه‌ی فیزیکیِ چپ میشه
+            trailingIcon = {
+                if (sims.size >= 2) {
+                    SimQuickSelectChip(
+                        sims = sims,
+                        selectedSubscriptionId = selectedSubscriptionId,
+                        onSelect = onSimSelect
+                    )
+                }
+            }
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        // آخرین آیتم -> توی چیدمانِ راست‌به‌چپ سمتِ چپِ کادر می‌شینه
+        IconButton(onClick = { showAttachMenu = true }) {
+            Icon(Icons.Filled.Add, contentDescription = "افزودن")
         }
     }
 }
 
 /**
- * دکمه‌ی کوچیکِ دایره‌ای داخلِ نوارِ ارسال که شماره‌ی سیمِ فعال (بر اساسِ slotIndex، نه
- * subscriptionId که یه عددِ سیستمیِ بی‌معنی برای کاربره) رو نشون میده. کلیک روش یه
- * DropdownMenu با اسمِ هر سیم (displayName) باز می‌کنه.
+ * چیپِ کوچیکِ زمان‌بندی که به‌عنوانِ leadingIcon داخلِ خودِ OutlinedTextField می‌شینه -
+ * یه مربعِ کوچیک با آیکنِ ساعت (فعلاً بدون متن) + دکمه‌ی ضربدرِ ریزِ کنارش برای لغو.
  */
 @Composable
-private fun SimQuickSelectButton(
+private fun ScheduledInlineChip(
+    scheduledAt: Long,
+    onClick: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier
+                .size(32.dp)
+                .clickable(onClick = onClick)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = "ارسال در ${DateFormatter.formatFull(scheduledAt)} - برای ویرایش بزن",
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Filled.Close, contentDescription = "لغو زمان‌بندی", modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+/**
+ * چیپِ کوچیکِ مستطیلیِ انتخابِ سیم‌کارت که به‌عنوانِ trailingIcon داخلِ خودِ
+ * OutlinedTextField می‌شینه. عددِ نشون‌داده‌شده بر اساسِ slotIndex ئه (نه
+ * subscriptionId که یه عددِ سیستمیِ بی‌معنی برای کاربره). کلیک روش همون
+ * DropdownMenu با اسمِ هر سیم رو باز می‌کنه.
+ */
+@Composable
+private fun SimQuickSelectChip(
     sims: List<SimInfo>,
     selectedSubscriptionId: Int?,
     onSelect: (Int) -> Unit
@@ -191,17 +215,18 @@ private fun SimQuickSelectButton(
 
     Box {
         Surface(
-            shape = CircleShape,
+            shape = RoundedCornerShape(6.dp),
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
             modifier = Modifier
-                .size(38.dp)
+                .padding(end = 4.dp)
+                .size(width = 26.dp, height = 22.dp)
                 .clickable { expanded = true }
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = label,
                     color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -220,23 +245,57 @@ private fun SimQuickSelectButton(
     }
 }
 
+/**
+ * منوی «+» - آیتم‌هاش (فعلاً فقط «زمان‌بندی ارسال») به‌صورتِ چیپ‌های مربعیِ کوچیک
+ * کنارِ هم (FlowRow) نشون داده میشن، فعلاً فقط با آیکن و بدونِ متن. اگه بعداً لازم
+ * شد، یه برچسبِ کوچیک زیرِ هر چیپ اضافه میشه. آیتم‌های بعدی (پیوست عکس/فایل و ...)
+ * دقیقاً با همین الگو به AttachMenuChip های بیشتر تبدیل میشن.
+ */
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AttachMenuSheet(onDismiss: () -> Unit, onScheduleClick: () -> Unit) {
     val sheetState = rememberModalBottomSheetState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onScheduleClick)
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Schedule, contentDescription = null)
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("زمان‌بندی ارسال", style = MaterialTheme.typography.bodyLarge)
-            }
-            // آیتم‌های بعدیِ منوی «+» (پیوست عکس/فایل و ...) اینجا اضافه میشن
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            AttachMenuChip(
+                icon = Icons.Filled.Schedule,
+                contentDescription = "زمان‌بندی ارسال",
+                onClick = {
+                    onDismiss()
+                    onScheduleClick()
+                }
+            )
+            // آیتم‌های بعدیِ منوی «+» (پیوست عکس/فایل و ...) همینجا اضافه میشن
+        }
+    }
+}
+
+@Composable
+private fun AttachMenuChip(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .size(56.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

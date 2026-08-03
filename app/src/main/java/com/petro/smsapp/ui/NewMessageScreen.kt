@@ -66,6 +66,11 @@ import kotlinx.coroutines.launch
  * ۶) ذخیره‌ی پیش‌نویس (فقط با یک گیرنده) - دو مسیرِ خروج (ترکِ داخلِ اپ + ترکِ کاملِ اپ) پوشش داده میشه.
  *
  * ۷) انتخابِ سیم‌کارت داخلِ خودِ MessageInputBar ئه.
+ *
+ * ۸) وقتی کاربر دستی یه شماره تایپ می‌کنه و روی «ارسال به شماره: ...» می‌زنه، بعد از
+ *    اضافه‌شدنش به لیستِ انتخاب‌شده‌ها (چیپ)، خودِ متنِ تایپ‌شده از باکسِ جستجو پاک
+ *    میشه - قبلاً بعد از این کلیک، هم چیپِ مخاطب اضافه می‌شد هم متنِ خام همچنان تو
+ *    باکس می‌موند که تکراری/گیج‌کننده بود.
  */
 @Composable
 fun NewMessageScreen(
@@ -120,6 +125,12 @@ fun NewMessageScreen(
 
     fun removeContact(contact: ContactInfo) {
         selectedContacts = selectedContacts.filter { it.phoneNumber != contact.phoneNumber }
+    }
+
+    /** بعد از افزودن/تایید یه شماره‌ی دستی، باکسِ جستجو (و نتیجه‌ی کوئریِ ViewModel) پاک بشه */
+    fun clearSearch() {
+        searchQuery = ""
+        onSearchChange("")
     }
 
     // ذخیره‌ی پیش‌نویس فقط وقتی معنی داره که دقیقاً یک گیرنده انتخاب شده باشه -
@@ -327,7 +338,12 @@ fun NewMessageScreen(
                 val manualEntry = ContactInfo(contactId = -1, name = searchQuery, phoneNumber = searchQuery)
                 val alreadyAdded = selectedContacts.any { it.phoneNumber == manualEntry.phoneNumber }
                 TextButton(
-                    onClick = { toggleContact(manualEntry) },
+                    onClick = {
+                        toggleContact(manualEntry)
+                        // بعد از تایید/برداشتنِ شماره‌ی دستی، دیگه لازم نیست متنِ تایپ‌شده
+                        // تو باکسِ جستجو بمونه - چیپش از قبل تو لیستِ انتخاب‌شده‌ها معلومه
+                        clearSearch()
+                    },
                     modifier = Modifier.padding(horizontal = 12.dp)
                 ) {
                     Text(if (alreadyAdded) "✓ اضافه شد: $searchQuery" else "ارسال به شماره: $searchQuery")
