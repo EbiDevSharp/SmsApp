@@ -1,8 +1,10 @@
 package com.petro.smsapp.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -167,7 +170,10 @@ fun MessageInputBar(
 
 /**
  * چیپِ کوچیکِ زمان‌بندی که به‌عنوانِ leadingIcon داخلِ خودِ OutlinedTextField می‌شینه -
- * یه مربعِ کوچیک با آیکنِ ساعت (فعلاً بدون متن) + دکمه‌ی ضربدرِ ریزِ کنارش برای لغو.
+ * یه مربعِ کوچیک با آیکنِ ساعت (فعلاً بدون متن). دکمه‌ی لغو دیگه یه IconButtonِ جدا و
+ * پهن نیست - مثلِ چیپ‌های فیلترِ درآور (DrawerFilterAccordion) یه بجِ ریزِ گوشه‌ی
+ * بالای خودِ چیپه؛ اینجوری هم مجموعه جمع‌وجورتر میشه هم با پدینگِ اطرافش از لبه‌ی
+ * باکسِ متن فاصله می‌گیره (قبلاً کاملاً چسبیده بود).
  */
 @Composable
 private fun ScheduledInlineChip(
@@ -175,7 +181,9 @@ private fun ScheduledInlineChip(
     onClick: () -> Unit,
     onCancel: () -> Unit
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Box(
+        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+    ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.primaryContainer,
@@ -191,8 +199,22 @@ private fun ScheduledInlineChip(
                 )
             }
         }
-        IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Filled.Close, contentDescription = "لغو زمان‌بندی", modifier = Modifier.size(14.dp))
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 6.dp, y = (-6).dp)
+                .size(16.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(MaterialTheme.colorScheme.error)
+                .clickable(onClick = onCancel),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "لغو زمان‌بندی",
+                tint = Color.White,
+                modifier = Modifier.size(11.dp)
+            )
         }
     }
 }
