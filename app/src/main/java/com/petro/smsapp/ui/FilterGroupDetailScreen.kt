@@ -21,7 +21,7 @@ import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «داخلِ یه گروه» - جایگزینِ عمومیِ BlockScreen/BlockSettingsScreen قبلی، ولی
- * برای یه گروهِ مشخص. بالای صفحه اسمِ گروه (با امکانِ ویرایش) + سه سوییچِ تنظیمات، پایینش
+ * برای یه گروهِ مشخص. بالای صفحه اسمِ گروه (با امکانِ ویرایش) + چهار سوییچِ تنظیمات، پایینش
  * سه کارتِ ورودی (شماره/کلمه/الگو) و یه کارتِ نمایشِ پیام‌ها.
  */
 @Composable
@@ -32,17 +32,19 @@ fun FilterGroupDetailScreen(
     onOpenKeywords: () -> Unit,
     onOpenPatterns: () -> Unit,
     onOpenMessages: () -> Unit,
-    onSave: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean) -> Unit
+    onSave: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean, showInNotificationPicker: Boolean) -> Unit
 ) {
     var name by remember(summary.group.id) { mutableStateOf(summary.group.name) }
     var hideFromMainList by remember(summary.group.id) { mutableStateOf(summary.group.hideFromMainList) }
     var showNotifications by remember(summary.group.id) { mutableStateOf(summary.group.showNotifications) }
     var blockNonContacts by remember(summary.group.id) { mutableStateOf(summary.group.blockNonContacts) }
+    var showInNotificationPicker by remember(summary.group.id) { mutableStateOf(summary.group.showInNotificationPicker) }
 
     val hasChanges = name.trim() != summary.group.name ||
         hideFromMainList != summary.group.hideFromMainList ||
         showNotifications != summary.group.showNotifications ||
-        blockNonContacts != summary.group.blockNonContacts
+        blockNonContacts != summary.group.blockNonContacts ||
+        showInNotificationPicker != summary.group.showInNotificationPicker
 
     Scaffold(
         topBar = {
@@ -54,7 +56,7 @@ fun FilterGroupDetailScreen(
                 actions = {
                     if (hasChanges) {
                         TextButton(onClick = {
-                            onSave(name.trim(), hideFromMainList, showNotifications, blockNonContacts)
+                            onSave(name.trim(), hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker)
                         }) { Text("ذخیره") }
                     }
                 }
@@ -79,6 +81,7 @@ fun FilterGroupDetailScreen(
             SettingSwitchRow("از لیستِ اصلی مخفی بشه", hideFromMainList) { hideFromMainList = it }
             SettingSwitchRow("با اینکه افتاد تو این گروه، بازم نوتیف بده", showNotifications) { showNotifications = it }
             SettingSwitchRow("فرستنده‌های خارج از مخاطبین خودکار بیان اینجا", blockNonContacts) { blockNonContacts = it }
+            SettingSwitchRow("تو انتخابگرِ سریعِ دکمه‌ی نوتیفیکیشن («افزودن به گروه») هم نشون داده بشه", showInNotificationPicker) { showInNotificationPicker = it }
 
             Spacer(modifier = Modifier.height(20.dp))
 

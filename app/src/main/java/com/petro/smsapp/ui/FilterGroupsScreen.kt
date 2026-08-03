@@ -45,7 +45,7 @@ fun FilterGroupsScreen(
     onMenuClick: () -> Unit,
     onBack: () -> Unit,
     onOpenGroup: (groupId: Long) -> Unit,
-    onCreateGroup: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean) -> Unit,
+    onCreateGroup: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean, showInNotificationPicker: Boolean) -> Unit,
     onDeleteGroup: (groupId: Long) -> Unit,
     onReorder: (orderedGroupIds: List<Long>) -> Unit
 ) {
@@ -66,8 +66,8 @@ fun FilterGroupsScreen(
 
     if (showCreateDialog) {
         CreateFilterGroupDialog(
-            onConfirm = { name, hide, notify, nonContacts ->
-                onCreateGroup(name, hide, notify, nonContacts)
+            onConfirm = { name, hide, notify, nonContacts, notifPicker ->
+                onCreateGroup(name, hide, notify, nonContacts, notifPicker)
                 showCreateDialog = false
             },
             onDismiss = { showCreateDialog = false }
@@ -223,16 +223,17 @@ private fun FilterGroupRow(
     }
 }
 
-/** دیالوگِ ساختِ گروهِ جدید - اسم + سه سوییچِ تنظیماتِ اولیه (بعداً هم از صفحه‌ی تنظیماتِ خودِ گروه قابلِ‌تغییره) */
+/** دیالوگِ ساختِ گروهِ جدید - اسم + چهار سوییچِ تنظیماتِ اولیه (بعداً هم از صفحه‌ی تنظیماتِ خودِ گروه قابلِ‌تغییره) */
 @Composable
 private fun CreateFilterGroupDialog(
-    onConfirm: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean) -> Unit,
+    onConfirm: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean, showInNotificationPicker: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var hideFromMainList by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(true) }
     var blockNonContacts by remember { mutableStateOf(false) }
+    var showInNotificationPicker by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -263,11 +264,16 @@ private fun CreateFilterGroupDialog(
                     checked = blockNonContacts,
                     onCheckedChange = { blockNonContacts = it }
                 )
+                SettingSwitchRow(
+                    label = "تو انتخابگرِ سریعِ دکمه‌ی نوتیفیکیشن هم نشون داده بشه",
+                    checked = showInNotificationPicker,
+                    onCheckedChange = { showInNotificationPicker = it }
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name.trim(), hideFromMainList, showNotifications, blockNonContacts) },
+                onClick = { onConfirm(name.trim(), hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker) },
                 enabled = name.isNotBlank()
             ) { Text("ساخت") }
         },

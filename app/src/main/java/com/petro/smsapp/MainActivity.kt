@@ -293,6 +293,7 @@ fun AppNavigation(
     val favoriteThreadIds by viewModel.favoriteThreadIds.collectAsState()
     val trash by viewModel.trash.collectAsState()
     val filterGroupSummaries by viewModel.filterGroupSummaries.collectAsState()
+    val notificationPickerGroups by viewModel.notificationPickerGroups.collectAsState()
     val filterGroupMessages by viewModel.filterGroupMessages.collectAsState()
     val appSettings by AppSettings.state.collectAsState()
     val privateNumbers by viewModel.privateNumbers.collectAsState()
@@ -361,7 +362,7 @@ fun AppNavigation(
         }
     }
 
-    // شیتِ انتخابِ گروه - از سویپ/منویِ لیستِ مکالمات (چند مکالمه‌ی هدف هم‌زمان)
+    // شیتِ انتخابِ گروه - از سویپ/منویِ لیستِ مکالمات (چند مکالمه‌ی هدف هم‌زمان) - همه‌ی گروه‌ها نشون داده میشن
     if (pendingGroupPickTargets != null) {
         val targets = pendingGroupPickTargets!!
         val label = if (targets.size == 1) targets.first().displayName else "${targets.size} مخاطب"
@@ -374,12 +375,13 @@ fun AppNavigation(
         )
     }
 
-    // شیتِ انتخابِ گروه - از دکمه‌ی روی نوتیف (یه شماره‌ی هدف)
+    // شیتِ انتخابِ گروه - از دکمه‌ی روی نوتیف (یه شماره‌ی هدف) - فقط گروه‌هایی که
+    // showInNotificationPicker روشنه نشون داده میشن
     if (quickGroupPickTarget != null) {
         val target = quickGroupPickTarget!!
         GroupPickerSheet(
             targetLabel = target.displayName,
-            groups = filterGroupSummaries,
+            groups = notificationPickerGroups,
             onPick = { groupId -> viewModel.addAddressToGroupQuick(groupId, target.address, target.displayName) },
             onCreateAndPick = { name -> viewModel.createFilterGroupAndAddAddress(name, target.address, target.displayName) },
             onDismiss = { viewModel.consumeQuickGroupPick() }
@@ -637,8 +639,8 @@ fun AppNavigation(
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
                     onOpenGroup = { groupId -> navController.navigate("filter_group/$groupId") },
-                    onCreateGroup = { name, hide, notify, nonContacts ->
-                        viewModel.createFilterGroup(name, hide, notify, nonContacts)
+                    onCreateGroup = { name, hide, notify, nonContacts, notifPicker ->
+                        viewModel.createFilterGroup(name, hide, notify, nonContacts, notifPicker)
                     },
                     onDeleteGroup = { groupId -> viewModel.deleteFilterGroup(groupId) },
                     onReorder = { orderedIds -> viewModel.reorderFilterGroups(orderedIds) }
@@ -661,8 +663,8 @@ fun AppNavigation(
                             viewModel.loadFilterGroupMessages(groupId)
                             navController.navigate("filter_group_messages/$groupId")
                         },
-                        onSave = { name, hide, notify, nonContacts ->
-                            viewModel.updateFilterGroup(groupId, name, hide, notify, nonContacts)
+                        onSave = { name, hide, notify, nonContacts, notifPicker ->
+                            viewModel.updateFilterGroup(groupId, name, hide, notify, nonContacts, notifPicker)
                         }
                     )
                 } else {

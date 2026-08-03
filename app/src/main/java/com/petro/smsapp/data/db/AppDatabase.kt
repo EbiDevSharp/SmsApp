@@ -28,7 +28,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FilterGroupPatternEntity::class,
         FilterGroupMatchedMessageEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -79,6 +79,19 @@ abstract class AppDatabase : RoomDatabase() {
          * پاک و از نو ساخته میشه (فقط دیتابیسِ SMS/دستگاه دست‌نخورده می‌مونه، چون اون
          * اصلاً تو Room نیست).
          */
+
+        /**
+         * نسخه‌ی ۴ -> ۵: افزودنِ ستونِ showInNotificationPicker به filter_groups - تعیینِ
+         * اینکه یه گروه تویِ شیتِ انتخابِ گروهِ دکمه‌ی «افزودن به گروه»ِ روی نوتیفیکیشن
+         * نشون داده بشه یا نه. پیش‌فرض ۱ (true) تا گروه‌های از قبل ساخته‌شده هم مثلِ قبل
+         * تویِ اون شیت دیده بشن.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE filter_groups ADD COLUMN showInNotificationPicker INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -86,7 +99,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sms_app.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }

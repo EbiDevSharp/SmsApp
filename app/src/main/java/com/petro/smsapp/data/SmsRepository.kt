@@ -469,6 +469,10 @@ class SmsRepository(
         return BulkDeleteResult(movedToTrash = trashEnabled, blockedFavoriteCount = blockedCount)
     }
 
+    /**
+     * فقط idِ پیامک‌های یه thread خاص - بدونِ خوندنِ بدنه/تاریخ/نوع، برای عملیات‌های
+     * سبکی مثلِ حذفِ دسته‌جمعی یا بک‌فیلِ matchِ گروهِ فیلتر که فقط id لازم دارن.
+     */
     private fun getMessageIdsForThread(threadId: Long): List<Long> {
         val ids = mutableListOf<Long>()
         try {
@@ -483,6 +487,23 @@ class SmsRepository(
             Log.w("SmsRepository", "SecurityException موقع خوندن id های یک مکالمه", e)
         }
         return ids
+    }
+
+    /**
+     * بعد از اضافه‌شدنِ دستیِ یه شماره به یه گروهِ فیلتر (نه از طریقِ پیامِ تازه‌رسیده)،
+     * پیام‌های از قبل موجودِ همون thread رو هم به این گروه وصل می‌کنه - وگرنه
+     * تنظیماتِ گروه (مثلاً «از لیستِ اصلی مخفی بشه») فقط رویِ پیام‌های *بعدی* اعمال
+     * می‌شد، نه پیام‌های قدیمی‌ای که همون لحظه‌ی اضافه‌کردن تو لیستِ اصلی بودن.
+     */
+    suspend fun applyGroupToExistingThreadMessages(groupId: Long, threadId: Long, address: String) {
+        val ids = getMessageIdsForThread(threadId)
+        if (ids.isEmpty()) return
+        filterGroupRepository.matchMessagesToGroup(groupId, address, ids)
+    }
+
+    /** برعکسِ applyGroupToExistingThreadMessages - وقتی یه شماره از یه گروه حذف میشه، برای برگردوندنِ مکالمه‌ی مخفی‌شده به لیستِ اصلی */
+    suspend fun removeGroupFromExistingThreadMessages(groupId: Long, address: String) {
+        filterGroupRepository.unmatchMessagesForAddressInGroup(groupId, address)
     }
 
     suspend fun deleteMessages(messageIds: Set<Long>): BulkDeleteResult {

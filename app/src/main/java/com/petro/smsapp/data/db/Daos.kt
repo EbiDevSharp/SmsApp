@@ -211,9 +211,17 @@ interface FilterGroupDao {
 
     @Query(
         "UPDATE filter_groups SET name = :name, hideFromMainList = :hideFromMainList, " +
-                "showNotifications = :showNotifications, blockNonContacts = :blockNonContacts WHERE id = :id"
+                "showNotifications = :showNotifications, blockNonContacts = :blockNonContacts, " +
+                "showInNotificationPicker = :showInNotificationPicker WHERE id = :id"
     )
-    suspend fun updateGroup(id: Long, name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean)
+    suspend fun updateGroup(
+        id: Long,
+        name: String,
+        hideFromMainList: Boolean,
+        showNotifications: Boolean,
+        blockNonContacts: Boolean,
+        showInNotificationPicker: Boolean
+    )
 
     @Query("UPDATE filter_groups SET priority = :priority WHERE id = :id")
     suspend fun updatePriority(id: Long, priority: Int)
@@ -284,11 +292,23 @@ interface FilterGroupDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMatch(entity: FilterGroupMatchedMessageEntity)
 
+    /** بک‌فیلِ دسته‌جمعیِ پیام‌های قبلی موقعِ افزودنِ دستیِ یه شماره به گروه - یه insert برای کلِ لیست، نه یکی‌یکی */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMatches(entities: List<FilterGroupMatchedMessageEntity>)
+
     @Query("DELETE FROM filter_group_matched_messages WHERE messageId = :messageId")
     suspend fun deleteMatch(messageId: Long)
 
+    /** حذفِ دسته‌جمعیِ چند match هم‌زمان - برای وقتی یه شماره از گروه حذف میشه */
+    @Query("DELETE FROM filter_group_matched_messages WHERE messageId IN (:messageIds)")
+    suspend fun deleteMatches(messageIds: List<Long>)
+
     @Query("SELECT * FROM filter_group_matched_messages WHERE messageId = :messageId LIMIT 1")
     suspend fun getMatch(messageId: Long): FilterGroupMatchedMessageEntity?
+
+    /** از بینِ یه لیستِ id، فقط اونایی که از قبل match دارن - برای اینکه بک‌فیل فقط رویِ باقی‌مونده انجام بشه، نه یه کوئریِ جدا برای هر پیام */
+    @Query("SELECT messageId FROM filter_group_matched_messages WHERE messageId IN (:messageIds)")
+    suspend fun getMatchedMessageIdsAmong(messageIds: List<Long>): List<Long>
 
     @Query("SELECT * FROM filter_group_matched_messages WHERE groupId = :groupId")
     suspend fun getMatchesForGroup(groupId: Long): List<FilterGroupMatchedMessageEntity>

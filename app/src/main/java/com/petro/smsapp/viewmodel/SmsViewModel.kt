@@ -127,6 +127,15 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     val filterGroupSummaries: StateFlow<List<FilterGroupSummary>> =
         filterGroupRepository.observeGroupSummaries().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * فقط گروه‌هایی که کاربر گفته تویِ شیتِ انتخابِ گروهِ دکمه‌ی نوتیفیکیشن هم نشون داده
+     * بشن (FilterGroup.showInNotificationPicker) - برای شیتِ بازشده از دکمه‌ی «افزودن به
+     * گروه»ِ روی نوتیف (quickGroupPickTarget). شیتِ سویپ/منویِ داخلِ لیست همچنان از
+     * filterGroupSummaries کامل استفاده می‌کنه.
+     */
+    val notificationPickerGroups: StateFlow<List<FilterGroupSummary>> =
+        filterGroupRepository.observeNotificationPickerGroups().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // ---- لیست‌های ترکیبیِ Telephony + Room - هم‌چنان trigger-based ----
 
     private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
@@ -461,13 +470,14 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         name: String,
         hideFromMainList: Boolean,
         showNotifications: Boolean,
-        blockNonContacts: Boolean
+        blockNonContacts: Boolean,
+        showInNotificationPicker: Boolean = true
     ) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                filterGroupRepository.createGroup(trimmed, hideFromMainList, showNotifications, blockNonContacts)
+                filterGroupRepository.createGroup(trimmed, hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker)
             }
             _operationMessage.value = "گروهِ «$trimmed» ساخته شد"
         }
@@ -478,13 +488,14 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         name: String,
         hideFromMainList: Boolean,
         showNotifications: Boolean,
-        blockNonContacts: Boolean
+        blockNonContacts: Boolean,
+        showInNotificationPicker: Boolean
     ) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                filterGroupRepository.updateGroup(id, trimmed, hideFromMainList, showNotifications, blockNonContacts)
+                filterGroupRepository.updateGroup(id, trimmed, hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker)
             }
             loadConversations()
         }
@@ -513,6 +524,14 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val added = withContext(Dispatchers.IO) { filterGroupRepository.addNumber(groupId, address, displayName) }
+            if (added) {
+                // پیام‌های از قبل موجودِ همین شماره هم به این گروه وصل بشن، وگرنه
+                // تنظیماتِ گروه (مثلاً مخفی از لیستِ اصلی) فقط رویِ پیام‌های بعدی اثر می‌کرد
+                withContext(Dispatchers.IO) {
+                    val threadId = repository.getOrCreateThreadId(address)
+                    repository.applyGroupToExistingThreadMessages(groupId, threadId, address)
+                }
+            }
             _operationMessage.value = if (added) "$displayName اضافه شد" else "این شماره از قبل تو این گروه بود"
             loadConversations()
         }
@@ -520,7 +539,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun removeNumberFromFilterGroup(groupId: Long, address: String) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { filterGroupRepository.removeNumber(groupId, address) }
+            withContext(Dispatchers.IO) {
+                filterGroupRepository.removeNumber(groupId, address)
+                // ردِ matchِ پیام‌های قبلیِ این شماره تو این گروه هم پاک بشه تا اگه گروه
+                // مخفی‌شون کرده بود، دوباره برگردن به لیستِ اصلیِ مکالمات
+                repository.removeGroupFromExistingThreadMessages(groupId, address)
+            }
             loadConversations()
         }
     }
@@ -630,6 +654,8 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     val wasAdded = filterGroupRepository.addNumber(groupId, conversation.address, conversation.displayName)
                     if (wasAdded) {
+                        // این thread از قبل تو لیستِ اصلی بود - پیام‌های موجودش هم به این گروه وصل بشن
+                        repository.applyGroupToExistingThreadMessages(groupId, conversation.threadId, conversation.address)
                         NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
                         added++
                     }
@@ -663,6 +689,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val added = withContext(Dispatchers.IO) { filterGroupRepository.addNumber(groupId, address, displayName) }
+            if (added) {
+                withContext(Dispatchers.IO) {
+                    val threadId = repository.getOrCreateThreadId(address)
+                    repository.applyGroupToExistingThreadMessages(groupId, threadId, address)
+                }
+            }
             _operationMessage.value = if (added) "$displayName به گروه اضافه شد" else "این شماره از قبل تو این گروه بود"
             loadConversations()
             consumeQuickGroupPick()

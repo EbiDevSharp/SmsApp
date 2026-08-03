@@ -55,6 +55,14 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
             }
         }
 
+    /**
+     * فقط گروه‌هایی که کاربر گفته تویِ شیتِ انتخابِ گروهِ دکمه‌ی «افزودن به گروه»ِ روی
+     * نوتیفیکیشن هم نشون داده بشن (FilterGroup.showInNotificationPicker). همون Flow
+     * بالا رو فیلتر می‌کنه - کوئریِ جداگانه‌ای لازم نیست.
+     */
+    fun observeNotificationPickerGroups(): Flow<List<FilterGroupSummary>> =
+        observeGroupSummaries().map { list -> list.filter { it.group.showInNotificationPicker } }
+
     private fun List<GroupIdCount>.toCountMap(): Map<Long, Int> = associate { it.groupId to it.cnt }
 
     suspend fun getGroup(id: Long): FilterGroup? = dao.getGroup(id)?.toDomain()
@@ -64,7 +72,8 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
         name: String,
         hideFromMainList: Boolean,
         showNotifications: Boolean,
-        blockNonContacts: Boolean
+        blockNonContacts: Boolean,
+        showInNotificationPicker: Boolean = true
     ): Long {
         val nextPriority = dao.getMaxPriority() + 1
         return dao.insertGroup(
@@ -74,6 +83,7 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
                 hideFromMainList = hideFromMainList,
                 showNotifications = showNotifications,
                 blockNonContacts = blockNonContacts,
+                showInNotificationPicker = showInNotificationPicker,
                 createdAt = System.currentTimeMillis()
             )
         )
@@ -84,9 +94,10 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
         name: String,
         hideFromMainList: Boolean,
         showNotifications: Boolean,
-        blockNonContacts: Boolean
+        blockNonContacts: Boolean,
+        showInNotificationPicker: Boolean
     ) {
-        dao.updateGroup(id, name, hideFromMainList, showNotifications, blockNonContacts)
+        dao.updateGroup(id, name, hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker)
     }
 
     /** جابه‌جاییِ اولویتِ دو گروهِ همسایه (دکمه‌های بالا/پایینِ هرردیف تویِ هابِ گروه‌ها) */
@@ -213,6 +224,40 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
         dao.insertMatch(FilterGroupMatchedMessageEntity(messageId, groupId, matchType.name, matchedValue, System.currentTimeMillis()))
     }
 
+    /**
+     * بک‌فیلِ دسته‌جمعیِ پیام‌های از قبل موجود، وقتی یه شماره *دستی* (نه از طریقِ پیامِ
+     * تازه‌رسیده) به یه گروه اضافه میشه. قبلاً این اتفاق فقط برای پیام‌های بعدی می‌افتاد،
+     * برای همین تنظیماتِ گروه (مثلاً «از لیستِ اصلی مخفی بشه») روی پیام‌های قدیمیِ همون
+     * شماره اصلاً اثر نداشت. فقط پیام‌هایی که هنوز مالِ هیچ گروهی نشدن رو مچ می‌کنه، تا
+     * مچِ درستِ یه پیام با یه گروهِ دیگه (اگه از قبل داشت) بازنویسی نشه.
+     */
+    suspend fun matchMessagesToGroup(groupId: Long, address: String, messageIds: List<Long>) {
+        if (messageIds.isEmpty()) return
+        val alreadyMatched = dao.getMatchedMessageIdsAmong(messageIds).toSet()
+        val toInsert = messageIds.filter { it !in alreadyMatched }
+        if (toInsert.isEmpty()) return
+        val now = System.currentTimeMillis()
+        dao.insertMatches(
+            toInsert.map { messageId ->
+                FilterGroupMatchedMessageEntity(messageId, groupId, FilterMatchType.NUMBER.name, address, now)
+            }
+        )
+    }
+
+    /**
+     * برعکسِ بالا - وقتی یه شماره از یه گروه حذف میشه، ردِ matchِ پیام‌های قبلیِ همون
+     * شماره تو همون گروه هم پاک میشه تا (اگه گروه hideFromMainList داشت) دوباره برگردن
+     * به لیستِ اصلیِ مکالمات.
+     */
+    suspend fun unmatchMessagesForAddressInGroup(groupId: Long, address: String) {
+        val key = normalize(address)
+        if (key.isBlank()) return
+        val toRemove = dao.getMatchesForGroup(groupId)
+            .filter { it.matchType == FilterMatchType.NUMBER.name && normalize(it.matchedValue ?: "") == key }
+            .map { it.messageId }
+        if (toRemove.isNotEmpty()) dao.deleteMatches(toRemove)
+    }
+
     suspend fun getMatch(messageId: Long): FilterMatchResultForMessage? {
         val row = dao.getMatch(messageId) ?: return null
         val group = dao.getGroup(row.groupId) ?: return null
@@ -245,7 +290,9 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
         }
     }
 
-    private fun FilterGroupEntity.toDomain() = FilterGroup(id, name, priority, hideFromMainList, showNotifications, blockNonContacts, createdAt)
+    private fun FilterGroupEntity.toDomain() = FilterGroup(
+        id, name, priority, hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker, createdAt
+    )
     private fun FilterGroupNumberEntity.toDomain() = FilterGroupNumber(groupId, address, displayName, addedAt)
     private fun FilterGroupKeywordEntity.toDomain() = FilterGroupKeyword(id, groupId, text, addedAt)
     private fun FilterGroupPatternEntity.toDomain() = FilterGroupPattern(id, groupId, PatternType.valueOf(type), value, addedAt)
