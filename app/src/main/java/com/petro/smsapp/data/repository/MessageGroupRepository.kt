@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.map
  * بخش (خودِ اس‌ام‌اس‌های سیستم، بلاک، خصوصی، گروه‌ها) مستقل و ماژولار بمونه.
  *
  * observeGroupSummaries فقط id/اسم/تعدادِ اعضا رو (با یه کوئریِ JOIN سبک) reactive
- * برمی‌گردونه - خودِ اعضا فقط وقتی واقعاً لازم بشه (کاربر یه گروه رو برای بارگذاری
+ * برمی‌گردونه - خودِ اعضا فقط وقتی واقعاً لازم بشه (کاربر یه گروه رو برای بارگذاری/ویرایش
  * انتخاب کنه) با getGroupMembers جداگانه خونده میشن؛ اینجوری صفحه‌ی لیستِ گروه‌ها
  * مجبور نیست همه‌ی اعضای همه‌ی گروه‌ها رو هم‌زمان تو حافظه نگه داره.
  */
@@ -41,5 +41,24 @@ class MessageGroupRepository(private val dao: MessageGroupDao) {
     suspend fun deleteGroup(groupId: Long) {
         dao.deleteMembers(groupId)
         dao.deleteGroup(groupId)
+    }
+
+    /** تغییرِ اسمِ یه گروهِ ذخیره‌شده - برای «ویرایش گروه» */
+    suspend fun renameGroup(groupId: Long, newName: String) {
+        dao.renameGroup(groupId, newName)
+    }
+
+    /**
+     * جایگزینیِ کاملِ اعضای یه گروه (حذف/افزودنِ عضو از صفحه‌ی ویرایش) - چون تعدادِ
+     * اعضای هر گروه معمولاً کمه، ساده‌ترین و مطمئن‌ترین راه اینه که کلِ لیستِ قبلی پاک
+     * بشه و لیستِ جدید یه‌جا insert بشه، به‌جای دیف‌گرفتنِ دستی بینِ لیستِ قدیم/جدید.
+     */
+    suspend fun replaceMembers(groupId: Long, members: List<MessageGroupMember>) {
+        dao.deleteMembers(groupId)
+        if (members.isNotEmpty()) {
+            dao.insertMembers(
+                members.map { MessageGroupMemberEntity(groupId = groupId, address = it.address, displayName = it.displayName) }
+            )
+        }
     }
 }

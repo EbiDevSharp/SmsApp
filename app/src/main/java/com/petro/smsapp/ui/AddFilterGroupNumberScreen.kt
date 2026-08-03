@@ -19,27 +19,22 @@ import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.util.autoDirection
 
-/**
- * صفحه‌ی «افزودن شماره‌ی بلاک» - دقیقاً همون الگوی مرحله‌ی اول «پیام جدید»: جستجو
- * تو مخاطبین گوشی + دکمه‌ی انتخاب از لیست مخاطبین + امکان وارد کردن دستی یه شماره
- * که اصلاً تو مخاطبین نیست. تفاوتش با «پیام جدید» اینه که به‌جای رفتن به صفحه‌ی چت،
- * انتخاب (چه از مخاطبین چه دستی) بلافاصله همون شماره رو بلاک می‌کنه و برمی‌گرده عقب.
- */
 @Composable
-fun AddBlockedNumberScreen(
+fun AddFilterGroupNumberScreen(
+    groupName: String,
     contacts: List<ContactInfo>,
     pickedContact: ContactInfo?,
     onPickedContactConsumed: () -> Unit,
     onPickFromContactsClick: () -> Unit,
     onSearchChange: (String) -> Unit,
-    onBlockNumber: (address: String, displayName: String) -> Unit,
+    onAddNumber: (address: String, displayName: String) -> Unit,
     onBack: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(pickedContact) {
         if (pickedContact != null) {
-            onBlockNumber(pickedContact.phoneNumber, pickedContact.name)
+            onAddNumber(pickedContact.phoneNumber, pickedContact.name)
             onPickedContactConsumed()
             onBack()
         }
@@ -48,7 +43,7 @@ fun AddBlockedNumberScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("افزودن شماره‌ی بلاک") },
+                title = { Text("افزودنِ شماره به «$groupName»", style = LocalTextStyle.current.autoDirection()) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
                 }
@@ -80,13 +75,12 @@ fun AddBlockedNumberScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // اگه شماره‌ای که تایپ شده اصلاً تو مخاطبین نباشه، همینجا دستی قابل بلاک‌کردنه
             if (searchQuery.isNotBlank() && searchQuery.any { it.isDigit() }) {
                 TextButton(onClick = {
-                    onBlockNumber(searchQuery, searchQuery)
+                    onAddNumber(searchQuery, searchQuery)
                     onBack()
                 }) {
-                    Text("بلاک کردن شماره: $searchQuery")
+                    Text("افزودنِ شماره: $searchQuery")
                 }
             }
 
@@ -97,9 +91,9 @@ fun AddBlockedNumberScreen(
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(contacts, key = { it.contactId to it.phoneNumber }) { contact ->
-                        AddBlockContactRow(
+                        AddFilterGroupContactRow(
                             contact = contact,
-                            onClick = { onBlockNumber(contact.phoneNumber, contact.name); onBack() }
+                            onClick = { onAddNumber(contact.phoneNumber, contact.name); onBack() }
                         )
                         Divider()
                     }
@@ -110,7 +104,7 @@ fun AddBlockedNumberScreen(
 }
 
 @Composable
-private fun AddBlockContactRow(contact: ContactInfo, onClick: () -> Unit) {
+private fun AddFilterGroupContactRow(contact: ContactInfo, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -123,7 +117,7 @@ private fun AddBlockContactRow(contact: ContactInfo, onClick: () -> Unit) {
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
             contentAlignment = Alignment.Center
         ) {
             Text(initial, color = Color.White, style = MaterialTheme.typography.titleMedium)
@@ -131,8 +125,6 @@ private fun AddBlockContactRow(contact: ContactInfo, onClick: () -> Unit) {
         Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(contact.name, style = MaterialTheme.typography.bodyLarge.autoDirection())
-            // شماره‌ها همیشه چپ‌به‌راست نشون داده بشن - وگرنه شماره‌هایی که با +98
-            // شروع می‌شن توی چیدمانِ راست‌به‌چپِ برنامه برعکس (چپکی) نشون داده می‌شدن
             Text(
                 text = contact.phoneNumber,
                 style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr)

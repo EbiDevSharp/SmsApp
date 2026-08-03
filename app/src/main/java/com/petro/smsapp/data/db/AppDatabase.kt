@@ -8,57 +8,43 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * دیتابیس اصلی اپ - جایگزین همه‌ی SharedPreferences Storeهای قبلی (Favorite/Block/
- * Private/Trash/Pin/Scheduled/Delivery) + گروه‌های پیامکی. یه instance واحد و
- * singleton، بدون هیچ کش میانی اضافه - خودِ Room منبعِ واقعیِ داده‌ست و از طریق
- * Flow مستقیم reactive میشه.
+ * دیتابیس اصلی اپ - جایگزین همه‌ی SharedPreferences Storeهای قبلی + گروه‌های پیامکی +
+ * ماژولِ عمومیِ «گروهِ فیلتر» (جایگزینِ بخشِ قدیمیِ «بلاک»).
  */
 @Database(
     entities = [
         FavoriteEntity::class,
-        BlockedNumberEntity::class,
         PrivateNumberEntity::class,
-        BlockKeywordEntity::class,
-        BlockPatternEntity::class,
-        BlockedKeywordMessageEntity::class,
-        BlockedPatternMessageEntity::class,
-        BlockedNonContactMessageEntity::class,
         TrashEntity::class,
         PinEntity::class,
         PinnedMessageEntity::class,
         ScheduledMessageEntity::class,
         DeliveryEntity::class,
         MessageGroupEntity::class,
-        MessageGroupMemberEntity::class
+        MessageGroupMemberEntity::class,
+        FilterGroupEntity::class,
+        FilterGroupNumberEntity::class,
+        FilterGroupKeywordEntity::class,
+        FilterGroupPatternEntity::class,
+        FilterGroupMatchedMessageEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
-    abstract fun blockedNumberDao(): BlockedNumberDao
     abstract fun privateNumberDao(): PrivateNumberDao
-    abstract fun blockKeywordDao(): BlockKeywordDao
-    abstract fun blockPatternDao(): BlockPatternDao
-    abstract fun blockedKeywordMessageDao(): BlockedKeywordMessageDao
-    abstract fun blockedPatternMessageDao(): BlockedPatternMessageDao
-    abstract fun blockedNonContactMessageDao(): BlockedNonContactMessageDao
     abstract fun trashDao(): TrashDao
     abstract fun pinDao(): PinDao
     abstract fun pinnedMessageDao(): PinnedMessageDao
     abstract fun scheduledMessageDao(): ScheduledMessageDao
     abstract fun deliveryDao(): DeliveryDao
     abstract fun messageGroupDao(): MessageGroupDao
+    abstract fun filterGroupDao(): FilterGroupDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
 
-        /**
-         * نسخه‌ی ۱ -> ۲: اضافه شدنِ جدول‌های «گروه‌های پیامکی» (message_groups) و
-         * «اعضای گروه» (message_group_members). عمداً یه Migration دستی نوشته شده
-         * (نه fallbackToDestructiveMigration) چون پاک کردنِ کل دیتابیس یعنی از دست
-         * رفتنِ فیوریت‌ها/بلاک‌ها/پین‌ها/... کاربرهایی که از قبل از اپ استفاده می‌کردن.
-         */
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -77,19 +63,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * نسخه‌ی ۲ -> ۳: اضافه شدنِ ستونِ threadId به جدولِ pinned_messages (پین یه پیامِ
-         * خاص داخل چت). قبلاً این جدول فقط messageId داشت و هیچ‌جا مشخص نمی‌کرد این پیامِ
-         * پین‌شده مالِ کدوم مکالمه‌ست - برای فیلترِ جدیدِ «دارای پیام سنجاق‌شده» توی
-         * آکاردئونِ درآور، نیاز شد بشه بدونِ کوئری اضافه به Telephony Provider فهمید کدوم
-         * threadId ها حداقل یه پیامِ پین‌شده دارن.
-         */
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE pinned_messages ADD COLUMN threadId INTEGER NOT NULL DEFAULT 0")
             }
         }
 
+        /**
+         * نسخه‌ی ۳ -> ۴: کلِ بخشِ قدیمیِ «بلاک» (blocked_numbers، block_keywords،
+         * block_patterns، و سه جدولِ ردیابیِ پیام‌های بلاک‌شده) حذف و جاش ماژولِ عمومیِ
+         * «گروهِ فیلتر» نشست. چون این یه بازطراحیِ کاملِ اسکیماست (نه یه تغییرِ کوچیک)
+         * و طبقِ گفته‌ی خودِ پروژه هنوز پروداکت نرفته، به‌جای نوشتنِ Migration دستیِ
+         * پیچیده برای انتقالِ داده‌های قدیمیِ بلاک، از fallbackToDestructiveMigration
+         * استفاده شده - یعنی موقعِ بالا اومدنِ اپ با این نسخه‌ی جدید، دیتابیسِ محلیِ قبلی
+         * پاک و از نو ساخته میشه (فقط دیتابیسِ SMS/دستگاه دست‌نخورده می‌مونه، چون اون
+         * اصلاً تو Room نیست).
+         */
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -98,6 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "sms_app.db"
                 )
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }
         }

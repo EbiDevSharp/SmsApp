@@ -1,7 +1,6 @@
 package com.petro.smsapp.data.db
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -26,27 +25,6 @@ interface FavoriteDao {
 }
 
 @Dao
-interface BlockedNumberDao {
-    @Query("SELECT * FROM blocked_numbers ORDER BY blockedAt DESC")
-    fun observeAll(): Flow<List<BlockedNumberEntity>>
-
-    @Query("SELECT * FROM blocked_numbers")
-    suspend fun getAllOnce(): List<BlockedNumberEntity>
-
-    @Query("SELECT EXISTS(SELECT 1 FROM blocked_numbers WHERE normalizedAddress = :key)")
-    suspend fun isBlocked(key: String): Boolean
-
-    @Query("SELECT * FROM blocked_numbers WHERE threadId = :threadId LIMIT 1")
-    suspend fun findByThreadId(threadId: Long): BlockedNumberEntity?
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertIfAbsent(entity: BlockedNumberEntity): Long
-
-    @Query("DELETE FROM blocked_numbers WHERE normalizedAddress = :key")
-    suspend fun deleteByKey(key: String)
-}
-
-@Dao
 interface PrivateNumberDao {
     @Query("SELECT * FROM private_numbers ORDER BY madePrivateAt DESC")
     fun observeAll(): Flow<List<PrivateNumberEntity>>
@@ -65,78 +43,6 @@ interface PrivateNumberDao {
 
     @Query("DELETE FROM private_numbers WHERE normalizedAddress = :key")
     suspend fun deleteByKey(key: String)
-}
-
-@Dao
-interface BlockKeywordDao {
-    @Query("SELECT * FROM block_keywords ORDER BY addedAt DESC")
-    fun observeAll(): Flow<List<BlockKeywordEntity>>
-
-    @Query("SELECT * FROM block_keywords")
-    suspend fun getAllOnce(): List<BlockKeywordEntity>
-
-    @Insert
-    suspend fun insert(entity: BlockKeywordEntity)
-
-    @Query("DELETE FROM block_keywords WHERE id = :id")
-    suspend fun delete(id: String)
-}
-
-@Dao
-interface BlockPatternDao {
-    @Query("SELECT * FROM block_patterns ORDER BY addedAt DESC")
-    fun observeAll(): Flow<List<BlockPatternEntity>>
-
-    @Query("SELECT * FROM block_patterns")
-    suspend fun getAllOnce(): List<BlockPatternEntity>
-
-    @Insert
-    suspend fun insert(entity: BlockPatternEntity)
-
-    @Query("DELETE FROM block_patterns WHERE id = :id")
-    suspend fun delete(id: String)
-}
-
-@Dao
-interface BlockedKeywordMessageDao {
-    @Query("SELECT messageId FROM blocked_keyword_messages")
-    suspend fun getAllIds(): List<Long>
-
-    @Query("SELECT keyword FROM blocked_keyword_messages WHERE messageId = :messageId")
-    suspend fun getMatchedKeyword(messageId: Long): String?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entity: BlockedKeywordMessageEntity)
-
-    @Query("DELETE FROM blocked_keyword_messages WHERE messageId = :messageId")
-    suspend fun delete(messageId: Long)
-}
-
-@Dao
-interface BlockedPatternMessageDao {
-    @Query("SELECT messageId FROM blocked_pattern_messages")
-    suspend fun getAllIds(): List<Long>
-
-    @Query("SELECT * FROM blocked_pattern_messages WHERE messageId = :messageId")
-    suspend fun getMatch(messageId: Long): BlockedPatternMessageEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entity: BlockedPatternMessageEntity)
-
-    @Query("DELETE FROM blocked_pattern_messages WHERE messageId = :messageId")
-    suspend fun delete(messageId: Long)
-}
-
-@Dao
-interface BlockedNonContactMessageDao {
-    @Query("SELECT messageId FROM blocked_non_contact_messages")
-    suspend fun getAllIds(): List<Long>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entity: BlockedNonContactMessageEntity)
-
-    @Query("DELETE FROM blocked_non_contact_messages WHERE messageId = :messageId")
-    suspend fun delete(messageId: Long)
 }
 
 @Dao
@@ -180,7 +86,6 @@ interface PinnedMessageDao {
     @Query("SELECT messageId FROM pinned_messages")
     fun observeAllIds(): Flow<List<Long>>
 
-    /** برای فیلترِ «دارای پیام سنجاق‌شده» - همه‌ی threadId های متمایزی که حداقل یه پیامِ پین‌شده دارن */
     @Query("SELECT DISTINCT threadId FROM pinned_messages")
     fun observeThreadIds(): Flow<List<Long>>
 
@@ -230,7 +135,7 @@ interface DeliveryDao {
     suspend fun delete(messageId: Long)
 }
 
-/** نتیجه‌ی خامِ کوئریِ JOIN برای شمارشِ تعداد اعضای هر گروه - Entity نیست، فقط یه POJO خروجیِ Room */
+/** نتیجه‌ی خامِ کوئریِ JOIN برای شمارشِ تعداد اعضای هر «گروهِ پیامکی» (گیرنده‌های ارسال) */
 data class GroupWithMemberCount(
     val id: Long,
     val name: String,
@@ -261,4 +166,143 @@ interface MessageGroupDao {
 
     @Query("DELETE FROM message_group_members WHERE groupId = :groupId")
     suspend fun deleteMembers(groupId: Long)
+
+    @Query("UPDATE message_groups SET name = :name WHERE id = :groupId")
+    suspend fun renameGroup(groupId: Long, name: String)
+}
+
+// ============================================================================
+// FilterGroupDao - یه Dao واحد برای کلِ ماژولِ «گروهِ فیلتر» (جایگزینِ عمومیِ بلاک).
+// عمداً همه‌چی (خودِ گروه‌ها + شماره‌ها + کلمات + الگوها + پیام‌های مچ‌شده) توی یه
+// Dao جمع شده چون همه‌شون مفهوماً یه ماژولِ واحدن و اکثرِ عملیات‌ها (مثلاً پیدا کردنِ
+// گروهِ مچ‌شده برای یه پیام) به چندتاشون هم‌زمان نیاز دارن.
+// ============================================================================
+
+/** خلاصه‌ی هر گروهِ فیلتر با شمارنده‌های هر بخش - برای هابِ اصلیِ صفحه‌ی «گروه‌ها» */
+data class FilterGroupCounts(
+    val numberCount: Int,
+    val keywordCount: Int,
+    val patternCount: Int,
+    val messageCount: Int
+)
+
+data class GroupIdCount(val groupId: Long, val cnt: Int)
+
+@Dao
+interface FilterGroupDao {
+
+    // ---- خودِ گروه‌ها ----
+
+    @Query("SELECT * FROM filter_groups ORDER BY priority ASC")
+    fun observeGroups(): Flow<List<FilterGroupEntity>>
+
+    /** برای منطقِ تشخیصِ داخلِ SmsDeliverReceiver - یه‌بار‌خوانیِ ساده، مرتب بر اساسِ اولویت (کوچیک‌تر = زودتر چک میشه) */
+    @Query("SELECT * FROM filter_groups ORDER BY priority ASC")
+    suspend fun getGroupsOrderedByPriority(): List<FilterGroupEntity>
+
+    @Query("SELECT * FROM filter_groups WHERE id = :id LIMIT 1")
+    suspend fun getGroup(id: Long): FilterGroupEntity?
+
+    @Query("SELECT COALESCE(MAX(priority), -1) FROM filter_groups")
+    suspend fun getMaxPriority(): Int
+
+    @Insert
+    suspend fun insertGroup(entity: FilterGroupEntity): Long
+
+    @Query(
+        "UPDATE filter_groups SET name = :name, hideFromMainList = :hideFromMainList, " +
+                "showNotifications = :showNotifications, blockNonContacts = :blockNonContacts WHERE id = :id"
+    )
+    suspend fun updateGroup(id: Long, name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean)
+
+    @Query("UPDATE filter_groups SET priority = :priority WHERE id = :id")
+    suspend fun updatePriority(id: Long, priority: Int)
+
+    @Query("DELETE FROM filter_groups WHERE id = :id")
+    suspend fun deleteGroup(id: Long)
+
+    // ---- شماره‌ها ----
+
+    @Query("SELECT * FROM filter_group_numbers WHERE groupId = :groupId ORDER BY addedAt DESC")
+    fun observeNumbersForGroup(groupId: Long): Flow<List<FilterGroupNumberEntity>>
+
+    @Query("SELECT * FROM filter_group_numbers WHERE groupId = :groupId")
+    suspend fun getNumbersForGroupOnce(groupId: Long): List<FilterGroupNumberEntity>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM filter_group_numbers WHERE groupId = :groupId AND normalizedAddress = :key)")
+    suspend fun numberExistsInGroup(groupId: Long, key: String): Boolean
+
+    /** آیا این شماره تو *هر* گروهی از قبل ثبت شده - برای پیغامِ «قبلاً به گروهِ دیگه‌ای اضافه شده» */
+    @Query("SELECT groupId FROM filter_group_numbers WHERE normalizedAddress = :key LIMIT 1")
+    suspend fun findGroupIdForNumber(key: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertNumberIfAbsent(entity: FilterGroupNumberEntity): Long
+
+    @Query("DELETE FROM filter_group_numbers WHERE groupId = :groupId AND normalizedAddress = :key")
+    suspend fun deleteNumber(groupId: Long, key: String)
+
+    @Query("SELECT groupId as groupId, COUNT(*) as cnt FROM filter_group_numbers GROUP BY groupId")
+    fun observeNumberCounts(): Flow<List<GroupIdCount>>
+
+    // ---- کلمات کلیدی ----
+
+    @Query("SELECT * FROM filter_group_keywords WHERE groupId = :groupId ORDER BY addedAt DESC")
+    fun observeKeywordsForGroup(groupId: Long): Flow<List<FilterGroupKeywordEntity>>
+
+    @Query("SELECT * FROM filter_group_keywords WHERE groupId = :groupId")
+    suspend fun getKeywordsForGroupOnce(groupId: Long): List<FilterGroupKeywordEntity>
+
+    @Insert
+    suspend fun insertKeyword(entity: FilterGroupKeywordEntity)
+
+    @Query("DELETE FROM filter_group_keywords WHERE id = :id")
+    suspend fun deleteKeyword(id: String)
+
+    @Query("SELECT groupId as groupId, COUNT(*) as cnt FROM filter_group_keywords GROUP BY groupId")
+    fun observeKeywordCounts(): Flow<List<GroupIdCount>>
+
+    // ---- الگوها ----
+
+    @Query("SELECT * FROM filter_group_patterns WHERE groupId = :groupId ORDER BY addedAt DESC")
+    fun observePatternsForGroup(groupId: Long): Flow<List<FilterGroupPatternEntity>>
+
+    @Query("SELECT * FROM filter_group_patterns WHERE groupId = :groupId")
+    suspend fun getPatternsForGroupOnce(groupId: Long): List<FilterGroupPatternEntity>
+
+    @Insert
+    suspend fun insertPattern(entity: FilterGroupPatternEntity)
+
+    @Query("DELETE FROM filter_group_patterns WHERE id = :id")
+    suspend fun deletePattern(id: String)
+
+    @Query("SELECT groupId as groupId, COUNT(*) as cnt FROM filter_group_patterns GROUP BY groupId")
+    fun observePatternCounts(): Flow<List<GroupIdCount>>
+
+    // ---- ردیابیِ پیام‌های مچ‌شده ----
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMatch(entity: FilterGroupMatchedMessageEntity)
+
+    @Query("DELETE FROM filter_group_matched_messages WHERE messageId = :messageId")
+    suspend fun deleteMatch(messageId: Long)
+
+    @Query("SELECT * FROM filter_group_matched_messages WHERE messageId = :messageId LIMIT 1")
+    suspend fun getMatch(messageId: Long): FilterGroupMatchedMessageEntity?
+
+    @Query("SELECT * FROM filter_group_matched_messages WHERE groupId = :groupId")
+    suspend fun getMatchesForGroup(groupId: Long): List<FilterGroupMatchedMessageEntity>
+
+    /**
+     * id همه‌ی پیام‌هایی که تویِ یه گروهِ hideFromMainList=1 افتادن - برای فیلترِ لیستِ
+     * اصلیِ مکالمات؛ این تنها جایی‌ست که SmsRepository لازمه بدونه.
+     */
+    @Query(
+        "SELECT m.messageId FROM filter_group_matched_messages m " +
+                "JOIN filter_groups g ON g.id = m.groupId WHERE g.hideFromMainList = 1"
+    )
+    suspend fun getHiddenMessageIds(): List<Long>
+
+    @Query("SELECT groupId as groupId, COUNT(*) as cnt FROM filter_group_matched_messages GROUP BY groupId")
+    fun observeMessageCounts(): Flow<List<GroupIdCount>>
 }

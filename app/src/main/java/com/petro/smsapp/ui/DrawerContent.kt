@@ -33,18 +33,12 @@ val drawerItems = listOf(
     DrawerItem("favorites", "علاقه‌مندی‌ها", Icons.Filled.Star, androidx.compose.ui.graphics.Color(0xFFFFC107)),
     DrawerItem("trash", "سطل زباله", Icons.Filled.Delete, androidx.compose.ui.graphics.Color(0xFFC62828)),
     DrawerItem("scheduled", "زمان‌بندی‌شده", Icons.Filled.Schedule, androidx.compose.ui.graphics.Color(0xFF2196F3)),
-    DrawerItem("blocked", "مسدودشده‌ها", Icons.Filled.Block, androidx.compose.ui.graphics.Color.Red),
+    // قبلاً «مسدودشده‌ها» با یه مقصدِ ثابت بود؛ الان کاربر خودش N تا گروهِ دلخواه می‌سازه
+    DrawerItem("filter_groups", "گروه‌ها", Icons.Filled.Folder, androidx.compose.ui.graphics.Color(0xFF6D4C41)),
     DrawerItem("private", "خصوصی", Icons.Filled.Lock, androidx.compose.ui.graphics.Color(0xFF7E57C2)),
     DrawerItem("settings", "تنظیمات", Icons.Filled.Build, androidx.compose.ui.graphics.Color(0xFFA9A6A6)),
 )
 
-/**
- * محتوای درآورِ برنامه. بخشِ «آکاردئونِ فیلترِ لیستِ چت‌ها» (DrawerFilterAccordion،
- * ماژولِ جدا در فایل DrawerFilterAccordion.kt) بالای همه‌ی آیتم‌های ثابتِ درآور قرار
- * می‌گیره - سه زیرِ بخشِ «وضعیت پیام»/«زمان»/«مرتب‌سازی» داره؛ انتخاب‌های هرکدوم و
- * منطقِ toggle/change کردنشون بیرون از این Composable (توی AppNavigation) نگه داشته
- * میشن، دقیقاً هم‌قاعده‌ی isDarkTheme/onToggleTheme.
- */
 @Composable
 fun AppDrawerContent(
     currentRoute: String?,
@@ -58,7 +52,6 @@ fun AppDrawerContent(
     sortType: ConversationSortType? = null,
     onSortTypeChange: (ConversationSortType?) -> Unit = {}
 ) {
-    // ===== Header =====
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -88,21 +81,19 @@ fun AppDrawerContent(
             modifier = Modifier.weight(1f)
         )
 
-        // آیکن تغییر تم
         IconButton(onClick = onToggleTheme) {
             Icon(
                 imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
                 contentDescription = if (isDarkTheme) "حالت روز" else "حالت شب",
                 tint = if (isDarkTheme) {
-                    Color(0xFFFFD700) // طلایی (مخصوص خورشید در حالت شب/دارک)
+                    Color(0xFFFFD700)
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant // رنگ معمولی برای ماه در حالت روز/لایت
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 }
             )
         }
     }
 
-    // ===== آکاردئونِ فیلترِ لیست چت‌ها - بالای همه‌ی آیتم‌های ثابتِ درآور =====
     DrawerFilterAccordion(
         selectedIds = selectedFilterIds,
         onToggle = onToggleFilter,

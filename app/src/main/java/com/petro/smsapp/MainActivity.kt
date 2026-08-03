@@ -41,21 +41,21 @@ import com.petro.smsapp.data.applyConversationFilters
 import com.petro.smsapp.data.applySort
 import com.petro.smsapp.data.applyTimeFilter
 import com.petro.smsapp.ui.AppDrawerContent
-import com.petro.smsapp.ui.AddBlockedNumberScreen
-import com.petro.smsapp.ui.AddBlockedSenderScreen
+import com.petro.smsapp.ui.AddFilterGroupNumberScreen
+import com.petro.smsapp.ui.AddFilterGroupSenderScreen
 import com.petro.smsapp.ui.AddPrivateNumberScreen
-import com.petro.smsapp.ui.BlockScreen
-import com.petro.smsapp.ui.BlockKeywordsScreen
-import com.petro.smsapp.ui.BlockPatternsScreen
-import com.petro.smsapp.ui.BlockSettingsScreen
-import com.petro.smsapp.ui.BlockedMessagesScreen
-import com.petro.smsapp.ui.BlockedNumbersScreen
+import com.petro.smsapp.ui.FilterGroupsScreen
+import com.petro.smsapp.ui.FilterGroupDetailScreen
+import com.petro.smsapp.ui.FilterGroupKeywordsScreen
+import com.petro.smsapp.ui.FilterGroupMessagesScreen
+import com.petro.smsapp.ui.FilterGroupNumbersScreen
+import com.petro.smsapp.ui.FilterGroupPatternsScreen
+import com.petro.smsapp.ui.GroupPickerSheet
 import com.petro.smsapp.ui.ContactPickerScreen
 import com.petro.smsapp.ui.ConversationListScreen
 import com.petro.smsapp.ui.FavoritesScreen
 import com.petro.smsapp.ui.NewMessageScreen
 import com.petro.smsapp.ui.NoteScreen
-import com.petro.smsapp.ui.PlaceholderScreen
 import com.petro.smsapp.ui.PrivateMessagesScreen
 import com.petro.smsapp.ui.PrivateNumbersScreen
 import com.petro.smsapp.ui.PrivatePinScreen
@@ -85,7 +85,6 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        // اگه کاربر همینجا مجوزِ مخاطبین رو داد، observer رو (بدونِ نیازِ ری‌استارتِ اپ) ثبت کن
         (application as SmsApplication).ensureContactsObserverRegistered()
         if (result.values.all { it }) {
             viewModel.loadConversations()
@@ -142,6 +141,7 @@ class MainActivity : ComponentActivity() {
         }
 
         handleNotificationIntent(intent)
+        handleQuickGroupPickIntent(intent)
     }
 
     override fun onPause() {
@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleNotificationIntent(intent)
+        handleQuickGroupPickIntent(intent)
     }
 
     private fun handleNotificationIntent(intent: Intent?) {
@@ -174,6 +175,14 @@ class MainActivity : ComponentActivity() {
             address = address,
             displayName = displayName
         )
+    }
+
+    /** دکمه‌ی «افزودن به گروه» روی نوتیف اپ رو با این اینتنت باز می‌کنه - اینجا فقط ViewModel رو خبر می‌کنیم تا شیتِ انتخابِ گروه نشون داده بشه */
+    private fun handleQuickGroupPickIntent(intent: Intent?) {
+        intent ?: return
+        val address = intent.getStringExtra(EXTRA_QUICK_GROUP_ADDRESS) ?: return
+        val displayName = intent.getStringExtra(EXTRA_QUICK_GROUP_DISPLAY_NAME) ?: address
+        viewModel.requestQuickGroupPick(address, displayName)
     }
 
     private fun checkPermissionsAndLoad() {
@@ -229,14 +238,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * دکمه‌ی مخاطبِ بالای صفحه‌ی چت این تابع رو صدا می‌زنه. اول با یه کوئریِ سبک (روی
-     * Dispatchers.IO) چک می‌کنه آیا این آدرس تو مخاطبینِ گوشی هست یا نه:
-     * - اگه بود -> Intent.ACTION_VIEW با lookupUri واقعیِ مخاطب، صفحه‌ی کاملِ خودِ اپ
-     *   مخاطبین (با عکس، همه‌ی شماره‌ها، ایمیل و بقیه‌ی فیلدها) باز میشه.
-     * - اگه نبود -> Intent.ACTION_INSERT با شماره‌ی از پیش پرشده، صفحه‌ی «افزودن مخاطب
-     *   جدید»ِ خودِ اپ مخاطبین باز میشه.
-     */
     private fun openContactInfo(address: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             val lookupUri = ContactsRepository(this@MainActivity).getContactLookupUri(address)
@@ -262,6 +263,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_THREAD_ID = "extra_thread_id"
         const val EXTRA_ADDRESS = "extra_address"
         const val EXTRA_DISPLAY_NAME = "extra_display_name"
+        const val EXTRA_QUICK_GROUP_ADDRESS = "extra_quick_group_address"
+        const val EXTRA_QUICK_GROUP_DISPLAY_NAME = "extra_quick_group_display_name"
     }
 }
 
@@ -286,16 +289,11 @@ fun AppNavigation(
     val favorites by viewModel.favorites.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val pinnedMessageIds by viewModel.pinnedMessageIds.collectAsState()
-    // برای فیلترهای «دارای پیام سنجاق‌شده» و «دارای پیام علاقه‌مند» توی آکاردئونِ درآور -
-    // برخلافِ pinnedMessageIds/favoriteIds (که سطحِ خودِ پیام‌ها هستن)، این دوتا سطحِ
-    // مکالمه‌ان (threadId هایی که حداقل یه پیامِ پین/فیوریت‌شده دارن)
     val pinnedMessageThreadIds by viewModel.pinnedMessageThreadIds.collectAsState()
     val favoriteThreadIds by viewModel.favoriteThreadIds.collectAsState()
     val trash by viewModel.trash.collectAsState()
-    val blockedNumbers by viewModel.blockedNumbers.collectAsState()
-    val blockedMessages by viewModel.blockedMessages.collectAsState()
-    val blockKeywords by viewModel.blockKeywords.collectAsState()
-    val blockPatterns by viewModel.blockPatterns.collectAsState()
+    val filterGroupSummaries by viewModel.filterGroupSummaries.collectAsState()
+    val filterGroupMessages by viewModel.filterGroupMessages.collectAsState()
     val appSettings by AppSettings.state.collectAsState()
     val privateNumbers by viewModel.privateNumbers.collectAsState()
     val privateMessages by viewModel.privateMessages.collectAsState()
@@ -303,16 +301,13 @@ fun AppNavigation(
     val operationMessage by viewModel.operationMessage.collectAsState()
     val allScheduledMessages by viewModel.allScheduledMessages.collectAsState()
     val groupSummaries by viewModel.groupSummaries.collectAsState()
+    val pendingGroupPickTargets by viewModel.pendingGroupPickTargets.collectAsState()
+    val quickGroupPickTarget by viewModel.quickGroupPickTarget.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // فیلترهای فعالِ آکاردئونِ بالای درآور (مثلاً «خوانده‌نشده») - فعلاً فقط یه State
-    // محلیه (نه پایدار/DataStore)، چون تا وقتی خودِ لیستِ آیتم‌ها هم داینامیک نشده معنی
-    // نداره ذخیره‌ش کنیم؛ وقتی بعداً از تنظیمات داینامیک شد، همینجا جایگزینش با یه
-    // StateFlow از ViewModel/DataStore کافیه - بقیه‌ی مسیر (DrawerFilterAccordion،
-    // applyConversationFilters) دست‌نخورده می‌مونه.
     var selectedFilterIds by remember { mutableStateOf(setOf<String>()) }
     var timeSelection by remember { mutableStateOf<TimeFilterSelection>(TimeFilterSelection.None) }
     var sortType by remember { mutableStateOf<ConversationSortType?>(null) }
@@ -347,10 +342,6 @@ fun AppNavigation(
         navController.popBackStack()
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadBlockedMessages()
-    }
-
     LaunchedEffect(operationMessage) {
         operationMessage?.let { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -368,6 +359,31 @@ fun AppNavigation(
             navController.navigate("thread/${target.threadId}/${Uri.encode(target.address)}/${Uri.encode(target.displayName)}")
             viewModel.consumeNewConversationTarget()
         }
+    }
+
+    // شیتِ انتخابِ گروه - از سویپ/منویِ لیستِ مکالمات (چند مکالمه‌ی هدف هم‌زمان)
+    if (pendingGroupPickTargets != null) {
+        val targets = pendingGroupPickTargets!!
+        val label = if (targets.size == 1) targets.first().displayName else "${targets.size} مخاطب"
+        GroupPickerSheet(
+            targetLabel = label,
+            groups = filterGroupSummaries,
+            onPick = { groupId -> viewModel.addConversationsToGroup(groupId, targets) },
+            onCreateAndPick = { name -> viewModel.createFilterGroupAndAddConversations(name, targets) },
+            onDismiss = { viewModel.consumeGroupPickTargets() }
+        )
+    }
+
+    // شیتِ انتخابِ گروه - از دکمه‌ی روی نوتیف (یه شماره‌ی هدف)
+    if (quickGroupPickTarget != null) {
+        val target = quickGroupPickTarget!!
+        GroupPickerSheet(
+            targetLabel = target.displayName,
+            groups = filterGroupSummaries,
+            onPick = { groupId -> viewModel.addAddressToGroupQuick(groupId, target.address, target.displayName) },
+            onCreateAndPick = { name -> viewModel.createFilterGroupAndAddAddress(name, target.address, target.displayName) },
+            onDismiss = { viewModel.consumeQuickGroupPick() }
+        )
     }
 
     ModalNavigationDrawer(
@@ -436,7 +452,7 @@ fun AppNavigation(
                     },
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
-                    onBlockConversations = { selectedConversations -> viewModel.blockConversations(selectedConversations) },
+                    onAddToGroupClick = { selectedConversations -> viewModel.requestAddConversationsToGroup(selectedConversations) },
                     onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },
                     onPinConversations = { selectedConversations -> viewModel.pinConversations(selectedConversations) },
                     swipeRightToLeftAction = appSettings.swipeRightToLeftAction,
@@ -483,6 +499,8 @@ fun AppNavigation(
                     onLoadGroupMembers = { groupId -> viewModel.getGroupMembers(groupId) },
                     onSaveGroup = { name, members -> viewModel.saveMessageGroup(name, members) },
                     onDeleteGroup = { groupId -> viewModel.deleteMessageGroup(groupId) },
+                    onRenameGroup = { groupId, newName -> viewModel.renameMessageGroup(groupId, newName) },
+                    onUpdateGroupMembers = { groupId, members -> viewModel.updateMessageGroupMembers(groupId, members) },
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -508,9 +526,6 @@ fun AppNavigation(
                 val address = backStackEntry.arguments?.getString("address") ?: ""
                 val displayName = backStackEntry.arguments?.getString("displayName") ?: address
 
-                // چون ContactsCache تو کل عمرِ اپ کش‌شده، این چک عملاً یه HashMap.get سبکه -
-                // نیازی به suspend/withContext نداره (هم‌خانواده‌ی همون استفاده‌ای که
-                // ConversationListScreen و بقیه‌ی صفحات برای اسمِ مخاطب ازش می‌کنن)
                 val isKnownContact = remember(address) { ContactsCache.getName(context, address) != null }
 
                 LaunchedEffect(threadId, address) {
@@ -611,32 +626,136 @@ fun AppNavigation(
                     onCancel = { id -> viewModel.cancelScheduledMessageGlobal(id) }
                 )
             }
-            composable("blocked") {
-                LaunchedEffect(Unit) {
-                    viewModel.loadBlockedMessages()
-                }
-                BlockScreen(
-                    blockedMessageCount = blockedMessages.size,
-                    blockedNumberCount = blockedNumbers.size,
-                    blockKeywordCount = blockKeywords.size,
-                    blockPatternCount = blockPatterns.size,
+
+            // ==================================================================
+            // گروهِ فیلتر - جایگزینِ عمومیِ روت‌های قدیمیِ «blocked/...»
+            // ==================================================================
+
+            composable("filter_groups") {
+                FilterGroupsScreen(
+                    groups = filterGroupSummaries,
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() },
-                    onOpenBlockedMessages = { navController.navigate("blocked_messages") },
-                    onOpenBlockedNumbers = { navController.navigate("blocked_numbers") },
-                    onOpenBlockKeywords = { navController.navigate("block_keywords") },
-                    onOpenBlockPatterns = { navController.navigate("block_patterns") },
-                    onOpenAddSender = { navController.navigate("block_add_sender") },
-                    onOpenBlockSettings = { navController.navigate("block_settings") }
+                    onOpenGroup = { groupId -> navController.navigate("filter_group/$groupId") },
+                    onCreateGroup = { name, hide, notify, nonContacts ->
+                        viewModel.createFilterGroup(name, hide, notify, nonContacts)
+                    },
+                    onDeleteGroup = { groupId -> viewModel.deleteFilterGroup(groupId) },
+                    onReorder = { orderedIds -> viewModel.reorderFilterGroups(orderedIds) }
                 )
             }
-            composable("blocked_messages") {
-                LaunchedEffect(Unit) { viewModel.loadBlockedMessages() }
-                BlockedMessagesScreen(
-                    blockedMessages = blockedMessages,
+            composable(
+                route = "filter_group/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                if (summary != null) {
+                    FilterGroupDetailScreen(
+                        summary = summary,
+                        onBack = { navController.popBackStack() },
+                        onOpenNumbers = { navController.navigate("filter_group_numbers/$groupId") },
+                        onOpenKeywords = { navController.navigate("filter_group_keywords/$groupId") },
+                        onOpenPatterns = { navController.navigate("filter_group_patterns/$groupId") },
+                        onOpenMessages = {
+                            viewModel.loadFilterGroupMessages(groupId)
+                            navController.navigate("filter_group_messages/$groupId")
+                        },
+                        onSave = { name, hide, notify, nonContacts ->
+                            viewModel.updateFilterGroup(groupId, name, hide, notify, nonContacts)
+                        }
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack() }
+                }
+            }
+            composable(
+                route = "filter_group_numbers/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                val numbers by viewModel.observeFilterGroupNumbers(groupId).collectAsState(initial = emptyList())
+                FilterGroupNumbersScreen(
+                    groupName = summary?.group?.name ?: "",
+                    numbers = numbers,
+                    onBack = { navController.popBackStack() },
+                    onRemove = { address -> viewModel.removeNumberFromFilterGroup(groupId, address) },
+                    onAddNumberClick = { navController.navigate("add_filter_group_number/$groupId") }
+                )
+            }
+            composable(
+                route = "add_filter_group_number/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                AddFilterGroupNumberScreen(
+                    groupName = summary?.group?.name ?: "",
+                    contacts = contacts,
+                    pickedContact = pickedContact,
+                    onPickedContactConsumed = { viewModel.consumePickedContact() },
+                    onPickFromContactsClick = onPickContactClick,
+                    onSearchChange = { query -> viewModel.searchContacts(query) },
+                    onAddNumber = { address, displayName -> viewModel.addNumberToFilterGroup(groupId, address, displayName) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "add_filter_group_sender/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                AddFilterGroupSenderScreen(
+                    groupName = summary?.group?.name ?: "",
+                    onAddSender = { sender -> viewModel.addNumberToFilterGroup(groupId, sender, sender) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "filter_group_keywords/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                val keywords by viewModel.observeFilterGroupKeywords(groupId).collectAsState(initial = emptyList())
+                FilterGroupKeywordsScreen(
+                    groupName = summary?.group?.name ?: "",
+                    keywords = keywords,
+                    onBack = { navController.popBackStack() },
+                    onAddKeyword = { text -> viewModel.addFilterGroupKeyword(groupId, text) },
+                    onRemoveKeyword = { id -> viewModel.removeFilterGroupKeyword(id) }
+                )
+            }
+            composable(
+                route = "filter_group_patterns/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                val patterns by viewModel.observeFilterGroupPatterns(groupId).collectAsState(initial = emptyList())
+                FilterGroupPatternsScreen(
+                    groupName = summary?.group?.name ?: "",
+                    patterns = patterns,
+                    onBack = { navController.popBackStack() },
+                    onAddPattern = { type, value -> viewModel.addFilterGroupPattern(groupId, type, value) },
+                    onRemovePattern = { id -> viewModel.removeFilterGroupPattern(id) }
+                )
+            }
+            composable(
+                route = "filter_group_messages/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                val summary = filterGroupSummaries.find { it.group.id == groupId }
+                LaunchedEffect(groupId) { viewModel.loadFilterGroupMessages(groupId) }
+                FilterGroupMessagesScreen(
+                    groupName = summary?.group?.name ?: "",
+                    messages = filterGroupMessages,
                     favoriteIds = favoriteIds,
                     onBack = { navController.popBackStack() },
-                    onDeleteMessages = { messageIds -> viewModel.deleteBlockedMessages(messageIds) },
+                    onDeleteMessages = { messageIds -> viewModel.deleteFilterGroupMessages(messageIds, groupId) },
                     onOpenNote = { text ->
                         viewModel.openNote(text)
                         navController.navigate("note")
@@ -645,67 +764,7 @@ fun AppNavigation(
                     onResend = { entry -> viewModel.resendMessage(entry.message) }
                 )
             }
-            composable("blocked_numbers") {
-                BlockedNumbersScreen(
-                    blockedNumbers = blockedNumbers,
-                    onBack = { navController.popBackStack() },
-                    onUnblock = { threadId -> viewModel.unblockNumber(threadId) },
-                    onAddNumberClick = {
-                        viewModel.prepareNewMessage()
-                        navController.navigate("block_add_number")
-                    }
-                )
-            }
-            composable("block_add_number") {
-                AddBlockedNumberScreen(
-                    contacts = contacts,
-                    pickedContact = pickedContact,
-                    onPickedContactConsumed = { viewModel.consumePickedContact() },
-                    onPickFromContactsClick = onPickContactClick,
-                    onSearchChange = { query -> viewModel.searchContacts(query) },
-                    onBlockNumber = { address, displayName -> viewModel.blockNumber(address, displayName) },
-                    onBack = { navController.popBackStack() }
-                )
-            }
-            composable("block_add_sender") {
-                AddBlockedSenderScreen(
-                    onBlockSender = { sender -> viewModel.blockNumber(sender, sender) },
-                    onBack = { navController.popBackStack() }
-                )
-            }
-            composable("block_keywords") {
-                BlockKeywordsScreen(
-                    keywords = blockKeywords,
-                    onBack = { navController.popBackStack() },
-                    onAddKeyword = { text -> viewModel.addBlockKeyword(text) },
-                    onRemoveKeyword = { id -> viewModel.removeBlockKeyword(id) }
-                )
-            }
-            composable("block_patterns") {
-                BlockPatternsScreen(
-                    patterns = blockPatterns,
-                    onBack = { navController.popBackStack() },
-                    onAddPattern = { type, value -> viewModel.addBlockPattern(type, value) },
-                    onRemovePattern = { id -> viewModel.removeBlockPattern(id) }
-                )
-            }
-            composable("block_settings") {
-                BlockSettingsScreen(
-                    showBlockedNotificationsEnabled = appSettings.showBlockedNotificationsEnabled,
-                    showBlockedInMessageListEnabled = appSettings.showBlockedInMessageListEnabled,
-                    blockNonContactsEnabled = appSettings.blockNonContactsEnabled,
-                    onBack = { navController.popBackStack() },
-                    onShowBlockedNotificationsChange = { enabled ->
-                        AppSettings.setShowBlockedNotificationsEnabled(context, enabled)
-                    },
-                    onShowBlockedInMessageListChange = { enabled ->
-                        AppSettings.setShowBlockedInMessageListEnabled(context, enabled)
-                    },
-                    onBlockNonContactsChange = { enabled ->
-                        AppSettings.setBlockNonContactsEnabled(context, enabled)
-                    }
-                )
-            }
+
             composable("private") {
                 if (privateUnlocked) {
                     LaunchedEffect(Unit) {

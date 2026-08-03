@@ -22,30 +22,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.petro.smsapp.data.BlockPattern
-import com.petro.smsapp.data.BlockPatternType
+import com.petro.smsapp.data.FilterGroupPattern
+import com.petro.smsapp.data.PatternType
 import com.petro.smsapp.util.DateFormatter
 
-/**
- * صفحه‌ی «الگوهای بلاکِ شماره» - کاربر اینجا الگوهایی برای **شماره‌ی فرستنده** تعریف می‌کنه
- * (نه متنِ پیام): «شروع با ...» (مثلاً +98 یا 0930) یا «پایان با ...» (مثلاً 9325). هر پیامِ
- * ورودی‌ای که شماره‌ی فرستنده‌ش با یکی از این الگوها مچ بشه، خودکار بلاک میشه (بدون نوتیف/صدا) -
- * دقیقاً هم‌خانواده‌ی «کلمات کلیدی بلاک» ولی روی شماره به‌جای متن.
- */
 @Composable
-fun BlockPatternsScreen(
-    patterns: List<BlockPattern>,
+fun FilterGroupPatternsScreen(
+    groupName: String,
+    patterns: List<FilterGroupPattern>,
     onBack: () -> Unit,
-    onAddPattern: (type: BlockPatternType, value: String) -> Unit,
+    onAddPattern: (type: PatternType, value: String) -> Unit,
     onRemovePattern: (id: String) -> Unit
 ) {
     var newValue by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(BlockPatternType.STARTS_WITH) }
+    var selectedType by remember { mutableStateOf(PatternType.STARTS_WITH) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("الگوهای بلاکِ شماره") },
+                title = { Text("الگوهای «$groupName»") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
                 }
@@ -60,13 +55,13 @@ fun BlockPatternsScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
-                    selected = selectedType == BlockPatternType.STARTS_WITH,
-                    onClick = { selectedType = BlockPatternType.STARTS_WITH },
+                    selected = selectedType == PatternType.STARTS_WITH,
+                    onClick = { selectedType = PatternType.STARTS_WITH },
                     label = { Text("شروع شماره با...") }
                 )
                 FilterChip(
-                    selected = selectedType == BlockPatternType.ENDS_WITH,
-                    onClick = { selectedType = BlockPatternType.ENDS_WITH },
+                    selected = selectedType == PatternType.ENDS_WITH,
+                    onClick = { selectedType = PatternType.ENDS_WITH },
                     label = { Text("پایان شماره با...") }
                 )
             }
@@ -82,7 +77,7 @@ fun BlockPatternsScreen(
                     onValueChange = { newValue = it },
                     label = {
                         Text(
-                            if (selectedType == BlockPatternType.STARTS_WITH) "مثلاً +98 یا 0930"
+                            if (selectedType == PatternType.STARTS_WITH) "مثلاً +98 یا 0930"
                             else "مثلاً 9325"
                         )
                     },
@@ -103,7 +98,7 @@ fun BlockPatternsScreen(
             }
 
             Text(
-                text = "هر پیامِ ورودی‌ای که شماره‌ی فرستنده‌ش با یکی از این الگوها مطابقت داشته باشه، خودکار بلاک میشه (بدون نوتیف/صدا)، حتی اگه خودِ شماره جداگانه بلاک نشده باشه.",
+                text = "هر پیامِ ورودی‌ای که شماره‌ی فرستنده‌ش با یکی از این الگوها مطابقت داشته باشه، میره تو گروهِ «$groupName».",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -116,7 +111,7 @@ fun BlockPatternsScreen(
             } else {
                 LazyColumn {
                     items(patterns, key = { it.id }) { pattern ->
-                        BlockPatternRow(pattern = pattern, onRemove = { onRemovePattern(pattern.id) })
+                        FilterGroupPatternRow(pattern = pattern, onRemove = { onRemovePattern(pattern.id) })
                         Divider(modifier = Modifier.padding(start = 72.dp))
                     }
                 }
@@ -126,7 +121,7 @@ fun BlockPatternsScreen(
 }
 
 @Composable
-private fun BlockPatternRow(pattern: BlockPattern, onRemove: () -> Unit) {
+private fun FilterGroupPatternRow(pattern: FilterGroupPattern, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -137,11 +132,11 @@ private fun BlockPatternRow(pattern: BlockPattern, onRemove: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (pattern.type == BlockPatternType.STARTS_WITH) Icons.Filled.ArrowForward else Icons.Filled.ArrowBack,
+                imageVector = if (pattern.type == PatternType.STARTS_WITH) Icons.Filled.ArrowForward else Icons.Filled.ArrowBack,
                 contentDescription = null,
                 tint = Color.White
             )
@@ -156,7 +151,7 @@ private fun BlockPatternRow(pattern: BlockPattern, onRemove: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = if (pattern.type == BlockPatternType.STARTS_WITH) "شروع شماره با این عبارت" else "پایان شماره با این عبارت",
+                text = if (pattern.type == PatternType.STARTS_WITH) "شروع شماره با این عبارت" else "پایان شماره با این عبارت",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )

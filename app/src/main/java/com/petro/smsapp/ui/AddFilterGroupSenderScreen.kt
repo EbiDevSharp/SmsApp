@@ -24,20 +24,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.util.autoDirection
 
-/**
- * صفحه‌ی «افزودن فرستنده‌ی غیرشماره» - برای بلاک‌کردن پیامک‌هایی که فرستنده‌شون یه
- * شماره‌ی واقعی نیست، بلکه یه Sender ID حروفی‌ه (مثلاً اسم اپراتور «ایرانسل»/«همراه‌اول»
- * یا یه Sender ID انگلیسیِ سرویس‌ها مثل «GOOGLE»). قبلاً هیچ راهی برای بلاک‌کردنِ
- * صریح/دستیِ همچین فرستنده‌ای وجود نداشت.
- *
- * عمداً جدا از AddBlockedNumberScreen نگه داشته شده: اونجا برای شماره‌های واقعیه و
- * جستجو/انتخاب از مخاطبین گوشی معنی داره؛ اینجا چون Sender ID اصلاً تو مخاطبین گوشی
- * ذخیره نمیشه، فقط یه فیلدِ متنیِ ساده برای وارد کردنِ دقیقِ همون متنی که به‌عنوانِ
- * فرستنده تو لیستِ مکالمات/پیامک دیده میشه لازمه.
- */
 @Composable
-fun AddBlockedSenderScreen(
-    onBlockSender: (sender: String) -> Unit,
+fun AddFilterGroupSenderScreen(
+    groupName: String,
+    onAddSender: (sender: String) -> Unit,
     onBack: () -> Unit
 ) {
     var senderInput by remember { mutableStateOf("") }
@@ -45,7 +35,7 @@ fun AddBlockedSenderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("افزودن فرستنده‌ی غیرشماره") },
+                title = { Text("افزودنِ فرستنده‌ی غیرشماره", style = LocalTextStyle.current.autoDirection()) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
                 }
@@ -59,7 +49,7 @@ fun AddBlockedSenderScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text(
-                text = "برای فرستنده‌هایی که شماره نیستن (مثل اسمِ اپراتور یا Sender ID های انگلیسیِ سرویس‌ها)، دقیقاً همون متنی که به‌عنوانِ فرستنده نشون داده میشه رو وارد کن.",
+                text = "برای فرستنده‌هایی که شماره نیستن (مثل اسمِ اپراتور یا Sender ID های انگلیسیِ سرویس‌ها)، دقیقاً همون متنی که به‌عنوانِ فرستنده نشون داده میشه رو وارد کن. به گروهِ «$groupName» اضافه میشه.",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
@@ -80,14 +70,14 @@ fun AddBlockedSenderScreen(
             Button(
                 onClick = {
                     if (senderInput.isNotBlank()) {
-                        onBlockSender(senderInput.trim())
+                        onAddSender(senderInput.trim())
                         onBack()
                     }
                 },
                 enabled = senderInput.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("بلاک کردن این فرستنده")
+                Text("افزودن این فرستنده")
             }
         }
     }

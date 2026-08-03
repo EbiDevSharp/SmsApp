@@ -26,9 +26,8 @@ import kotlinx.coroutines.launch
 /**
  * وقتی اپ ما "پیش‌فرض پیامک" باشه، این ریسیور به جای سیستم پیام رو دریافت می‌کنه.
  *
- * چون تصمیم‌گیریِ بلاک‌بودن حالا از روی Room (suspend) میاد، نه SharedPreferences
- * (synchronous)، کل منطق داخل goAsync() + یه coroutine روی Dispatchers.IO اجرا میشه -
- * وگرنه Main Thread تا پایان کوئری‌های دیتابیس قفل می‌موند (ریسک ANR).
+ * تشخیصِ گروهِ فیلتر از روی Room (suspend) میاد، پس کل منطق داخل goAsync() + یه
+ * coroutine روی Dispatchers.IO اجرا میشه.
  */
 class SmsDeliverReceiver : BroadcastReceiver() {
 
@@ -43,8 +42,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         val sentTimestamp = messages[0].timestampMillis
         val receivedTimestamp = System.currentTimeMillis()
 
-        // چون contentResolver.insert سریع و خودِ سیستمه (نه Room)، همینجا synchronous
-        // انجامش می‌دیم؛ فقط تصمیم‌گیریِ بلاک/خصوصی/نوتیف که به Room نیاز داره میره تو goAsync
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, sender)
             put(Telephony.Sms.BODY, fullBody)
@@ -60,14 +57,14 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                handleBlockAndNotify(context, sender, fullBody, threadId, messageId)
+                handleFilterAndNotify(context, sender, fullBody, threadId, messageId)
             } finally {
                 pendingResult.finish()
             }
         }
     }
 
-    private suspend fun handleBlockAndNotify(
+    private suspend fun handleFilterAndNotify(
         context: Context,
         sender: String,
         fullBody: String,
@@ -75,30 +72,19 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         messageId: Long
     ) {
         val privateRepository = AppContainer.privateRepository(context)
-        val blockRepository = AppContainer.blockRepository(context)
+        val filterGroupRepository = AppContainer.filterGroupRepository(context)
 
         if (privateRepository.isAddressPrivate(sender)) {
             return
         }
 
-        val isNumberBlocked = blockRepository.isAddressBlocked(sender)
-        val matchedKeyword = blockRepository.findKeywordMatch(fullBody)
-        val matchedPattern = if (!isNumberBlocked) blockRepository.findPatternMatch(sender) else null
-        val isBlockedAsNonContact = !isNumberBlocked && matchedKeyword == null && matchedPattern == null &&
-            AppSettings.isBlockNonContactsEnabled(context) &&
-            ContactsCache.getName(context, sender) == null
-
-        if (isNumberBlocked || matchedKeyword != null || matchedPattern != null || isBlockedAsNonContact) {
-            if (!isNumberBlocked && matchedKeyword != null) {
-                blockRepository.markKeywordBlocked(messageId, matchedKeyword.text)
-            } else if (!isNumberBlocked && matchedPattern != null) {
-                blockRepository.markPatternBlocked(messageId, matchedPattern.type, matchedPattern.value)
-            } else if (isBlockedAsNonContact) {
-                blockRepository.markNonContactBlocked(messageId, sender)
-            }
+        // به‌ترتیبِ اولویت، اولین گروهی که مچ بشه برنده‌ست
+        val matched = filterGroupRepository.findMatchingGroup(context, sender, fullBody)
+        if (matched != null) {
+            filterGroupRepository.markMatched(messageId, matched.group.id, matched.matchType, matched.matchedValue)
             DataChangeSignal.notifyChanged()
 
-            if (!AppSettings.isShowBlockedNotificationsEnabled(context)) {
+            if (!matched.group.showNotifications) {
                 return
             }
         }
@@ -156,7 +142,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 NotificationActionType.MARK_READ -> buildMarkReadAction(context, threadId, notificationId)
                 NotificationActionType.DELETE -> buildDeleteAction(context, messageId, notificationId)
                 NotificationActionType.REPLY -> buildReplyAction(context, sender, notificationId)
-                NotificationActionType.BLOCK -> buildBlockAction(context, threadId, sender, notificationId)
+                NotificationActionType.BLOCK -> buildAddToGroupAction(context, threadId, sender, notificationId)
                 NotificationActionType.CALL -> buildCallAction(context, sender, notificationId)
             }
             builder.addAction(action)
@@ -199,10 +185,15 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         return NotificationCompat.Action.Builder(R.drawable.ic_delete, "حذف", deletePendingIntent).build()
     }
 
-    private fun buildBlockAction(context: Context, threadId: Long, address: String, notificationId: Int): NotificationCompat.Action {
+    /**
+     * قبلاً این دکمه مستقیم شماره رو بلاک می‌کرد. الان چون مقصدِ ثابتی نیست (کاربر N
+     * تا گروه داره)، اپ رو با یه Intent باز می‌کنه (NotificationActionReceiver.ACTION_BLOCK
+     * خودِ کارِ باز کردنِ اپ رو انجام میده) و اونجا یه شیتِ «به کدوم گروه اضافه بشه؟» نشون داده میشه.
+     */
+    private fun buildAddToGroupAction(context: Context, threadId: Long, address: String, notificationId: Int): NotificationCompat.Action {
         val blockIntent = Intent(context, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_BLOCK
-            data = Uri.parse("smsapp://block/$threadId")
+            data = Uri.parse("smsapp://add-to-group/$threadId")
             putExtra(NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
             putExtra(NotificationActionReceiver.EXTRA_ADDRESS, address)
             putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
@@ -211,7 +202,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             context, notificationId * 10 + 3, blockIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Action.Builder(R.drawable.ic_block, "بلاک", blockPendingIntent).build()
+        return NotificationCompat.Action.Builder(R.drawable.ic_block, "افزودن به گروه", blockPendingIntent).build()
     }
 
     private fun buildCallAction(context: Context, address: String, notificationId: Int): NotificationCompat.Action {

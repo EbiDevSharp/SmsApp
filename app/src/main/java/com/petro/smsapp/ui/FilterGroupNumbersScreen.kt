@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,24 +21,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
-import com.petro.smsapp.data.BlockedNumber
+import com.petro.smsapp.data.FilterGroupNumber
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.autoDirection
 
 @Composable
-fun BlockedNumbersScreen(
-    blockedNumbers: List<BlockedNumber>,
+fun FilterGroupNumbersScreen(
+    groupName: String,
+    numbers: List<FilterGroupNumber>,
     onBack: () -> Unit,
-    onUnblock: (threadId: Long) -> Unit,
+    onRemove: (address: String) -> Unit,
     onAddNumberClick: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    // فیلتر سمت خودِ اپ (نه کوئری جدید) چون کل لیست شماره‌های بلاک‌شده معمولاً کوچیکه
-    // و از قبل توی حافظه‌ست - نیازی به رفت‌وبرگشت اضافه به دیتابیس نیست
     val filteredNumbers = if (searchQuery.isBlank()) {
-        blockedNumbers
+        numbers
     } else {
-        blockedNumbers.filter {
+        numbers.filter {
             it.displayName.contains(searchQuery, ignoreCase = true) || it.address.contains(searchQuery)
         }
     }
@@ -46,20 +45,20 @@ fun BlockedNumbersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("شماره‌های بلاک‌شده") },
+                title = { Text("شماره‌های «$groupName»", style = LocalTextStyle.current.autoDirection()) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
                 },
                 actions = {
                     IconButton(onClick = onAddNumberClick) {
-                        Icon(Icons.Filled.Add, contentDescription = "افزودن شماره‌ی بلاک")
+                        Icon(Icons.Filled.Add, contentDescription = "افزودن شماره")
                     }
                 }
             )
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (blockedNumbers.isNotEmpty()) {
+            if (numbers.isNotEmpty()) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -72,26 +71,18 @@ fun BlockedNumbersScreen(
                 )
             }
 
-            if (blockedNumbers.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("هیچ شماره‌ای بلاک نیست", color = Color.Gray)
+            if (numbers.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("هیچ شماره‌ای تو این گروه نیست", color = Color.Gray)
                 }
             } else if (filteredNumbers.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("چیزی پیدا نشد", color = Color.Gray)
                 }
             } else {
                 LazyColumn {
-                    items(filteredNumbers, key = { it.threadId }) { blocked ->
-                        BlockedNumberRow(blocked = blocked, onUnblock = { onUnblock(blocked.threadId) })
+                    items(filteredNumbers, key = { it.address }) { number ->
+                        FilterGroupNumberRow(number = number, onRemove = { onRemove(number.address) })
                         Divider(modifier = Modifier.padding(start = 72.dp))
                     }
                 }
@@ -101,52 +92,35 @@ fun BlockedNumbersScreen(
 }
 
 @Composable
-private fun BlockedNumberRow(blocked: BlockedNumber, onUnblock: () -> Unit) {
+private fun FilterGroupNumberRow(number: FilterGroupNumber, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = blocked.displayName)
+        val initial = number.displayName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(initial, color = Color.White, style = MaterialTheme.typography.titleMedium)
+        }
         Spacer(modifier = Modifier.width(12.dp))
-
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = blocked.displayName,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyLarge.autoDirection()
-            )
+            Text(number.displayName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge.autoDirection())
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "بلاک‌شده در ${DateFormatter.formatFull(blocked.blockedAt)}",
+                "اضافه‌شده در ${DateFormatter.formatFull(number.addedAt)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
         }
-
-        TextButton(onClick = onUnblock) {
-            Icon(
-                imageVector = Icons.Filled.LockOpen,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("آنبلاک")
+        IconButton(onClick = onRemove) {
+            Icon(Icons.Filled.Close, contentDescription = "حذف از گروه")
         }
-    }
-}
-
-@Composable
-private fun Avatar(name: String) {
-    val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(initial, color = Color.White, style = MaterialTheme.typography.titleMedium)
     }
 }

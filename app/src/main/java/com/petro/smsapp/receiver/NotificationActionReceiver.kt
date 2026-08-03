@@ -6,24 +6,40 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
-import com.petro.smsapp.data.AppContainer
+import com.petro.smsapp.MainActivity
 import com.petro.smsapp.data.ContactsCache
-import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.SmsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * دکمه‌های داینامیک روی نوتیفیکیشن پیامک این ریسیور رو صدا می‌زنن. چون همه‌ی این
- * اکشن‌ها الان به Room (suspend) نیاز دارن، از goAsync() + coroutine روی Dispatchers.IO
- * استفاده می‌کنیم تا Main Thread قفل نشه.
+ * دکمه‌های داینامیک روی نوتیفیکیشن پیامک این ریسیور رو صدا می‌زنن.
  */
 class NotificationActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.d("NotifAction", "دریافت شد: action=${intent.action}")
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
+
+        // ACTION_BLOCK دیگه به Room نیاز نداره - فقط اپ رو با یه Intent باز می‌کنه که
+        // اونجا صفحه‌ی «به کدوم گروه اضافه بشه؟» نشون داده بشه، پس همینجا synchronous انجامش میدیم
+        if (intent.action == ACTION_BLOCK) {
+            val address = intent.getStringExtra(EXTRA_ADDRESS)
+            if (address != null) {
+                val displayName = ContactsCache.getName(context, address) ?: address
+                val openIntent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(MainActivity.EXTRA_QUICK_GROUP_ADDRESS, address)
+                    putExtra(MainActivity.EXTRA_QUICK_GROUP_DISPLAY_NAME, displayName)
+                }
+                context.startActivity(openIntent)
+            }
+            if (notificationId != -1) {
+                NotificationManagerCompat.from(context).cancel(notificationId)
+            }
+            return
+        }
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
@@ -54,21 +70,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 if (messageId != -1L) {
                     repository.deleteMessage(messageId)
                     Log.d("NotifAction", "message $messageId حذف شد")
-                }
-            }
-            ACTION_BLOCK -> {
-                val threadId = intent.getLongExtra(EXTRA_THREAD_ID, -1L)
-                val address = intent.getStringExtra(EXTRA_ADDRESS)
-                if (threadId != -1L && address != null) {
-                    val displayName = ContactsCache.getName(context, address) ?: address
-                    val blockRepository = AppContainer.blockRepository(context)
-                    val wasNewlyBlocked = blockRepository.blockNumber(threadId, address, displayName)
-                    DataChangeSignal.notifyChanged()
-                    if (wasNewlyBlocked) {
-                        Log.d("NotifAction", "شماره $address بلاک شد")
-                    } else {
-                        Log.d("NotifAction", "شماره $address از قبل بلاک بود، تغییری اعمال نشد")
-                    }
                 }
             }
             ACTION_REPLY -> {

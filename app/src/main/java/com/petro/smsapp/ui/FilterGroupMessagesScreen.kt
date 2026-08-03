@@ -21,44 +21,33 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.petro.smsapp.data.BlockPatternType
-import com.petro.smsapp.data.BlockSource
-import com.petro.smsapp.data.BlockedMessageEntry
+import com.petro.smsapp.data.FilterMatchType
+import com.petro.smsapp.data.FilteredMessageEntry
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.autoDirection
 
 /**
- * صفحه‌ی «پیامک‌های بلاک‌شده» - همه‌ی پیام‌های (قدیم + جدید) شماره‌های بلاک‌شده.
- * برای برداشتن یه شماره از حالت بلاک، باید از صفحه‌ی «شماره‌های بلاک‌شده» اقدام کرد.
- *
- * دو تا قابلیت، دقیقاً به همون الگوی صفحه‌ی چت اصلی:
- * ۱) تک‌کلیک روی یه پیام → همون منوی اکشن پیام (MessageActionsSheet) که تو چت داریم باز
- *    میشه: جزئیات، باز کردن در نوت (برای متن‌های طولانی)، کپی، اشتراک‌گذاری، فیوریت،
- *    و حذف. (قبلاً تک‌کلیک فقط متن رو ۲خطی/کامل می‌کرد؛ چون الان «باز کردن در نوت» همون
- *    کارو بهتر انجام میده، دیگه لازم نبود و با کلیکِ منو تداخل داشت.)
- * ۲) لانگ‌کلیک روی یه پیام وارد حالت «انتخاب چندتایی» میشه (تک‌کلیک بعدی فقط انتخاب/
- *    عدم‌انتخاب می‌کنه)، نوار بالا با تعداد انتخاب‌شده + انتخاب‌همه + حذف (با تائید) عوض میشه.
- *    چون پیام‌های این صفحه از چند مکالمه‌ی مختلف جمع شدن (نه فقط یکی)، حذف از اینجا با
- *    همون منطق مشترک حذف (سطل زباله/قفل فیوریت) میره، نه وابسته به یه thread خاص.
+ * صفحه‌ی «پیام‌های این گروه» - جایگزینِ BlockedMessagesScreen قبلی، مخصوصِ یه گروهِ خاص.
+ * تک‌کلیک -> منوی اکشنِ عادیِ پیام (MessageActionsSheet)؛ لانگ‌کلیک -> انتخابِ چندتایی + حذف.
  */
 @Composable
-fun BlockedMessagesScreen(
-    blockedMessages: List<BlockedMessageEntry>,
+fun FilterGroupMessagesScreen(
+    groupName: String,
+    messages: List<FilteredMessageEntry>,
     favoriteIds: Set<Long>,
     onBack: () -> Unit,
     onDeleteMessages: (Set<Long>) -> Unit,
     onOpenNote: (text: String) -> Unit,
-    onToggleFavorite: (entry: BlockedMessageEntry) -> Unit,
-    onResend: (entry: BlockedMessageEntry) -> Unit
+    onToggleFavorite: (entry: FilteredMessageEntry) -> Unit,
+    onResend: (entry: FilteredMessageEntry) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var actionSheetEntry by remember { mutableStateOf<BlockedMessageEntry?>(null) }
+    var actionSheetEntry by remember { mutableStateOf<FilteredMessageEntry?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
 
-    // اگه بعد از حذف/تغییر لیست، بعضی id های انتخاب‌شده دیگه وجود نداشته باشن، از انتخاب پاک بشن
-    LaunchedEffect(blockedMessages) {
-        val stillExisting = blockedMessages.map { it.message.id }.toSet()
+    LaunchedEffect(messages) {
+        val stillExisting = messages.map { it.message.id }.toSet()
         if (selectedIds.any { it !in stillExisting }) {
             selectedIds = selectedIds.filter { it in stillExisting }.toSet()
         }
@@ -118,9 +107,9 @@ fun BlockedMessagesScreen(
                         }
                     },
                     actions = {
-                        val allSelected = selectedIds.size == blockedMessages.size && blockedMessages.isNotEmpty()
+                        val allSelected = selectedIds.size == messages.size && messages.isNotEmpty()
                         IconButton(onClick = {
-                            selectedIds = if (allSelected) emptySet() else blockedMessages.map { it.message.id }.toSet()
+                            selectedIds = if (allSelected) emptySet() else messages.map { it.message.id }.toSet()
                         }) {
                             Icon(
                                 Icons.Filled.SelectAll,
@@ -134,7 +123,7 @@ fun BlockedMessagesScreen(
                 )
             } else {
                 TopAppBar(
-                    title = { Text("پیامک‌های بلاک‌شده") },
+                    title = { Text("پیام‌های «$groupName»", style = LocalTextStyle.current.autoDirection()) },
                     navigationIcon = {
                         IconButton(onClick = onBack) { Text("←") }
                     }
@@ -142,19 +131,17 @@ fun BlockedMessagesScreen(
             }
         }
     ) { padding ->
-        if (blockedMessages.isEmpty()) {
+        if (messages.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("هیچ پیامک بلاک‌شده‌ای نیست", color = Color.Gray)
+                Text("هنوز هیچ پیامی تو این گروه نیفتاده", color = Color.Gray)
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
-                items(blockedMessages, key = { it.message.id }) { entry ->
-                    BlockedMessageRow(
+                items(messages, key = { it.message.id }) { entry ->
+                    FilterGroupMessageRow(
                         entry = entry,
                         selectionMode = selectionMode,
                         isSelected = selectedIds.contains(entry.message.id),
@@ -182,8 +169,8 @@ fun BlockedMessagesScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BlockedMessageRow(
-    entry: BlockedMessageEntry,
+private fun FilterGroupMessageRow(
+    entry: FilteredMessageEntry,
     selectionMode: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -225,33 +212,20 @@ private fun BlockedMessageRow(
                 color = Color.Gray
             )
             Spacer(modifier = Modifier.height(2.dp))
-            BlockSourceLabel(entry)
+            MatchTypeLabel(entry)
         }
     }
 }
 
-/**
- * نشون میده این پیام از چه طریقی بلاک شده. برای PHONE_NUMBER و NOT_IN_CONTACTS هم -
- * که قبلاً فقط یه برچسبِ کلی («بر اساس: شماره») بودن بدونِ اینکه بگن دقیقاً کدوم
- * شماره/فرستنده - الان خودِ آدرس/فرستنده هم کنارش نشون داده میشه؛ دقیقاً هم‌خانواده‌ی
- * KEYWORD و PATTERN که از اول این‌جوری بودن.
- */
 @Composable
-private fun BlockSourceLabel(entry: BlockedMessageEntry) {
-    val text = when (entry.blockSource) {
-        BlockSource.PHONE_NUMBER -> "بلاک‌شده بر اساس: شماره «${entry.message.address}»"
-        BlockSource.KEYWORD -> "بلاک‌شده بر اساس: کلمه‌ی «${entry.matchedKeyword ?: ""}»"
-        BlockSource.PATTERN -> {
-            val label = if (entry.matchedPatternType == BlockPatternType.STARTS_WITH) "شروع شماره با" else "پایان شماره با"
-            "بلاک‌شده بر اساس: $label «${entry.matchedPatternValue ?: ""}»"
-        }
-        BlockSource.NOT_IN_CONTACTS -> "بلاک‌شده بر اساس: خارج از مخاطبین «${entry.message.address}»"
+private fun MatchTypeLabel(entry: FilteredMessageEntry) {
+    val text = when (entry.matchType) {
+        FilterMatchType.NUMBER -> "افتاده تو این گروه بر اساسِ: شماره «${entry.message.address}»"
+        FilterMatchType.KEYWORD -> "افتاده تو این گروه بر اساسِ: کلمه‌ی «${entry.matchedValue ?: ""}»"
+        FilterMatchType.PATTERN -> "افتاده تو این گروه بر اساسِ: الگوی «${entry.matchedValue ?: ""}»"
+        FilterMatchType.NON_CONTACT -> "افتاده تو این گروه بر اساسِ: خارج از مخاطبین «${entry.message.address}»"
     }
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.error
-    )
+    Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
 }
 
 @Composable
@@ -283,7 +257,7 @@ private fun Avatar(name: String) {
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center
     ) {
         Text(initial, color = Color.White, style = MaterialTheme.typography.titleMedium)

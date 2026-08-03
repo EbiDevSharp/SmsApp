@@ -12,18 +12,16 @@ import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.data.AlarmScheduler
 import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
-import com.petro.smsapp.data.BlockKeyword
-import com.petro.smsapp.data.BlockPattern
-import com.petro.smsapp.data.BlockPatternType
-import com.petro.smsapp.data.BlockedMessageEntry
-import com.petro.smsapp.data.BlockedNumber
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.ContactsRepository
 import com.petro.smsapp.data.Conversation
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.FavoriteMessage
+import com.petro.smsapp.data.FilterGroupSummary
+import com.petro.smsapp.data.FilteredMessageEntry
 import com.petro.smsapp.data.MessageGroupMember
 import com.petro.smsapp.data.MessageGroupSummary
+import com.petro.smsapp.data.PatternType
 import com.petro.smsapp.data.PrivateMessageEntry
 import com.petro.smsapp.data.PrivateNumber
 import com.petro.smsapp.data.PrivatePinDataStore
@@ -33,7 +31,7 @@ import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsMessage
 import com.petro.smsapp.data.SmsRepository
 import com.petro.smsapp.data.TrashedMessage
-import com.petro.smsapp.data.repository.BlockRepository
+import com.petro.smsapp.data.repository.FilterGroupRepository
 import com.petro.smsapp.data.repository.MessageGroupRepository
 import com.petro.smsapp.data.repository.PinRepository
 import com.petro.smsapp.data.repository.PrivateRepository
@@ -59,11 +57,11 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val simRepository = SimRepository(application)
 
     private val favoriteRepository: FavoriteRepository = AppContainer.favoriteRepository(application)
-    private val blockRepository: BlockRepository = AppContainer.blockRepository(application)
     private val privateRepository: PrivateRepository = AppContainer.privateRepository(application)
     private val pinRepository: PinRepository = AppContainer.pinRepository(application)
     private val scheduledMessageRepository: ScheduledMessageRepository = AppContainer.scheduledMessageRepository(application)
     private val messageGroupRepository: MessageGroupRepository = AppContainer.messageGroupRepository(application)
+    private val filterGroupRepository: FilterGroupRepository = AppContainer.filterGroupRepository(application)
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
@@ -80,7 +78,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _contacts = MutableStateFlow<List<ContactInfo>>(emptyList())
     val contacts: StateFlow<List<ContactInfo>> = _contacts.asStateFlow()
 
-    /** کل مخاطبینِ گوشی - فقط برای ContactPickerScreen، فقط با درخواستِ صریحِ کاربر لود میشه */
     private val _allContactsForPicker = MutableStateFlow<List<ContactInfo>>(emptyList())
     val allContactsForPicker: StateFlow<List<ContactInfo>> = _allContactsForPicker.asStateFlow()
 
@@ -90,7 +87,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _pickedContact = MutableStateFlow<ContactInfo?>(null)
     val pickedContact: StateFlow<ContactInfo?> = _pickedContact.asStateFlow()
 
-    /** نتیجه‌ی ContactPickerScreen (چندتایی) - جدا از pickedContact (که مالِ Intent سیستمیِ تک‌انتخابیه) */
     private val _pickedContactsBatch = MutableStateFlow<List<ContactInfo>?>(null)
     val pickedContactsBatch: StateFlow<List<ContactInfo>?> = _pickedContactsBatch.asStateFlow()
 
@@ -111,31 +107,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     val pinnedMessageIds: StateFlow<Set<Long>> =
         pinRepository.observePinnedMessageIds().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
-    /**
-     * threadId هایی که حداقل یه پیامِ پین‌شده دارن - برای فیلترِ «دارای پیام سنجاق‌شده»
-     * توی آکاردئونِ درآور. جدا از pinnedMessageIds (که سطحِ خودِ پیامه، برای نمایشِ
-     * بج/بوردر روی حبابِ پیام داخل ThreadScreen استفاده میشه).
-     */
     val pinnedMessageThreadIds: StateFlow<Set<Long>> =
         pinRepository.observePinnedMessageThreadIds().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
-    /**
-     * threadId هایی که حداقل یه پیامِ فیوریت‌شده دارن - برای فیلترِ «دارای پیام علاقه‌مند»
-     * توی آکاردئونِ درآور. چون FavoriteMessage از قبل threadId رو داره، نیازی به کوئریِ
-     * جداگانه به دیتابیس نیست - فقط از روی همون لیستِ favorites که reactive هست map میشه.
-     */
     val favoriteThreadIds: StateFlow<Set<Long>> =
         favorites.map { list -> list.map { it.threadId }.toSet() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
-
-    val blockedNumbers: StateFlow<List<BlockedNumber>> =
-        blockRepository.observeBlockedNumbers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val blockKeywords: StateFlow<List<BlockKeyword>> =
-        blockRepository.observeKeywords().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val blockPatterns: StateFlow<List<BlockPattern>> =
-        blockRepository.observePatterns().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val privateNumbers: StateFlow<List<PrivateNumber>> =
         privateRepository.observePrivateNumbers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -143,17 +120,20 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     val allScheduledMessages: StateFlow<List<ScheduledMessage>> =
         scheduledMessageRepository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** خلاصه‌ی گروه‌های پیامکیِ ذخیره‌شده (اسم + تعداد اعضا) - برای نمایش توی صفحه‌ی «پیام جدید» */
     val groupSummaries: StateFlow<List<MessageGroupSummary>> =
         messageGroupRepository.observeGroupSummaries().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** خلاصه‌ی همه‌ی گروه‌های فیلتر (شماره/کلمه/الگو/تنظیمات) - جایگزینِ عمومیِ بلاک، برای هابِ صفحه‌ی «گروه‌ها» */
+    val filterGroupSummaries: StateFlow<List<FilterGroupSummary>> =
+        filterGroupRepository.observeGroupSummaries().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // ---- لیست‌های ترکیبیِ Telephony + Room - هم‌چنان trigger-based ----
 
     private val _trash = MutableStateFlow<List<TrashedMessage>>(emptyList())
     val trash: StateFlow<List<TrashedMessage>> = _trash.asStateFlow()
 
-    private val _blockedMessages = MutableStateFlow<List<BlockedMessageEntry>>(emptyList())
-    val blockedMessages: StateFlow<List<BlockedMessageEntry>> = _blockedMessages.asStateFlow()
+    private val _filterGroupMessages = MutableStateFlow<List<FilteredMessageEntry>>(emptyList())
+    val filterGroupMessages: StateFlow<List<FilteredMessageEntry>> = _filterGroupMessages.asStateFlow()
 
     private val _privateMessages = MutableStateFlow<List<PrivateMessageEntry>>(emptyList())
     val privateMessages: StateFlow<List<PrivateMessageEntry>> = _privateMessages.asStateFlow()
@@ -163,6 +143,14 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _operationMessage = MutableStateFlow<String?>(null)
     val operationMessage: StateFlow<String?> = _operationMessage.asStateFlow()
+
+    /** وقتی از سویپ/منویِ لیستِ مکالمات «افزودن به گروه» زده میشه، لیستِ مکالمه‌های هدف اینجا می‌شینه تا AppNavigation یه شیتِ انتخابِ گروه نشون بده */
+    private val _pendingGroupPickTargets = MutableStateFlow<List<Conversation>?>(null)
+    val pendingGroupPickTargets: StateFlow<List<Conversation>?> = _pendingGroupPickTargets.asStateFlow()
+
+    /** وقتی دکمه‌ی روی نوتیف زده میشه، اپ باز میشه و این پر میشه (تک‌شماره‌ای، نه لیستِ مکالمه) */
+    private val _quickGroupPickTarget = MutableStateFlow<QuickGroupPickTarget?>(null)
+    val quickGroupPickTarget: StateFlow<QuickGroupPickTarget?> = _quickGroupPickTarget.asStateFlow()
 
     private var openThreadId: Long? = null
 
@@ -189,7 +177,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             DataChangeSignal.tick.drop(1).collect {
                 loadConversations()
-                loadBlockedMessages()
                 loadPrivateMessages()
             }
         }
@@ -328,20 +315,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deleteBlockedMessages(messageIds: Set<Long>) {
-        if (messageIds.isEmpty()) return
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { repository.deleteMessages(messageIds) }
-            val base = if (result.movedToTrash) "پیام‌های انتخاب‌شده به سطل زباله منتقل شدن" else "پیام‌های انتخاب‌شده حذف شدن"
-            _operationMessage.value = if (result.blockedFavoriteCount > 0) {
-                "$base (${result.blockedFavoriteCount} پیام فیوریت‌شده به‌خاطر قفل بودن دست‌نخورده موند)"
-            } else {
-                base
-            }
-            loadBlockedMessages()
-        }
-    }
-
     fun deletePrivateMessages(messageIds: Set<Long>) {
         if (messageIds.isEmpty()) return
         viewModelScope.launch {
@@ -375,9 +348,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    @Deprecated("دیگه لازم نیست - favorites/favoriteIds خودشون از Room reactive هستن", ReplaceWith(""))
-    fun loadFavorites() { /* no-op: favorites همیشه reactive */ }
-
     fun toggleFavorite(message: SmsMessage, contactDisplayName: String) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
@@ -400,9 +370,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) { favoriteRepository.removeFavorite(messageId) }
         }
     }
-
-    @Deprecated("دیگه لازم نیست - pinnedMessageIds خودش از Room reactive هست", ReplaceWith(""))
-    fun loadPinnedMessages() { /* no-op */ }
 
     fun togglePinMessage(message: SmsMessage) {
         viewModelScope.launch {
@@ -457,7 +424,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** نسخه‌ی گروهیِ restoreFromTrash - برای دکمه‌ی «بازگردانی» تو حالت انتخاب‌چندتاییِ سطل زباله */
     fun restoreMultipleFromTrash(messageIds: Set<Long>) {
         if (messageIds.isEmpty()) return
         viewModelScope.launch {
@@ -477,7 +443,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** نسخه‌ی گروهیِ permanentlyDeleteFromTrash - برای دکمه‌ی «حذف همیشگی» تو حالت انتخاب‌چندتاییِ سطل زباله */
     fun permanentlyDeleteMultipleFromTrash(messageIds: Set<Long>) {
         if (messageIds.isEmpty()) return
         viewModelScope.launch {
@@ -488,130 +453,234 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun blockConversations(conversations: List<Conversation>) {
+    // ==================================================================
+    // گروهِ فیلتر - جایگزینِ عمومیِ بخشِ قبلیِ «بلاک»
+    // ==================================================================
+
+    fun createFilterGroup(
+        name: String,
+        hideFromMainList: Boolean,
+        showNotifications: Boolean,
+        blockNonContacts: Boolean
+    ) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                filterGroupRepository.createGroup(trimmed, hideFromMainList, showNotifications, blockNonContacts)
+            }
+            _operationMessage.value = "گروهِ «$trimmed» ساخته شد"
+        }
+    }
+
+    fun updateFilterGroup(
+        id: Long,
+        name: String,
+        hideFromMainList: Boolean,
+        showNotifications: Boolean,
+        blockNonContacts: Boolean
+    ) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                filterGroupRepository.updateGroup(id, trimmed, hideFromMainList, showNotifications, blockNonContacts)
+            }
+            loadConversations()
+        }
+    }
+
+    fun deleteFilterGroup(id: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { filterGroupRepository.deleteGroup(id) }
+            loadConversations()
+        }
+    }
+
+    /** بعد از درگ‌اند‌دراپِ لیستِ گروه‌ها صدا زده میشه - orderedGroupIds ترتیبِ نهاییِ کاربره */
+    fun reorderFilterGroups(orderedGroupIds: List<Long>) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { filterGroupRepository.reorderGroups(orderedGroupIds) }
+        }
+    }
+
+    fun addNumberToFilterGroup(groupId: Long, address: String, displayName: String) {
+        if (address.isBlank()) return
+        viewModelScope.launch {
+            val isPrivate = withContext(Dispatchers.IO) { privateRepository.isAddressPrivate(address) }
+            if (isPrivate) {
+                _operationMessage.value = "این شماره خصوصیه - اول باید از بخش خصوصی خارجش کنی"
+                return@launch
+            }
+            val added = withContext(Dispatchers.IO) { filterGroupRepository.addNumber(groupId, address, displayName) }
+            _operationMessage.value = if (added) "$displayName اضافه شد" else "این شماره از قبل تو این گروه بود"
+            loadConversations()
+        }
+    }
+
+    fun removeNumberFromFilterGroup(groupId: Long, address: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { filterGroupRepository.removeNumber(groupId, address) }
+            loadConversations()
+        }
+    }
+
+    fun addFilterGroupKeyword(groupId: Long, text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            val added = withContext(Dispatchers.IO) { filterGroupRepository.addKeyword(groupId, text) }
+            _operationMessage.value = if (added) "کلمه‌ی «${text.trim()}» اضافه شد" else "این کلمه از قبل تو این گروه بود"
+        }
+    }
+
+    fun removeFilterGroupKeyword(id: String) {
+        viewModelScope.launch { withContext(Dispatchers.IO) { filterGroupRepository.removeKeyword(id) } }
+    }
+
+    fun addFilterGroupPattern(groupId: Long, type: PatternType, value: String) {
+        if (value.isBlank()) return
+        viewModelScope.launch {
+            val added = withContext(Dispatchers.IO) { filterGroupRepository.addPattern(groupId, type, value) }
+            _operationMessage.value = if (added) "الگوی «${value.trim()}» اضافه شد" else "این الگو از قبل تو این گروه بود"
+        }
+    }
+
+    fun removeFilterGroupPattern(id: String) {
+        viewModelScope.launch { withContext(Dispatchers.IO) { filterGroupRepository.removePattern(id) } }
+    }
+
+    fun observeFilterGroupNumbers(groupId: Long) = filterGroupRepository.observeNumbersForGroup(groupId)
+    fun observeFilterGroupKeywords(groupId: Long) = filterGroupRepository.observeKeywordsForGroup(groupId)
+    fun observeFilterGroupPatterns(groupId: Long) = filterGroupRepository.observePatternsForGroup(groupId)
+
+    fun loadFilterGroupMessages(groupId: Long) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.getMessagesForFilterGroup(groupId) }
+            _filterGroupMessages.value = result
+        }
+    }
+
+    fun deleteFilterGroupMessages(messageIds: Set<Long>, groupId: Long) {
+        if (messageIds.isEmpty()) return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.deleteMessages(messageIds) }
+            val base = if (result.movedToTrash) "پیام‌های انتخاب‌شده به سطل زباله منتقل شدن" else "پیام‌های انتخاب‌شده حذف شدن"
+            _operationMessage.value = if (result.blockedFavoriteCount > 0) {
+                "$base (${result.blockedFavoriteCount} پیام فیوریت‌شده به‌خاطر قفل بودن دست‌نخورده موند)"
+            } else {
+                base
+            }
+            loadFilterGroupMessages(groupId)
+        }
+    }
+
+    fun requestAddConversationsToGroup(conversations: List<Conversation>) {
         if (conversations.isEmpty()) return
+        _pendingGroupPickTargets.value = conversations
+    }
+
+    fun consumeGroupPickTargets() {
+        _pendingGroupPickTargets.value = null
+    }
+
+    /** ساختِ یه گروهِ تازه (با تنظیماتِ پیش‌فرضِ ساده) + افزودنِ فوریِ مکالمه‌های هدف بهش - برای فرمِ «گروهِ جدید» داخلِ GroupPickerSheet */
+    fun createFilterGroupAndAddConversations(name: String, conversations: List<Conversation>) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            consumeGroupPickTargets()
+            return
+        }
+        viewModelScope.launch {
+            val groupId = withContext(Dispatchers.IO) {
+                filterGroupRepository.createGroup(trimmed, hideFromMainList = false, showNotifications = true, blockNonContacts = false)
+            }
+            addConversationsToGroup(groupId, conversations)
+        }
+    }
+
+    /** نسخه‌ی تک‌شماره‌ایِ بالا - برای فرمِ «گروهِ جدید» موقعِ افزودنِ سریع از نوتیف */
+    fun createFilterGroupAndAddAddress(name: String, address: String, displayName: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            consumeQuickGroupPick()
+            return
+        }
+        viewModelScope.launch {
+            val groupId = withContext(Dispatchers.IO) {
+                filterGroupRepository.createGroup(trimmed, hideFromMainList = false, showNotifications = true, blockNonContacts = false)
+            }
+            addAddressToGroupQuick(groupId, address, displayName)
+        }
+    }
+
+    fun addConversationsToGroup(groupId: Long, conversations: List<Conversation>) {
+        if (conversations.isEmpty()) {
+            consumeGroupPickTargets()
+            return
+        }
         viewModelScope.launch {
             val app = getApplication<Application>()
-            val blocked = mutableListOf<Conversation>()
+            var added = 0
             var privateSkipped = 0
-            var alreadyBlockedSkipped = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
                     if (privateRepository.isAddressPrivate(conversation.address)) {
                         privateSkipped++
                         return@forEach
                     }
-                    val newlyBlocked = blockRepository.blockNumber(
-                        conversation.threadId,
-                        conversation.address,
-                        conversation.displayName
-                    )
-                    if (!newlyBlocked) {
-                        alreadyBlockedSkipped++
-                        return@forEach
+                    val wasAdded = filterGroupRepository.addNumber(groupId, conversation.address, conversation.displayName)
+                    if (wasAdded) {
+                        NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
+                        added++
                     }
-                    NotificationManagerCompat.from(app).cancel(conversation.address.hashCode())
-                    blocked.add(conversation)
                 }
             }
             val base = when {
-                blocked.size == 1 -> "${blocked.first().displayName} بلاک شد"
-                blocked.isNotEmpty() -> "${blocked.size} مخاطب بلاک شدن"
-                else -> "هیچ مخاطب جدیدی بلاک نشد"
+                added == 1 -> "۱ مخاطب به گروه اضافه شد"
+                added > 1 -> "$added مخاطب به گروه اضافه شدن"
+                else -> "هیچ مخاطبِ جدیدی اضافه نشد (احتمالاً از قبل تو این گروه بودن)"
             }
-            val notes = mutableListOf<String>()
-            if (privateSkipped > 0) notes.add("$privateSkipped مخاطب چون خصوصی بودن رد شدن")
-            if (alreadyBlockedSkipped > 0) notes.add("$alreadyBlockedSkipped مخاطب از قبل بلاک بودن")
-            _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
-
+            _operationMessage.value = if (privateSkipped > 0) "$base ($privateSkipped مخاطب چون خصوصی بودن رد شدن)" else base
             loadConversations()
-            loadBlockedMessages()
+            consumeGroupPickTargets()
         }
     }
 
-    fun blockNumber(address: String, displayName: String) {
-        if (address.isBlank()) return
+    fun requestQuickGroupPick(address: String, displayName: String) {
+        _quickGroupPickTarget.value = QuickGroupPickTarget(address, displayName)
+    }
+
+    fun consumeQuickGroupPick() {
+        _quickGroupPickTarget.value = null
+    }
+
+    fun addAddressToGroupQuick(groupId: Long, address: String, displayName: String) {
         viewModelScope.launch {
-            val app = getApplication<Application>()
-            if (withContext(Dispatchers.IO) { blockRepository.isAddressBlocked(address) }) {
-                _operationMessage.value = "این شماره از قبل بلاک بود"
-                return@launch
-            }
-            val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
             val isPrivate = withContext(Dispatchers.IO) { privateRepository.isAddressPrivate(address) }
             if (isPrivate) {
                 _operationMessage.value = "این شماره خصوصیه - اول باید از بخش خصوصی خارجش کنی"
+                consumeQuickGroupPick()
                 return@launch
             }
-            withContext(Dispatchers.IO) { blockRepository.blockNumber(threadId, address, displayName) }
-            NotificationManagerCompat.from(app).cancel(address.hashCode())
-            _operationMessage.value = "$displayName بلاک شد"
+            val added = withContext(Dispatchers.IO) { filterGroupRepository.addNumber(groupId, address, displayName) }
+            _operationMessage.value = if (added) "$displayName به گروه اضافه شد" else "این شماره از قبل تو این گروه بود"
             loadConversations()
-            loadBlockedMessages()
+            consumeQuickGroupPick()
         }
     }
 
-    fun unblockNumber(threadId: Long) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { blockRepository.unblockThread(threadId) }
-            loadBlockedMessages()
-            loadConversations()
-        }
-    }
-
-    @Deprecated("دیگه لازم نیست - blockedNumbers خودش از Room reactive هست", ReplaceWith(""))
-    fun loadBlockedNumbers() { /* no-op */ }
-
-    fun loadBlockedMessages() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { repository.getMessagesForBlockedThreads() }
-            _blockedMessages.value = result
-        }
-    }
-
-    @Deprecated("دیگه لازم نیست - blockKeywords خودش از Room reactive هست", ReplaceWith(""))
-    fun loadBlockKeywords() { /* no-op */ }
-
-    fun addBlockKeyword(text: String) {
-        if (text.isBlank()) return
-        viewModelScope.launch {
-            val added = withContext(Dispatchers.IO) { blockRepository.addKeyword(text) }
-            _operationMessage.value = if (added) "کلمه‌ی «${text.trim()}» اضافه شد" else "این کلمه از قبل اضافه شده بود"
-        }
-    }
-
-    fun removeBlockKeyword(id: String) {
-        viewModelScope.launch { withContext(Dispatchers.IO) { blockRepository.removeKeyword(id) } }
-    }
-
-    @Deprecated("دیگه لازم نیست - blockPatterns خودش از Room reactive هست", ReplaceWith(""))
-    fun loadBlockPatterns() { /* no-op */ }
-
-    fun addBlockPattern(type: BlockPatternType, value: String) {
-        if (value.isBlank()) return
-        viewModelScope.launch {
-            val added = withContext(Dispatchers.IO) { blockRepository.addPattern(type, value) }
-            _operationMessage.value = if (added) "الگوی «${value.trim()}» اضافه شد" else "این الگو از قبل اضافه شده بود"
-        }
-    }
-
-    fun removeBlockPattern(id: String) {
-        viewModelScope.launch { withContext(Dispatchers.IO) { blockRepository.removePattern(id) } }
-    }
+    // ==================================================================
+    // خصوصی
+    // ==================================================================
 
     fun makeConversationsPrivate(conversations: List<Conversation>) {
         if (conversations.isEmpty()) return
         viewModelScope.launch {
             val app = getApplication<Application>()
             val madePrivate = mutableListOf<Conversation>()
-            var blockedSkipped = 0
             var alreadyPrivateSkipped = 0
             withContext(Dispatchers.IO) {
                 conversations.forEach { conversation ->
-                    if (blockRepository.isAddressBlocked(conversation.address)) {
-                        blockedSkipped++
-                        return@forEach
-                    }
                     val newlyPrivate = privateRepository.makePrivate(
                         conversation.threadId,
                         conversation.address,
@@ -630,10 +699,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                 madePrivate.isNotEmpty() -> "${madePrivate.size} مخاطب خصوصی شدن"
                 else -> "هیچ مخاطب جدیدی خصوصی نشد"
             }
-            val notes = mutableListOf<String>()
-            if (blockedSkipped > 0) notes.add("$blockedSkipped مخاطب چون بلاک بودن رد شدن")
-            if (alreadyPrivateSkipped > 0) notes.add("$alreadyPrivateSkipped مخاطب از قبل خصوصی بودن")
-            _operationMessage.value = if (notes.isNotEmpty()) "$base (${notes.joinToString("، ")})" else base
+            _operationMessage.value = if (alreadyPrivateSkipped > 0) "$base ($alreadyPrivateSkipped مخاطب از قبل خصوصی بودن)" else base
 
             loadConversations()
             loadPrivateMessages()
@@ -646,11 +712,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             val app = getApplication<Application>()
             if (withContext(Dispatchers.IO) { privateRepository.isAddressPrivate(address) }) {
                 _operationMessage.value = "این شماره از قبل خصوصی بود"
-                return@launch
-            }
-            val isBlocked = withContext(Dispatchers.IO) { blockRepository.isAddressBlocked(address) }
-            if (isBlocked) {
-                _operationMessage.value = "این شماره بلاکه - اول باید از بخش بلاک خارجش کنی"
                 return@launch
             }
             val threadId = withContext(Dispatchers.IO) { repository.getOrCreateThreadId(address) }
@@ -669,9 +730,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             loadConversations()
         }
     }
-
-    @Deprecated("دیگه لازم نیست - privateNumbers خودش از Room reactive هست", ReplaceWith(""))
-    fun loadPrivateNumbers() { /* no-op */ }
 
     fun loadPrivateMessages() {
         viewModelScope.launch {
@@ -712,7 +770,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** فقط با درخواستِ صریحِ کاربر (زدنِ دکمه‌ی «انتخاب از مخاطبین») صدا زده میشه - کل مخاطبینِ دارای شماره رو لود می‌کنه */
     fun loadAllContactsForPicker() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { contactsRepository.getAllContacts() }
@@ -730,9 +787,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun prepareNewMessage() {
         clearOpenThread()
-        // قبلاً اینجا searchContacts("") صدا زده می‌شد، یعنی محضِ باز شدنِ صفحه‌ی «پیام
-        // جدید» کل مخاطبین گوشی لود می‌شدن. الان تا کاربر واقعاً چیزی تایپ نکنه، لیست
-        // خالی می‌مونه (ContactsRepository.searchContacts هم با کوئری خالی چیزی برنمی‌گردونه).
         _contacts.value = emptyList()
     }
 
@@ -754,13 +808,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * ارسال گروهی: وقتی توی «پیام جدید» بیشتر از یک مخاطب انتخاب شده، پیام جدا-جدا
-     * (SMS مستقل، نه MMS) به تک‌تک شماره‌ها ارسال میشه - یعنی هر گیرنده یه thread
-     * جدا/موجودِ خودش رو می‌گیره، دقیقاً مثل اینکه پیام رو تک‌به‌تک براشون فرستاده باشی.
-     * چون اینجا دیگه یه thread واحد برای باز کردن نداریم، برخلاف sendNewMessage،
-     * _newConversationTarget ست نمیشه - صفحه‌ی «پیام جدید» بعدش برمی‌گرده به لیست مکالمات.
-     */
     fun sendNewMessageToMultiple(recipients: List<Pair<String, String>>, body: String, subscriptionId: Int?) {
         if (recipients.isEmpty() || body.isBlank()) return
         viewModelScope.launch {
@@ -796,7 +843,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** نسخه‌ی گروهیِ scheduleMessage - همون منطق sendNewMessageToMultiple ولی برای پیامِ زمان‌بندی‌شده */
     fun scheduleMessageToMultiple(
         recipients: List<Pair<String, String>>,
         body: String,
@@ -809,9 +855,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) {
                 recipients.forEachIndexed { index, (address, displayName) ->
                     val threadId = repository.getOrCreateThreadId(address)
-                    // id باید بین گیرنده‌های مختلف یکتا باشه؛ چون همه‌شون توی یه coroutine
-                    // پشتِ‌سرِهم ذخیره میشن، فقط currentTimeMillis ممکنه برای دوتاشون یکی
-                    // دربیاد - برای همین index هم بهش اضافه میشه
                     val message = ScheduledMessage(
                         id = System.currentTimeMillis() + index,
                         threadId = threadId,
@@ -913,14 +956,17 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** خوندنِ اعضای یه گروهِ پیامکیِ ذخیره‌شده - فقط وقتی کاربر واقعاً یه گروه رو برای بارگذاری انتخاب کنه صدا زده میشه */
     suspend fun getGroupMembers(groupId: Long): List<MessageGroupMember> =
         withContext(Dispatchers.IO) { messageGroupRepository.getGroupMembers(groupId) }
 
-    /** ذخیره‌ی مخاطبینِ انتخاب‌شده‌ی فعلی (توی «پیام جدید») به‌عنوان یه گروهِ جدید */
     fun saveMessageGroup(name: String, members: List<Pair<String, String>>) {
         val trimmedName = name.trim()
         if (trimmedName.isBlank() || members.isEmpty()) return
+        val isDuplicate = groupSummaries.value.any { it.name.equals(trimmedName, ignoreCase = true) }
+        if (isDuplicate) {
+            _operationMessage.value = "یه گروهِ دیگه از قبل اسمِ «$trimmedName» رو داره - یه اسمِ دیگه انتخاب کن"
+            return
+        }
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 messageGroupRepository.saveGroup(trimmedName, members.map { MessageGroupMember(it.first, it.second) })
@@ -932,6 +978,28 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteMessageGroup(groupId: Long) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { messageGroupRepository.deleteGroup(groupId) }
+        }
+    }
+
+    fun renameMessageGroup(groupId: Long, newName: String) {
+        val trimmedName = newName.trim()
+        if (trimmedName.isBlank()) return
+        val isDuplicate = groupSummaries.value.any { it.id != groupId && it.name.equals(trimmedName, ignoreCase = true) }
+        if (isDuplicate) {
+            _operationMessage.value = "یه گروهِ دیگه از قبل اسمِ «$trimmedName» رو داره - یه اسمِ دیگه انتخاب کن"
+            return
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { messageGroupRepository.renameGroup(groupId, trimmedName) }
+            _operationMessage.value = "اسمِ گروه به «$trimmedName» تغییر کرد"
+        }
+    }
+
+    fun updateMessageGroupMembers(groupId: Long, members: List<Pair<String, String>>) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                messageGroupRepository.replaceMembers(groupId, members.map { MessageGroupMember(it.first, it.second) })
+            }
         }
     }
 
@@ -951,9 +1019,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         _noteText.value = null
     }
 
-    // ---- عملیاتِ سویپ روی هر ردیفِ لیستِ مکالمات ----
-
-    /** سویپ -> «خوانده شدن»: فقط اون یه مکالمه رو خوانده‌شده می‌کنه (بدون باز کردنِ خودِ چت) */
     fun markThreadReadFromSwipe(threadId: Long) {
         viewModelScope.launch {
             val marked = withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
@@ -965,7 +1030,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** سویپ -> «ناخوانده شدن»: معکوسِ بالا - پیام‌های دریافتیِ اون مکالمه رو ناخوانده می‌کنه */
     fun markThreadUnreadFromSwipe(threadId: Long) {
         viewModelScope.launch {
             val marked = withContext(Dispatchers.IO) { repository.markThreadAsUnread(threadId) }
@@ -980,6 +1044,12 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
 data class NewConversationTarget(
     val threadId: Long,
+    val address: String,
+    val displayName: String
+)
+
+/** هدفِ تک‌شماره‌ایِ درخواستِ سریعِ «افزودن به گروه» (از دکمه‌ی روی نوتیف) */
+data class QuickGroupPickTarget(
     val address: String,
     val displayName: String
 )

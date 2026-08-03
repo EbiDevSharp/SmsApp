@@ -21,18 +21,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.petro.smsapp.data.BlockKeyword
+import com.petro.smsapp.data.FilterGroupKeyword
 import com.petro.smsapp.util.DateFormatter
 
-/**
- * صفحه‌ی «کلمات کلیدی بلاک» - کاربر اینجا عبارت‌هایی رو تعریف می‌کنه که اگه توی بدنه‌ی
- * هر پیامِ ورودی (از هر شماره‌ای) دیده بشن، همون پیام خودکار بلاک میشه (بدون نوتیف/صدا) -
- * برخلاف بخش «شماره‌های بلاک‌شده» که کلِ یه شماره رو بلاک می‌کنه، اینجا فقط پیام‌هایی که
- * واقعاً شامل عبارت هستن بلاک میشن؛ بقیه‌ی پیام‌های همون شماره عادی می‌مونن.
- */
 @Composable
-fun BlockKeywordsScreen(
-    keywords: List<BlockKeyword>,
+fun FilterGroupKeywordsScreen(
+    groupName: String,
+    keywords: List<FilterGroupKeyword>,
     onBack: () -> Unit,
     onAddKeyword: (text: String) -> Unit,
     onRemoveKeyword: (id: String) -> Unit
@@ -42,7 +37,7 @@ fun BlockKeywordsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("کلمات کلیدی بلاک") },
+                title = { Text("کلمات کلیدیِ «$groupName»") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Text("←") }
                 }
@@ -77,7 +72,7 @@ fun BlockKeywordsScreen(
             }
 
             Text(
-                text = "هر پیامِ ورودی‌ای که شاملِ یکی از این عبارت‌ها باشه، خودکار بلاک میشه (بدون نوتیف/صدا)، صرف‌نظر از اینکه شماره‌ی فرستنده‌ش بلاک باشه یا نه.",
+                text = "هر پیامِ ورودی‌ای که شاملِ یکی از این عبارت‌ها باشه، میره تو گروهِ «$groupName».",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -90,7 +85,7 @@ fun BlockKeywordsScreen(
             } else {
                 LazyColumn {
                     items(keywords, key = { it.id }) { keyword ->
-                        BlockKeywordRow(keyword = keyword, onRemove = { onRemoveKeyword(keyword.id) })
+                        FilterGroupKeywordRow(keyword = keyword, onRemove = { onRemoveKeyword(keyword.id) })
                         Divider(modifier = Modifier.padding(start = 72.dp))
                     }
                 }
@@ -100,7 +95,7 @@ fun BlockKeywordsScreen(
 }
 
 @Composable
-private fun BlockKeywordRow(keyword: BlockKeyword, onRemove: () -> Unit) {
+private fun FilterGroupKeywordRow(keyword: FilterGroupKeyword, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -111,7 +106,7 @@ private fun BlockKeywordRow(keyword: BlockKeyword, onRemove: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Filled.Sms, contentDescription = null, tint = Color.White)

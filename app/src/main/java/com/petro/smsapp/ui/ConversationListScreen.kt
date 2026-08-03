@@ -61,26 +61,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * صفحه‌ی اصلی لیست مکالمات (پیام‌ها). علاوه بر رفتار عادی (کلیک -> باز کردن مکالمه)،
- * حالا حالت «انتخاب چندتایی» و «سویپِ داینامیک» هم داره:
- * - لانگ‌کلیک روی یه ردیف -> وارد حالت انتخاب میشه و همون ردیف انتخاب میشه.
- * - توی حالت انتخاب، کلیک ساده روی هر ردیف فقط انتخاب/عدم‌انتخابش می‌کنه (دیگه مکالمه باز نمیشه).
- * - نوار بالای صفحه با تعداد انتخاب‌شده‌ها عوض میشه: دکمه‌ی بستن (خروج از حالت انتخاب)،
- *   دکمه‌ی «انتخاب همه/هیچ‌کدام»، دکمه‌ی حذف (فعلاً تنها عملیات واقعی)، و یه منوی سه‌نقطه
- *   برای عملیات‌های بعدی (پین، کپی، اشتراک‌گذاری، مسدودکردن - که هنوز پیاده نشدن).
- * - دکمه‌ی برگشتِ گوشی هم توی حالت انتخاب، فقط از حالت انتخاب خارج می‌کنه نه از کل صفحه.
- * - هر ردیف قابل‌سویپه: جهتِ راست‌به‌چپ و چپ‌به‌راست هرکدوم یه عملیاتِ داینامیک و
- *   قابل‌تنظیم از صفحه‌ی تنظیمات دارن (خوانده/ناخوانده‌شدن، حذف، تماس، بلاک). حین
- *   کشیدن، پس‌زمینه‌ی ردیف رنگِ همون عملیات رو می‌گیره و آیکنش نزدیکِ لبه‌ی
- *   بازشده (جایی که کشیدن از اونجا شروع شده) نشون داده میشه.
- * - اگه از تنظیمات «نمایش شماره‌ی مخاطب در لیست چت‌ها» فعال شده باشه، زیرِ اسمِ
- *   مخاطبینی که واقعاً تو گوشی ذخیره‌ن (یعنی address با displayName فرق داره) شماره‌شون
- *   هم با فونتِ کوچیک‌تر و همیشه چپ‌به‌راست نشون داده میشه.
- * - آواتارِ هر ردیف (ContactAvatar) اگه مخاطب تو گوشی عکس داشته باشه، همون عکسِ واقعی
- *   رو نشون میده؛ وگرنه دایره‌ی رنگی با حرفِ اول (رفتار قبلی).
- * - اگه از تنظیمات «نوار حروف الفبا» فعال شده باشه، یه نوارِ کناریِ پرشِ سریع (سمتِ
- *   چپِ فیزیکیِ صفحه) نشون داده میشه که با لمس/درگ روی حرفِ موردنظر، مستقیم به اولین
- *   مخاطبِ همون حرف اسکرول می‌کنه - بدونِ اینکه ترتیبِ فعلیِ لیست (پین/تاریخ) عوض بشه.
+ * صفحه‌ی اصلی لیست مکالمات. عملیاتِ قبلیِ «بلاک کردن» (چه از سویپ چه از منو) دیگه
+ * مستقیم به یه مقصدِ ثابت نمی‌ره - onAddToGroupClick صدا زده میشه و صداکننده (AppNavigation)
+ * یه شیتِ کوچیک برای انتخابِ گروه نشون میده.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -90,7 +73,7 @@ fun ConversationListScreen(
     onComposeClick: () -> Unit,
     onMenuClick: () -> Unit,
     onDeleteConversations: (Set<Long>) -> Unit,
-    onBlockConversations: (List<Conversation>) -> Unit,
+    onAddToGroupClick: (List<Conversation>) -> Unit,
     onMakeConversationsPrivate: (List<Conversation>) -> Unit,
     onPinConversations: (List<Conversation>) -> Unit = {},
     swipeRightToLeftAction: SwipeAction = SwipeAction.NONE,
@@ -104,14 +87,12 @@ fun ConversationListScreen(
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
-    // هدفِ حذفِ تک‌موردیِ ناشی از سویپ (جدا از showDeleteConfirm که مالِ حذفِ چندتاییه)
     var swipeDeleteTarget by remember { mutableStateOf<Conversation?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // اگه بعد از حذف/تغییر لیست، بعضی id های انتخاب‌شده دیگه وجود نداشته باشن، از انتخاب پاک بشن
     LaunchedEffect(conversations) {
         val stillExisting = conversations.map { it.threadId }.toSet()
         if (selectedIds.any { it !in stillExisting }) {
@@ -119,7 +100,6 @@ fun ConversationListScreen(
         }
     }
 
-    // دکمه‌ی برگشت سیستم: اگه توی حالت انتخابیم، فقط از انتخاب خارج شو، از صفحه خارج نشو
     BackHandler(enabled = selectionMode) {
         selectedIds = emptySet()
     }
@@ -168,8 +148,6 @@ fun ConversationListScreen(
         )
     }
 
-    // نگاشتِ «حرف -> اولین ایندکسِ اون حرف توی conversations» - فقط با تغییرِ خودِ
-    // لیست دوباره محاسبه میشه، هیچ کوئری‌ای به دیتابیس/Provider نمی‌زنه (کاملاً درحافظه)
     val letterToFirstIndex = remember(conversations) {
         val map = LinkedHashMap<String, Int>()
         conversations.forEachIndexed { index, conversation ->
@@ -214,11 +192,8 @@ fun ConversationListScreen(
                                 Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
                             }
                             DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
-                                // این دوتا فعلاً فقط اسکلت‌بندی‌شدن - قابلیت واقعیشون بعداً اضافه میشه
                                 run {
                                     val selectedConversations = conversations.filter { it.threadId in selectedIds }
-                                    // اگه همه‌ی انتخاب‌شده‌ها از قبل پین بودن، این دکمه اونا رو آنپین می‌کنه؛
-                                    // وگرنه (حتی اگه بعضی‌هاشون پین بودن) بقیه رو هم پین می‌کنه.
                                     val allPinned = selectedConversations.isNotEmpty() && selectedConversations.all { it.isPinned }
                                     DropdownMenuItem(
                                         text = { Text(if (allPinned) "برداشتن پین" else "پین کردن") },
@@ -233,12 +208,12 @@ fun ConversationListScreen(
                                 ComingSoonMenuItem(Icons.Filled.ContentCopy, "کپی کردن") { showMoreMenu = false }
                                 ComingSoonMenuItem(Icons.Filled.Share, "اشتراک‌گذاری") { showMoreMenu = false }
                                 DropdownMenuItem(
-                                    text = { Text("بلاک کردن") },
+                                    text = { Text("افزودن به گروه") },
                                     leadingIcon = { Icon(Icons.Filled.Block, contentDescription = null) },
                                     onClick = {
                                         showMoreMenu = false
                                         val selectedConversations = conversations.filter { it.threadId in selectedIds }
-                                        onBlockConversations(selectedConversations)
+                                        onAddToGroupClick(selectedConversations)
                                         selectedIds = emptySet()
                                     }
                                 )
@@ -329,7 +304,7 @@ fun ConversationListScreen(
                                     onDeleteConversations(setOf(conversation.threadId))
                                 }
                             },
-                            onBlock = { onBlockConversations(listOf(conversation)) },
+                            onAddToGroup = { onAddToGroupClick(listOf(conversation)) },
                             onCall = {
                                 if (PhoneNumberUtils.isSendableAddress(conversation.address)) {
                                     context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${conversation.address}")))
@@ -343,8 +318,6 @@ fun ConversationListScreen(
                 }
             }
 
-            // نوارِ کناریِ پرشِ سریعِ الفبا - همیشه سمتِ چپِ فیزیکیِ صفحه، مستقل از
-            // راست‌چینِ کلیِ برنامه. فقط وقتی هم از تنظیمات فعاله و هم لیست خالی نیست نشون داده میشه.
             if (alphabetIndexBarEnabled && sortedIndexLetters.isNotEmpty() && !selectionMode) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     AlphabetIndexBar(
@@ -383,17 +356,6 @@ private fun ComingSoonMenuItem(
     )
 }
 
-/**
- * لایه‌ی سویپ‌پذیرِ دورِ هر ردیفِ لیستِ مکالمات. از Modifier.draggable (نه پویینترانپوت
- * دستی) استفاده می‌کنه چون این ماژول به‌خوبی کنارِ combinedClickable ردیفِ داخلی
- * (ConversationRow) کار می‌کنه: تا وقتی حرکتِ انگشت از آستانه‌ی لمسِ سیستم رد نشه،
- * تپ‌های ساده/لانگ‌کلیک دست‌نخورده به همون ردیف می‌رسن.
- *
- * جهتِ افقیِ آفست همیشه فیزیکیه (مستقل از راست‌چین/چپ‌چینِ کلِ اپ) - یعنی کشیدنِ
- * انگشت به‌سمتِ چپ همیشه «راست‌به‌چپ» حساب میشه، چه اپ RTL باشه چه LTR؛ برای همین
- * پس‌زمینه‌ی آیکن هم عمداً با LayoutDirection.Ltr اجباری کشیده میشه تا Start/End
- * همیشه معنیِ فیزیکیِ چپ/راست بدن، نه معنیِ جهتِ متنِ برنامه.
- */
 @Composable
 private fun SwipeableConversationRow(
     conversation: Conversation,
@@ -407,7 +369,7 @@ private fun SwipeableConversationRow(
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
     onRequestDelete: () -> Unit,
-    onBlock: () -> Unit,
+    onAddToGroup: () -> Unit,
     onCall: () -> Unit
 ) {
     val density = LocalDensity.current
@@ -415,7 +377,6 @@ private fun SwipeableConversationRow(
     val maxDragPx = with(density) { 132.dp.toPx() }
     var offsetX by remember { mutableStateOf(0f) }
 
-    // اگه وسطِ کشیدن وارد حالتِ انتخاب چندتایی بشیم، ردیف رو فوراً به حالتِ عادی برگردون
     LaunchedEffect(selectionMode) {
         if (selectionMode) offsetX = 0f
     }
@@ -425,14 +386,13 @@ private fun SwipeableConversationRow(
             SwipeAction.MARK_READ -> onMarkRead()
             SwipeAction.MARK_UNREAD -> onMarkUnread()
             SwipeAction.DELETE -> onRequestDelete()
-            SwipeAction.BLOCK -> onBlock()
+            SwipeAction.BLOCK -> onAddToGroup()
             SwipeAction.CALL -> onCall()
             SwipeAction.NONE -> Unit
         }
     }
 
     val draggableState = rememberDraggableState { delta ->
-        // اگه برای یه جهت هیچ عملیاتی تنظیم نشده باشه (NONE)، اصلاً اجازه‌ی کشیدن به همون سمت رو نده
         val minBound = if (rightToLeftAction != SwipeAction.NONE) -maxDragPx else 0f
         val maxBound = if (leftToRightAction != SwipeAction.NONE) maxDragPx else 0f
         offsetX = (offsetX + delta).coerceIn(minBound, maxBound)
@@ -445,7 +405,6 @@ private fun SwipeableConversationRow(
     }
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        // پس‌زمینه‌ی رنگی + آیکنِ عملیات - فقط وقتی واقعاً چیزی کشیده شده نشون داده میشه
         if (revealedAction != null && revealedAction != SwipeAction.NONE) {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Row(
@@ -492,7 +451,6 @@ private fun SwipeableConversationRow(
                             current >= actionThresholdPx -> leftToRightAction
                             else -> null
                         }
-                        // همیشه برمی‌گرده سرِ جاش - عملیات (اگه بود) بعد از شروعِ برگشتن اجرا میشه
                         animate(initialValue = offsetX, targetValue = 0f, animationSpec = tween(220)) { value, _ ->
                             offsetX = value
                         }
@@ -528,7 +486,7 @@ private fun swipeActionColor(action: SwipeAction): Color = when (action) {
     SwipeAction.MARK_UNREAD -> Color(0xFF757575)
     SwipeAction.DELETE -> Color(0xFFE53935)
     SwipeAction.CALL -> Color(0xFF43A047)
-    SwipeAction.BLOCK -> Color(0xFFB71C1C)
+    SwipeAction.BLOCK -> Color(0xFF6D4C41)
     SwipeAction.NONE -> Color.Transparent
 }
 
@@ -575,8 +533,6 @@ private fun ConversationRow(
                     style = MaterialTheme.typography.bodyLarge.autoDirection()
                 )
             }
-            // فقط وقتی این آدرس واقعاً یه مخاطبِ ذخیره‌شده‌ست (یعنی اسمِ نمایشی با خودِ
-            // شماره فرق داره) و کاربر از تنظیمات این گزینه رو فعال کرده باشه
             if (showContactNumberEnabled && conversation.address.isNotBlank() && conversation.address != conversation.displayName) {
                 Text(
                     text = conversation.address,
@@ -626,7 +582,6 @@ private fun ConversationRow(
     }
 }
 
-/** آواتار جایگزین توی حالت انتخاب: دایره‌ی خالی وقتی انتخاب نشده، دایره‌ی رنگی با تیک وقتی انتخاب شده */
 @Composable
 private fun SelectionAvatar(isSelected: Boolean) {
     Box(

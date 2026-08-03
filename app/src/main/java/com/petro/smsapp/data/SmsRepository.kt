@@ -11,8 +11,8 @@ import android.provider.Telephony
 import android.telephony.SmsManager
 import android.util.Log
 import com.petro.smsapp.DefaultSmsAppHelper
-import com.petro.smsapp.data.repository.BlockRepository
 import com.petro.smsapp.data.repository.DeliveryRepository
+import com.petro.smsapp.data.repository.FilterGroupRepository
 import com.petro.smsapp.data.repository.PinRepository
 import com.petro.smsapp.data.repository.PrivateRepository
 import com.petro.smsapp.data.repository.TrashRepository
@@ -20,17 +20,12 @@ import com.petro.smsapp.receiver.SmsStatusReceiver
 
 /**
  * لایه‌ی خواندن/نوشتنِ Telephony.Sms Provider - این پروایدر خودِ اندروید همیشه source
- * of truth می‌مونه (نمی‌شه به Room منتقلش کرد)، ولی همه‌ی متادیتای مربوط به بلاک/
- * خصوصی/سطل‌زباله/پین/دلیوری که قبلاً SharedPreferences بودن، الان از طریق
- * Repositoryهای تزریق‌شده (روی Room) میان - بدون هیچ کش میانیِ اضافه.
- *
- * همه‌ی متدهای این کلاس suspend شدن (قبلاً synchronous بودن چون SharedPreferences
- * synchronous بود) - چون همه‌جا همین الان هم از داخل withContext(Dispatchers.IO)
- * صدا زده میشن (توی SmsViewModel)، این تغییر امن و بدون بلاک‌کردن Main Thread ئه.
+ * of truth می‌مونه، ولی همه‌ی متادیتای مربوط به گروهِ فیلتر/خصوصی/سطل‌زباله/پین/دلیوری
+ * از طریقِ Repositoryهای تزریق‌شده (روی Room) میان.
  */
 class SmsRepository(
     private val context: Context,
-    private val blockRepository: BlockRepository = AppContainer.blockRepository(context),
+    private val filterGroupRepository: FilterGroupRepository = AppContainer.filterGroupRepository(context),
     private val privateRepository: PrivateRepository = AppContainer.privateRepository(context),
     private val trashRepository: TrashRepository = AppContainer.trashRepository(context),
     private val pinRepository: PinRepository = AppContainer.pinRepository(context),
@@ -71,9 +66,6 @@ class SmsRepository(
             if (privateRepository.isAddressPrivate(address)) {
                 return@mapNotNull null
             }
-            if (!AppSettings.isShowBlockedInMessageListEnabled(context) && blockRepository.isAddressBlocked(address)) {
-                return@mapNotNull null
-            }
 
             val displayName = ContactsCache.getName(context, address) ?: address
 
@@ -107,15 +99,10 @@ class SmsRepository(
     private suspend fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
-        // تعدادِ کلِ پیام‌های هر thread - برای گزینه‌ی مرتب‌سازیِ «پرپیام‌ترین اول».
-        // توی همین یه کوئریِ فعلی (که هرحال همه‌ی ردیف‌ها رو یه‌بار می‌خونه) شمرده
-        // میشه، بدونِ نیاز به هیچ کوئریِ اضافه‌ی جدا.
         val messageCounts = mutableMapOf<Long, Int>()
         val trashedIds = trashRepository.getTrashedIds()
-        val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
-        val keywordBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getKeywordBlockedMessageIds()
-        val patternBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getPatternBlockedMessageIds()
-        val nonContactBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getNonContactBlockedMessageIds()
+        // پیام‌هایی که تویِ یه گروهِ فیلترِ hideFromMainList=true افتادن - از لیستِ اصلی مخفی میشن
+        val hiddenByFilterGroup = filterGroupRepository.getHiddenMessageIds()
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -135,9 +122,7 @@ class SmsRepository(
                 val typeIdx = cursor.getColumnIndex(Telephony.Sms.TYPE)
                 while (cursor.moveToNext()) {
                     if (cursor.getLong(idIdx) in trashedIds) continue
-                    if (cursor.getLong(idIdx) in keywordBlockedIds) continue
-                    if (cursor.getLong(idIdx) in patternBlockedIds) continue
-                    if (cursor.getLong(idIdx) in nonContactBlockedIds) continue
+                    if (cursor.getLong(idIdx) in hiddenByFilterGroup) continue
                     if (typeIdx >= 0 && cursor.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT) continue
 
                     val threadId = cursor.getLong(threadIdIdx)
@@ -246,10 +231,7 @@ class SmsRepository(
         if (!requireReadSmsPermission("خواندن پیام‌های یک مکالمه")) return emptyList()
         val messages = mutableListOf<SmsMessage>()
         val trashedIds = trashRepository.getTrashedIds()
-        val showBlockedInList = AppSettings.isShowBlockedInMessageListEnabled(context)
-        val keywordBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getKeywordBlockedMessageIds()
-        val patternBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getPatternBlockedMessageIds()
-        val nonContactBlockedIds = if (showBlockedInList) emptySet() else blockRepository.getNonContactBlockedMessageIds()
+        val hiddenByFilterGroup = filterGroupRepository.getHiddenMessageIds()
         val uri = Telephony.Sms.CONTENT_URI
         val selection = "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} != ?"
         val selectionArgs = arrayOf(threadId.toString(), Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
@@ -262,9 +244,7 @@ class SmsRepository(
                 while (cursor.moveToNext()) {
                     val message = cursorToMessage(cursor)
                     if (message.id in trashedIds) continue
-                    if (message.id in keywordBlockedIds) continue
-                    if (message.id in patternBlockedIds) continue
-                    if (message.id in nonContactBlockedIds) continue
+                    if (message.id in hiddenByFilterGroup) continue
                     messages.add(message)
                 }
             }
@@ -275,65 +255,29 @@ class SmsRepository(
         return messages
     }
 
-    suspend fun getMessagesForBlockedThreads(): List<BlockedMessageEntry> {
-        val blockedNumbers = blockRepository.getAllBlockedNumbersOnce()
-        val phoneBlockedEntries = if (blockedNumbers.isEmpty()) {
-            emptyList()
-        } else {
-            getMessagesByAddresses(blockedNumbers.map { it.address })
-                .map { message ->
-                    val name = blockedNumbers.find { it.address == message.address }?.displayName ?: message.address
-                    BlockedMessageEntry(message, name, BlockSource.PHONE_NUMBER)
-                }
-        }
-
-        val keywordBlockedIds = blockRepository.getKeywordBlockedMessageIds()
-        val keywordBlockedEntries = if (keywordBlockedIds.isEmpty()) {
-            emptyList()
-        } else {
-            getMessagesByIds(keywordBlockedIds)
-                .filter { message -> blockedNumbers.none { it.address == message.address } }
-                .map { message ->
-                    val name = ContactsCache.getName(context, message.address) ?: message.address
-                    val keyword = blockRepository.getMatchedKeyword(message.id)
-                    BlockedMessageEntry(message, name, BlockSource.KEYWORD, keyword)
-                }
-        }
-
-        val patternBlockedIds = blockRepository.getPatternBlockedMessageIds()
-        val patternBlockedEntries = if (patternBlockedIds.isEmpty()) {
-            emptyList()
-        } else {
-            getMessagesByIds(patternBlockedIds)
-                .filter { message -> blockedNumbers.none { it.address == message.address } }
-                .map { message ->
-                    val name = ContactsCache.getName(context, message.address) ?: message.address
-                    val matched = blockRepository.getMatchedPattern(message.id)
-                    BlockedMessageEntry(
-                        message, name, BlockSource.PATTERN,
-                        matchedPatternType = matched?.type,
-                        matchedPatternValue = matched?.value
-                    )
-                }
-        }
-
-        val nonContactBlockedIds = blockRepository.getNonContactBlockedMessageIds()
-        val nonContactBlockedEntries = if (nonContactBlockedIds.isEmpty()) {
-            emptyList()
-        } else {
-            getMessagesByIds(nonContactBlockedIds)
-                .filter { message -> blockedNumbers.none { it.address == message.address } }
-                .map { message ->
-                    val name = ContactsCache.getName(context, message.address) ?: message.address
-                    BlockedMessageEntry(message, name, BlockSource.NOT_IN_CONTACTS)
-                }
-        }
-
-        return (phoneBlockedEntries + keywordBlockedEntries + patternBlockedEntries + nonContactBlockedEntries).sortedByDescending { it.message.date }
+    /** همه‌ی پیام‌های عضوِ یه گروهِ فیلترِ خاص - برای صفحه‌ی «پیام‌های این گروه» */
+    suspend fun getMessagesForFilterGroup(groupId: Long): List<FilteredMessageEntry> {
+        val group = filterGroupRepository.getGroup(groupId) ?: return emptyList()
+        val matches = filterGroupRepository.getMatchedMessageIdsForGroup(groupId)
+        if (matches.isEmpty()) return emptyList()
+        return getMessagesByIds(matches.keys)
+            .map { message ->
+                val match = matches[message.id]
+                val name = ContactsCache.getName(context, message.address) ?: message.address
+                FilteredMessageEntry(
+                    message = message,
+                    contactDisplayName = name,
+                    groupId = group.id,
+                    groupName = group.name,
+                    matchType = match?.matchType ?: FilterMatchType.NUMBER,
+                    matchedValue = match?.matchedValue
+                )
+            }
+            .sortedByDescending { it.message.date }
     }
 
     private suspend fun getMessagesByIds(ids: Set<Long>): List<SmsMessage> {
-        if (!requireReadSmsPermission("خواندن پیامک‌های بلاک‌شده بر اساس کلمه")) return emptyList()
+        if (!requireReadSmsPermission("خواندن پیامک‌های یه گروهِ فیلتر")) return emptyList()
         if (ids.isEmpty()) return emptyList()
         val trashedIds = trashRepository.getTrashedIds()
         val placeholders = ids.joinToString(",") { "?" }
@@ -352,7 +296,7 @@ class SmsRepository(
                 }
             }
         } catch (e: SecurityException) {
-            Log.w("SmsRepository", "SecurityException موقع خوندن پیامک‌های بلاک‌شده بر اساس کلمه", e)
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیامک‌های یه گروهِ فیلتر", e)
             return emptyList()
         }
         return messages
@@ -369,7 +313,7 @@ class SmsRepository(
     }
 
     private suspend fun getMessagesByAddresses(addresses: List<String>): List<SmsMessage> {
-        if (!requireReadSmsPermission("خواندن پیامک‌های بلاک/خصوصی‌شده")) return emptyList()
+        if (!requireReadSmsPermission("خواندن پیامک‌های خصوصی‌شده")) return emptyList()
         if (addresses.isEmpty()) return emptyList()
         val trashedIds = trashRepository.getTrashedIds()
         val messages = mutableListOf<SmsMessage>()
@@ -387,7 +331,7 @@ class SmsRepository(
                 }
             }
         } catch (e: SecurityException) {
-            Log.w("SmsRepository", "SecurityException موقع خوندن پیامک‌های بلاک/خصوصی‌شده", e)
+            Log.w("SmsRepository", "SecurityException موقع خوندن پیامک‌های خصوصی‌شده", e)
             return emptyList()
         }
         return messages
@@ -563,7 +507,7 @@ class SmsRepository(
                         null
                     )
                     deliveryRepository.clear(messageId)
-                    blockRepository.clearMessageBlockMetadata(messageId)
+                    filterGroupRepository.clearMessageMatch(messageId)
                     pinRepository.clearPinnedMessage(messageId)
                 } catch (e: SecurityException) {
                     Log.w("SmsRepository", "SecurityException موقع حذف دسته‌جمعی پیام‌ها", e)
@@ -641,7 +585,7 @@ class SmsRepository(
             return false
         }
         deliveryRepository.clear(messageId)
-        blockRepository.clearMessageBlockMetadata(messageId)
+        filterGroupRepository.clearMessageMatch(messageId)
         pinRepository.clearPinnedMessage(messageId)
         trashRepository.restore(messageId)
         return true
@@ -672,11 +616,6 @@ class SmsRepository(
         return true
     }
 
-    /**
-     * معکوسِ markThreadAsRead - برای عملیاتِ سویپِ «ناخوانده شدن» روی لیستِ مکالمات.
-     * فقط پیام‌های *دریافتی* (نه ارسالی موفق) رو ناخوانده علامت می‌زنه، چون مفهومِ
-     * خوانده/ناخوانده منطقاً فقط برای پیام‌های ورودی معنی داره.
-     */
     fun markThreadAsUnread(threadId: Long): Boolean {
         if (!requireDefaultSmsApp("علامت‌گذاری مکالمه به‌عنوان ناخوانده")) return false
         val values = ContentValues().apply { put(Telephony.Sms.READ, 0) }
@@ -693,7 +632,6 @@ class SmsRepository(
         return true
     }
 
-    /** suspend چون deliveryRepository.getDeliveredAt روی Room ئه - همه‌ی صداکننده‌هاش خودشون suspend هستن */
     private suspend fun cursorToMessage(cursor: Cursor): SmsMessage {
         fun col(name: String) = cursor.getColumnIndex(name)
         val type = cursor.getInt(col(Telephony.Sms.TYPE))

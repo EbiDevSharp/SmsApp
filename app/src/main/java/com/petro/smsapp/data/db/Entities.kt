@@ -16,19 +16,6 @@ data class FavoriteEntity(
     val date: Long
 )
 
-/**
- * جایگزین BlockStore - کلید اصلی همون normalizedAddress قبلیه (۹ رقم آخر شماره)،
- * دقیقاً هم‌خانواده‌ی منطق قبلی که مستقل از threadId عمل می‌کرد.
- */
-@Entity(tableName = "blocked_numbers")
-data class BlockedNumberEntity(
-    @PrimaryKey val normalizedAddress: String,
-    val threadId: Long,
-    val address: String,
-    val displayName: String,
-    val blockedAt: Long
-)
-
 /** جایگزین PrivateStore (بخش شماره‌ها - رمز PIN جدا رفته توی DataStore) */
 @Entity(tableName = "private_numbers")
 data class PrivateNumberEntity(
@@ -37,48 +24,6 @@ data class PrivateNumberEntity(
     val address: String,
     val displayName: String,
     val madePrivateAt: Long
-)
-
-/** جایگزین BlockKeywordStore */
-@Entity(tableName = "block_keywords")
-data class BlockKeywordEntity(
-    @PrimaryKey val id: String,
-    val text: String,
-    val addedAt: Long
-)
-
-/** جایگزین BlockPatternStore - type به‌صورت رشته (اسم enum) ذخیره میشه */
-@Entity(tableName = "block_patterns")
-data class BlockPatternEntity(
-    @PrimaryKey val id: String,
-    val type: String,
-    val value: String,
-    val addedAt: Long
-)
-
-/** جایگزین BlockedKeywordMessageStore */
-@Entity(tableName = "blocked_keyword_messages")
-data class BlockedKeywordMessageEntity(
-    @PrimaryKey val messageId: Long,
-    val keyword: String,
-    val blockedAt: Long
-)
-
-/** جایگزین BlockedPatternMessageStore */
-@Entity(tableName = "blocked_pattern_messages")
-data class BlockedPatternMessageEntity(
-    @PrimaryKey val messageId: Long,
-    val type: String,
-    val value: String,
-    val blockedAt: Long
-)
-
-/** جایگزین BlockedNonContactMessageStore */
-@Entity(tableName = "blocked_non_contact_messages")
-data class BlockedNonContactMessageEntity(
-    @PrimaryKey val messageId: Long,
-    val address: String,
-    val blockedAt: Long
 )
 
 /** جایگزین TrashStore */
@@ -95,13 +40,7 @@ data class PinEntity(
     val pinnedAt: Long
 )
 
-/**
- * جایگزین PinnedMessageStore (پین یه پیام خاص داخل چت).
- *
- * فیلدِ threadId بعداً اضافه شد (نسخه‌ی ۳ دیتابیس - MIGRATION_2_3 توی AppDatabase) تا
- * بشه فهمید هر پیامِ پین‌شده مالِ کدوم مکالمه‌ست، بدونِ نیاز به کوئری اضافه به Telephony
- * Provider - برای فیلترِ «دارای پیام سنجاق‌شده» توی آکاردئونِ درآور لازم شد.
- */
+/** جایگزین PinnedMessageStore (پین یه پیام خاص داخل چت). */
 @Entity(tableName = "pinned_messages")
 data class PinnedMessageEntity(
     @PrimaryKey val messageId: Long,
@@ -131,8 +70,8 @@ data class DeliveryEntity(
 /**
  * یه گروهِ پیامکیِ ذخیره‌شده - وقتی کاربر به چند مخاطب هم‌زمان پیام می‌فرسته (پیام
  * گروهی) و می‌خواد بعداً بدونِ انتخابِ دوباره‌ی تک‌تکِ مخاطبین، همون گروه رو پیدا کنه.
- * اعضای هر گروه توی MessageGroupMemberEntity جداگانه نگه داشته میشن (یک‌به‌چند
- * ساده، بدون @Relation، چون تعداد اعضا معمولاً کمه و کوئری‌شون سبک و مستقله).
+ * این «گروهِ پیامکی» کاملاً مستقل از «گروهِ فیلتر» (پایینِ همین فایل) هست - یکی برای
+ * گیرنده‌های ارسال، یکی برای دسته‌بندی/فیلترِ پیام‌های دریافتی.
  */
 @Entity(tableName = "message_groups")
 data class MessageGroupEntity(
@@ -148,4 +87,72 @@ data class MessageGroupMemberEntity(
     val groupId: Long,
     val address: String,
     val displayName: String
+)
+
+// ============================================================================
+// گروهِ فیلتر (Filter Group) - جایگزینِ عمومیِ کاملِ بخشِ قبلیِ «بلاک».
+//
+// قبلاً «بلاک» یه مقصدِ ثابتِ واحد بود (یه لیستِ شماره، یه لیستِ کلمه، یه لیستِ الگو).
+// الان کاربر خودش N تا گروهِ دلخواه می‌سازه (مثلاً «تبلیغاتی»، «خرید»، «بانک») و هرکدوم
+// مستقلاً شماره/کلمه/الگوی خودش رو داره، به‌علاوه‌ی سه تا تنظیمِ مخصوصِ خودش:
+//   - hideFromMainList: پیام‌های این گروه از لیستِ اصلیِ مکالمات مخفی بشن یا نه
+//   - showNotifications: با اینکه پیام تویِ این گروه افتاده، بازم نوتیف/صدا بده یا نه
+//   - blockNonContacts: هر فرستنده‌ای که تو مخاطبینِ گوشی نیست خودکار بره تو این گروه
+//
+// چون هر پیام فقط عضوِ *یه* گروه میشه (اولین گروهی که باهاش مچ میشه)، فیلدِ priority
+// ترتیبِ چکِ گروه‌ها رو مشخص می‌کنه (عددِ کوچیک‌تر = زودتر چک میشه).
+// ============================================================================
+
+@Entity(tableName = "filter_groups")
+data class FilterGroupEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val priority: Int,
+    val hideFromMainList: Boolean,
+    val showNotifications: Boolean,
+    val blockNonContacts: Boolean,
+    val createdAt: Long
+)
+
+/** شماره‌های عضوِ یه گروهِ فیلتر - کلیدِ اصلی ترکیبیه چون (نظری) یه شماره می‌تونه تو چند گروه اضافه شده باشه (فقط اولین گروهِ باالویت واقعاً اعمال میشه) */
+@Entity(tableName = "filter_group_numbers", primaryKeys = ["groupId", "normalizedAddress"])
+data class FilterGroupNumberEntity(
+    val groupId: Long,
+    val normalizedAddress: String,
+    val address: String,
+    val displayName: String,
+    val addedAt: Long
+)
+
+/** کلمات کلیدیِ عضوِ یه گروهِ فیلتر */
+@Entity(tableName = "filter_group_keywords")
+data class FilterGroupKeywordEntity(
+    @PrimaryKey val id: String,
+    val groupId: Long,
+    val text: String,
+    val addedAt: Long
+)
+
+/** الگوهای شروع/پایانِ شماره‌یِ عضوِ یه گروهِ فیلتر */
+@Entity(tableName = "filter_group_patterns")
+data class FilterGroupPatternEntity(
+    @PrimaryKey val id: String,
+    val groupId: Long,
+    val type: String, // STARTS_WITH / ENDS_WITH
+    val value: String,
+    val addedAt: Long
+)
+
+/**
+ * ردیابیِ اینکه هر پیامِ دریافتی دقیقاً با کدوم گروه و از چه طریقی (شماره/کلمه/الگو/
+ * خارج‌از‌مخاطبین) مچ شده - چون هر پیام فقط عضوِ یه گروهه، یه ردیفِ تکی کافیه (برخلافِ
+ * قبل که سه جدولِ جدا برای سه نوعِ بلاک بود).
+ */
+@Entity(tableName = "filter_group_matched_messages")
+data class FilterGroupMatchedMessageEntity(
+    @PrimaryKey val messageId: Long,
+    val groupId: Long,
+    val matchType: String, // NUMBER / KEYWORD / PATTERN / NON_CONTACT
+    val matchedValue: String?,
+    val matchedAt: Long
 )

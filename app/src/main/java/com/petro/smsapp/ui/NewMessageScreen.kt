@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -15,8 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,37 +48,24 @@ import kotlinx.coroutines.launch
  * ۲) لیستِ نتایج واقعاً چندانتخابیه: با تپ روی هر مخاطب، تیک می‌خوره و به‌صورتِ
  *    یه چیپِ کوچیک داخلِ همون کادرِ جستجو (کنارِ هم، قبل از متنِ تایپ‌شده) نشون داده
  *    میشه - بدونِ اینکه لیستِ جستجو خالی بشه یا مجبور باشی برای مخاطبِ بعدی از اول
- *    جستجو کنی. تپِ دوباره روی یه مخاطبِ انتخاب‌شده هم از انتخاب درش میاره. قبلاً این
- *    چیپ‌ها یه ردیفِ کاملاً جدا بالای کادرِ جستجو بودن؛ الان دیگه ردیفِ جدا نیست و
- *    خودِ چیپ‌ها (با گوشه‌های گردتر) داخلِ همون کادر می‌شینن.
+ *    جستجو کنی. تپِ دوباره روی یه مخاطبِ انتخاب‌شده هم از انتخاب درش میاره.
  *
- * ۳) دکمه‌ی «انتخاب از مخاطبین گوشی» (آیکنِ شخص) دیگه Intent سیستمیِ ACTION_PICK
- *    رو باز نمی‌کنه - چون اون Intent محدودیتِ خودِ اندرویده و همیشه فقط یک مخاطب
- *    برمی‌گردونه. به‌جاش onOpenContactPicker صدا زده میشه که یه صفحه‌ی داخلیِ اپ
- *    (ContactPickerScreen) با چک‌باکس و بدونِ محدودیتِ تعداد باز می‌کنه.
+ * ۳) دکمه‌ی «انتخاب از مخاطبین گوشی» یه صفحه‌ی داخلیِ اپ (ContactPickerScreen) با
+ *    چک‌باکس و بدونِ محدودیتِ تعداد باز می‌کنه.
  *
- * ۴) اگه ارسال گروهی (Settings -> «گروه‌های پیامکی») فعال باشه: با انتخابِ بیش از
- *    یک مخاطب، امکانِ «ذخیره به‌عنوان گروه» ظاهر میشه؛ و یه آیکنِ «گروه‌ها» بالای
- *    صفحه لیستِ گروه‌های ذخیره‌شده رو نشون میده - با زدن روی هرکدوم، همه‌ی اعضاش
- *    خودکار به انتخاب اضافه میشن.
+ * ۴) گروه‌های پیامکیِ ذخیره‌شده (Settings -> «گروه‌های پیامکی»):
+ *    - با انتخابِ بیش از یک مخاطب، «ذخیره به‌عنوان گروه» ظاهر میشه. دیالوگِ ساختِ
+ *      گروه حالا خودِ لیستِ گروه‌های موجود رو هم (برای جلوگیری از سردرگمی/نامِ تکراری)
+ *      نشون میده و تا وقتی اسمِ واردشده تکراری یا خالی باشه، دکمه‌ی «ذخیره» غیرفعاله.
+ *    - آیکنِ «گروه‌ها» بالای صفحه لیستِ گروه‌های ذخیره‌شده رو نشون میده - تپ روی خودِ
+ *      ردیف = بارگذاریِ اعضا توی انتخابِ فعلی؛ دکمه‌ی مدادِ کنارش = باز شدنِ صفحه‌ی
+ *      «ویرایشِ گروه» (تغییرِ اسم + حذفِ تک‌تکِ اعضا + حذفِ کاملِ گروه).
  *
- * ۵) ارسال: اگه دقیقاً یک مخاطب انتخاب شده باشه، از مسیرِ تکیِ قبلی (onSend/
- *    onScheduleSend) میره - یعنی بعدش دقیقاً مثلِ قبل میره تو چتِ همون مخاطب. اگه
- *    بیشتر از یکی انتخاب شده باشه، پیام جدا-جدا به تک‌تکشون ارسال میشه
- *    (onSendToMultiple/onScheduleToMultiple) و صفحه برمی‌گرده به لیست مکالمات.
+ * ۵) ارسال: تکی یا گروهی، دقیقاً مثل قبل.
  *
- * ۶) ذخیره‌ی پیش‌نویس (فقط وقتی دقیقاً یک گیرنده انتخاب شده) دو مسیرِ خروج رو پوشش
- *    میده - عیناً هم‌خانواده‌ی همون منطقِ ThreadScreen:
- *    - خروجِ داخلِ اپ (کاربر با دکمه‌ی برگشتِ بالای صفحه یا Navigation از این Composable
- *      خارج میشه) -> DisposableEffect(Unit) با onDispose فوراً صدا زده میشه.
- *    - خروجِ کامل از اپ بدونِ خارج شدن از این صفحه (دکمه‌ی Home، سوییچ به اپِ دیگه،
- *      خاموش‌شدنِ صفحه و ...) -> قبلاً اصلاً پوشش داده نمی‌شد، چون این صفحه فقط اون
- *      DisposableEffect بالا رو داشت (که با ترکِ اپ از این طریق، Composable هنوز از
- *      ترکیب خارج نشده و onDispose صدا زده نمیشه). با گوش‌دادن به رویدادِ ON_STOP
- *      چرخه‌ی عمرِ صفحه (دقیقاً همون الگوی ThreadScreen)، همینجا هم پیش‌نویس ذخیره میشه.
+ * ۶) ذخیره‌ی پیش‌نویس (فقط با یک گیرنده) - دو مسیرِ خروج (ترکِ داخلِ اپ + ترکِ کاملِ اپ) پوشش داده میشه.
  *
- * ۷) انتخابِ سیم‌کارت دیگه یه ردیفِ جدا (SimSelector) بالای کیبورد نیست - یه دکمه‌ی
- *    کوچیکِ داخلِ خودِ MessageInputBar شده (کنارِ دکمه‌ی ارسال).
+ * ۷) انتخابِ سیم‌کارت داخلِ خودِ MessageInputBar ئه.
  */
 @Composable
 fun NewMessageScreen(
@@ -97,6 +87,8 @@ fun NewMessageScreen(
     onLoadGroupMembers: suspend (groupId: Long) -> List<MessageGroupMember> = { emptyList() },
     onSaveGroup: (name: String, members: List<Pair<String, String>>) -> Unit = { _, _ -> },
     onDeleteGroup: (groupId: Long) -> Unit = {},
+    onRenameGroup: (groupId: Long, newName: String) -> Unit = { _, _ -> },
+    onUpdateGroupMembers: (groupId: Long, members: List<Pair<String, String>>) -> Unit = { _, _ -> },
     onBack: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -107,6 +99,7 @@ fun NewMessageScreen(
     var showGroupsSheet by remember { mutableStateOf(false) }
     var showSaveGroupDialog by remember { mutableStateOf(false) }
     var groupNameInput by remember { mutableStateOf("") }
+    var editingGroup by remember { mutableStateOf<MessageGroupSummary?>(null) }
     val scope = rememberCoroutineScope()
 
     /** فقط اضافه می‌کنه (اگه از قبل نبود) - برای مخاطبِ دستی، مخاطبِ گروه، و اعضای بارگذاری‌شده از گروه */
@@ -217,36 +210,43 @@ fun NewMessageScreen(
                     }
                 }
             },
-            onDelete = { group -> onDeleteGroup(group.id) },
+            onEdit = { group ->
+                showGroupsSheet = false
+                editingGroup = group
+            },
             onDismiss = { showGroupsSheet = false }
         )
     }
 
+    val currentEditingGroup = editingGroup
+    if (currentEditingGroup != null) {
+        GroupEditSheet(
+            group = currentEditingGroup,
+            existingGroupNames = groupSummaries.filter { it.id != currentEditingGroup.id }.map { it.name },
+            onLoadMembers = { onLoadGroupMembers(currentEditingGroup.id) },
+            onRename = { newName -> onRenameGroup(currentEditingGroup.id, newName) },
+            onUpdateMembers = { members -> onUpdateGroupMembers(currentEditingGroup.id, members) },
+            onDelete = {
+                onDeleteGroup(currentEditingGroup.id)
+                editingGroup = null
+            },
+            onDismiss = { editingGroup = null }
+        )
+    }
+
     if (showSaveGroupDialog) {
-        AlertDialog(
-            onDismissRequest = { showSaveGroupDialog = false },
-            title = { Text("ذخیره به‌عنوان گروه") },
-            text = {
-                OutlinedTextField(
-                    value = groupNameInput,
-                    onValueChange = { groupNameInput = it },
-                    label = { Text("اسم گروه") },
-                    singleLine = true
-                )
+        SaveGroupDialog(
+            existingGroupNames = groupSummaries.map { it.name },
+            nameInput = groupNameInput,
+            onNameChange = { groupNameInput = it },
+            onConfirm = {
+                onSaveGroup(groupNameInput.trim(), selectedContacts.map { it.phoneNumber to it.name })
+                groupNameInput = ""
+                showSaveGroupDialog = false
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (groupNameInput.isNotBlank()) {
-                            onSaveGroup(groupNameInput.trim(), selectedContacts.map { it.phoneNumber to it.name })
-                            groupNameInput = ""
-                            showSaveGroupDialog = false
-                        }
-                    }
-                ) { Text("ذخیره") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSaveGroupDialog = false }) { Text("انصراف") }
+            onDismiss = {
+                groupNameInput = ""
+                showSaveGroupDialog = false
             }
         )
     }
@@ -360,15 +360,79 @@ fun NewMessageScreen(
 }
 
 /**
+ * دیالوگِ ساختِ گروهِ جدید. قبلاً فقط یه فیلدِ متنیِ خالی بود و کاربر هیچ ایده‌ای
+ * نداشت چه گروه‌هایی از قبل وجود دارن - الان لیستِ اسمِ گروه‌های موجود هم زیرِ فیلد
+ * نشون داده میشه (اگه گروهی وجود داشته باشه)، و اگه اسمِ واردشده (بعد از trim، بدونِ
+ * حساسیت به بزرگ/کوچیکیِ حروف) با یکی از همون‌ها یکی باشه، پیغامِ خطا نشون داده
+ * میشه و دکمه‌ی «ذخیره» غیرفعال می‌مونه.
+ */
+@Composable
+private fun SaveGroupDialog(
+    existingGroupNames: List<String>,
+    nameInput: String,
+    onNameChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val trimmed = nameInput.trim()
+    val isDuplicate = trimmed.isNotEmpty() && existingGroupNames.any { it.equals(trimmed, ignoreCase = true) }
+    val canConfirm = trimmed.isNotEmpty() && !isDuplicate
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ذخیره به‌عنوان گروه") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = onNameChange,
+                    label = { Text("اسم گروه") },
+                    singleLine = true,
+                    isError = isDuplicate,
+                    textStyle = LocalTextStyle.current.autoDirection(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (isDuplicate) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "یه گروهِ دیگه از قبل همین اسم رو داره",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (existingGroupNames.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        "گروه‌های موجود:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Column(modifier = Modifier.heightIn(max = 140.dp)) {
+                        existingGroupNames.forEach { name ->
+                            Text(
+                                text = "• $name",
+                                style = MaterialTheme.typography.bodySmall.autoDirection(),
+                                color = Color.Gray,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = canConfirm) { Text("ذخیره") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("انصراف") }
+        }
+    )
+}
+
+/**
  * کادرِ جستجو + چیپ‌های مخاطبینِ انتخاب‌شده، همه داخلِ یه کادرِ واحد (شبیهِ فیلدهای
- * "To" تو اپ‌های ایمیل). قبلاً چیپ‌ها یه ردیفِ کاملاً جدا (SelectedContactsRow) بالای
- * این کادر بودن؛ الان همه‌چی تو یه جعبه‌ست: آیکنِ انتخاب از مخاطبین، بعدش چیپ‌های
- * انتخاب‌شده (هرکدوم با ضربدرِ حذف)، بعدش خودِ فیلدِ متنیِ جستجو - همه کنارِ هم و اگه
- * جا نشن به خط بعد می‌رن (FlowRow).
- *
- * چیپ‌ها و متنِ جستجو با autoDirection/ContentOrLtr نمایش داده میشن - یعنی اسم‌های
- * فارسی راست‌به‌چپ می‌مونن و شماره‌ها (چه تو چیپ چه تو متنِ تایپ‌شده) همیشه چپ‌به‌راستن،
- * دقیقاً هم‌قاعده‌ی بقیه‌ی کادرهای متنی/جستجوی برنامه.
+ * "To" تو اپ‌های ایمیل).
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -468,15 +532,41 @@ private fun ContactChip(contact: ContactInfo, onRemove: () -> Unit) {
     }
 }
 
-/** لیستِ گروه‌های ذخیره‌شده - با تپ روی هرکدوم، اعضاش به انتخاب اضافه میشن؛ دکمه‌ی حذف هم داره */
+/**
+ * لیستِ گروه‌های ذخیره‌شده. تپ روی خودِ ردیف = اعضاش به انتخابِ فعلی اضافه میشن.
+ * دو دکمه‌ی جدا کنارِ هر ردیف: مداد (ویرایش) و سطل‌زباله (حذفِ مستقیم با تائید).
+ */
 @Composable
 private fun GroupsPickerSheet(
     groups: List<MessageGroupSummary>,
     onPick: (MessageGroupSummary) -> Unit,
-    onDelete: (MessageGroupSummary) -> Unit,
+    onEdit: (MessageGroupSummary) -> Unit,
+    onDelete: (MessageGroupSummary) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
+    var pendingDelete by remember { mutableStateOf<MessageGroupSummary?>(null) }
+
+    val toDelete = pendingDelete
+    if (toDelete != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("حذف گروه") },
+            text = { Text("گروهِ «${toDelete.name}» حذف بشه؟ خودِ مخاطبین حذف نمیشن، فقط این گروه از بین میره.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(toDelete)
+                    pendingDelete = null
+                }) {
+                    Text("حذف", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("انصراف") }
+            }
+        )
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text(
@@ -496,24 +586,173 @@ private fun GroupsPickerSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(group) }
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Filled.Groups, contentDescription = null)
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(group.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(group.name, style = MaterialTheme.typography.bodyLarge.autoDirection())
                             Text(
                                 "${group.memberCount} عضو",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.Gray
                             )
                         }
-                        IconButton(onClick = { onDelete(group) }) {
+                        IconButton(onClick = { onEdit(group) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "ویرایش گروه")
+                        }
+                        IconButton(onClick = { pendingDelete = group }) {
                             Icon(Icons.Filled.Delete, contentDescription = "حذف گروه")
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * صفحه‌ی «ویرایشِ گروه» - تغییرِ اسم (با چکِ زنده‌ی تکراری‌نبودن) + حذفِ تک‌تکِ
+ * اعضا (هر حذف بلافاصله ذخیره میشه، بدونِ نیاز به یه دکمه‌ی «ذخیره»ی جدا برای
+ * اعضا) + حذفِ کاملِ گروه (با تائید).
+ */
+@Composable
+private fun GroupEditSheet(
+    group: MessageGroupSummary,
+    existingGroupNames: List<String>,
+    onLoadMembers: suspend () -> List<MessageGroupMember>,
+    onRename: (newName: String) -> Unit,
+    onUpdateMembers: (List<Pair<String, String>>) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    var nameInput by remember { mutableStateOf(group.name) }
+    var members by remember { mutableStateOf<List<MessageGroupMember>?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(group.id) {
+        members = onLoadMembers()
+    }
+
+    val trimmedName = nameInput.trim()
+    val isDuplicate = trimmedName.isNotEmpty() && existingGroupNames.any { it.equals(trimmedName, ignoreCase = true) }
+    val nameChanged = trimmedName.isNotEmpty() && trimmedName != group.name
+    val canSaveName = nameChanged && !isDuplicate
+
+    fun removeMember(member: MessageGroupMember) {
+        val updated = (members ?: emptyList()).filter { it.address != member.address }
+        members = updated
+        onUpdateMembers(updated.map { it.address to it.displayName })
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("حذف گروه") },
+            text = { Text("گروهِ «${group.name}» حذف بشه؟ خودِ مخاطبین حذف نمیشن، فقط این گروه از بین میره.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete()
+                }) {
+                    Text("حذف", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("انصراف") }
+            }
+        )
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Text("ویرایش گروه", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = { nameInput = it },
+                    label = { Text("اسم گروه") },
+                    singleLine = true,
+                    isError = isDuplicate,
+                    textStyle = LocalTextStyle.current.autoDirection(),
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = { onRename(trimmedName) },
+                    enabled = canSaveName
+                ) { Text("ذخیره") }
+            }
+            if (isDuplicate) {
+                Text(
+                    "یه گروهِ دیگه از قبل همین اسم رو داره",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                "اعضای گروه (${members?.size ?: group.memberCount})",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            when (val currentMembers = members) {
+                null -> {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+                else -> {
+                    if (currentMembers.isEmpty()) {
+                        Text("این گروه دیگه هیچ عضوی نداره", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        val membersScrollState = rememberScrollState()
+                        Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(membersScrollState)) {
+                            currentMembers.forEach { member ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(member.displayName, style = MaterialTheme.typography.bodyMedium.autoDirection())
+                                        Text(
+                                            member.address,
+                                            style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+                                            color = Color.Gray
+                                        )
+                                    }
+                                    IconButton(onClick = { removeMember(member) }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "حذفِ ${member.displayName} از گروه")
+                                    }
+                                }
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(
+                onClick = { showDeleteConfirm = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("حذفِ کاملِ گروه")
             }
         }
     }
