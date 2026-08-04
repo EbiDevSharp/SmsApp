@@ -76,7 +76,9 @@ fun DateTimePickerSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val settings by AppSettings.state.collectAsState()
-    val isJalali = settings.calendarType == CalendarType.JALALI
+
+    // تقویم قابل‌سوئیچ داخل شیت (از تنظیمات شروع می‌شود)
+    var isJalali by remember { mutableStateOf(settings.calendarType == CalendarType.JALALI) }
 
     var stage by remember { mutableStateOf(PickerStage.MAIN) }
     var quickTab by remember { mutableStateOf(QuickTab.CUSTOM) }
@@ -165,6 +167,26 @@ fun DateTimePickerSheet(
         quickTab = QuickTab.CUSTOM
     }
 
+    /** سوئیچ جلالی ↔ میلادی + تبدیل تاریخ انتخاب‌شده */
+    fun toggleCalendar() {
+        val (newY, newM, newD) = if (isJalali) {
+            // جلالی → میلادی
+            val g = JalaliCalendar.toGregorian(year, month, day)
+            Triple(g.year, g.month, g.day)
+        } else {
+            // میلادی → جلالی
+            val j = JalaliCalendar.toJalali(year, month, day)
+            Triple(j.year, j.month, j.day)
+        }
+        val nextIsJalali = !isJalali
+        val maxDay = daysInMonthFor(newY, newM, nextIsJalali)
+        isJalali = nextIsJalali
+        year = newY
+        month = newM
+        day = newD.coerceAtMost(maxDay)
+        quickTab = QuickTab.CUSTOM
+    }
+
     BackHandler(enabled = stage != PickerStage.MAIN) {
         stage = PickerStage.MAIN
     }
@@ -195,6 +217,7 @@ fun DateTimePickerSheet(
                         stage = PickerStage.TIME
                     },
                     onQuickOffset = { field, amount -> addOffsetToSelection(field, amount) },
+                    onToggleCalendar = { toggleCalendar() },
                     onCancel = onDismiss,
                     onConfirm = { onConfirm(selectedMillis) }
                 )
@@ -234,7 +257,9 @@ private fun MainStage(
     title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int,
     isJalali: Boolean, quickTab: QuickTab, isPast: Boolean,
     onQuickTabSelect: (QuickTab) -> Unit, onOpenCalendar: () -> Unit, onOpenTime: () -> Unit,
-    onQuickOffset: (field: Int, amount: Int) -> Unit, onCancel: () -> Unit, onConfirm: () -> Unit
+    onQuickOffset: (field: Int, amount: Int) -> Unit,
+    onToggleCalendar: () -> Unit,
+    onCancel: () -> Unit, onConfirm: () -> Unit
 ) {
     val monthName = if (isJalali) JalaliCalendar.monthNames[month - 1] else gregorianMonthNamesFaPicker[month - 1]
     val weekdayIndex = weekdayIndexFor(year, month, day, isJalali)
@@ -247,6 +272,29 @@ private fun MainStage(
             .padding(bottom = 12.dp)
     ) {
         SheetHeader(title = title, onClose = onCancel)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // سوئیچ تقویم جلالی / میلادی
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CustomChip(
+                text = "جلالی",
+                selected = isJalali,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (!isJalali) onToggleCalendar()
+            }
+            CustomChip(
+                text = "میلادی",
+                selected = !isJalali,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (isJalali) onToggleCalendar()
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -314,7 +362,6 @@ private fun MainStage(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // دکمه‌های تأیید و انصراف در یک ردیف و جمع‌وجور
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -638,7 +685,6 @@ private fun TimeStage(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // دکمه‌های تأیید ساعت و بازگشت در یک ردیف
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
