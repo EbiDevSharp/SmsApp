@@ -37,8 +37,8 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 /**
  * هابِ اصلیِ «گروه‌ها» - جایگزینِ عمومیِ صفحه‌ی قدیمیِ «بلاک». ترتیبِ لیست همون ترتیبِ
  * اولویتِ چک‌شدنه (بالاتر = زودتر چک میشه). به‌جای دکمه‌های بالا/پایین، حالا درست مثلِ
- * صفحه‌ی «دکمه‌های نوتیفیکیشن» کاملاً با درگ‌اند‌دراپ (دستگیره‌ی سمتِ راستِ هر ردیف)
- * جابه‌جا میشه؛ هر جابه‌جایی بلافاصله ذخیره میشه.
+ * صفحه‌ی «دکمه‌های نوتیفیکیشن» کاملاً با درگ‌اند‌دراپ جابه‌جا میشه؛ کل ردیف قابل کشیدنه
+ * و هر جابه‌جایی بلافاصله ذخیره میشه.
  *
  * اگه یه گروه هدفِ دکمه‌ی «افزودن سریع به گروه»ِ نوتیف باشه (isQuickAddTarget)، کنارِ
  * اسمش یه آیکنِ رعد (⚡) کوچیک نشون داده میشه تا کاربر بدونِ باز کردنِ تک‌تکِ گروه‌ها
@@ -140,7 +140,7 @@ fun FilterGroupsScreen(
         } else {
             Column(modifier = Modifier.padding(padding)) {
                 Text(
-                    "ترتیبِ زیر همون ترتیبِ اولویتِ چک‌کردنه - با نگه‌داشتن و کشیدنِ دستگیره جابه‌جا کن",
+                    "ترتیبِ زیر همون ترتیبِ اولویتِ چک‌کردنه - با نگه‌داشتن و کشیدنِ ردیف جابه‌جا کن",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -175,6 +175,7 @@ private fun FilterGroupRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(dragModifier)          // ← کل ردیف دستگیرهٔ درگ شد
             .clickable(onClick = onClick)
             .let { mod ->
                 if (isDragging) {
@@ -228,13 +229,13 @@ private fun FilterGroupRow(
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = "حذفِ گروه")
         }
+        // آیکن فقط برای راهنمایی بصری؛ دیگه خودش handle نیست
         Icon(
             imageVector = Icons.Filled.DragHandle,
             contentDescription = "جابجایی",
             modifier = Modifier
                 .size(32.dp)
                 .padding(start = 4.dp)
-                .then(dragModifier)
         )
     }
 }
