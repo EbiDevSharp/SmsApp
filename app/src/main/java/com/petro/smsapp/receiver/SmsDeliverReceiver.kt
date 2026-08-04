@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.Telephony
@@ -106,7 +107,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         // استفاده می‌کنیم و اگه مخاطب پیدا نشه، به‌عنوانِ fallback خودِ شماره میاد.
         val displayName = ContactsCache.getName(context, sender) ?: sender
 
-        showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName)
+        // عکسِ پروفایلِ مخاطب (اگه فرستنده جزوِ مخاطبینِ ذخیره‌شده‌ی گوشی باشه و عکس
+        // داشته باشه) - از همون کشِ مشترکِ ContactsCache که برای آواتارهای توی UI هم
+        // استفاده میشه، پس کوئریِ اضافه‌ای به Contacts Provider زده نمیشه.
+        val contactPhotoUri = ContactsCache.getPhotoUri(context, sender)
+
+        showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
     }
 
     private fun showNotification(
@@ -116,7 +122,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         body: String,
         threadId: Long,
         messageId: Long,
-        quickAddTargetGroupName: String?
+        quickAddTargetGroupName: String?,
+        contactPhotoUri: String?
     ) {
         val channelId = "sms_channel"
         val notificationId = sender.hashCode()
@@ -132,7 +139,10 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val largeIcon = runCatching {
+        // اگه فرستنده مخاطبِ شناخته‌شده‌ای با عکسِ پروفایل باشه، همون عکس به‌عنوانِ
+        // largeIcon نوتیف نشون داده میشه؛ وگرنه (مخاطب ناشناسه یا عکس نداره) دقیقاً
+        // رفتارِ قبلی ادامه پیدا می‌کنه: آیکنِ خودِ اپ.
+        val largeIcon = loadContactPhotoBitmap(context, contactPhotoUri) ?: runCatching {
             BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
         }.getOrNull()
 
@@ -170,6 +180,24 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             } catch (e: SecurityException) {
                 // پرمیشن نوتیفیکیشن داده نشده
             }
+        }
+    }
+
+    /**
+     * خوندنِ عکسِ پروفایلِ مخاطب از رویِ content:// URI که ContactsCache برگردونده.
+     * چون این یه IO بلاکینگه، فقط از داخلِ کوروتینِ روی Dispatchers.IO صدا زده میشه
+     * (همون‌جایی که کلِ showNotification از قبل ازش صدا زده میشه). هر خطایی (مخاطب
+     * حذف شده، عکس در دسترس نیست و ...) فقط null برمی‌گردونه تا fallback به آیکنِ
+     * اپ انجام بشه، نه کرش.
+     */
+    private fun loadContactPhotoBitmap(context: Context, photoUri: String?): Bitmap? {
+        if (photoUri.isNullOrBlank()) return null
+        return try {
+            context.contentResolver.openInputStream(Uri.parse(photoUri))?.use { stream ->
+                BitmapFactory.decodeStream(stream)
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
