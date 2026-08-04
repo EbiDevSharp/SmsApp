@@ -584,10 +584,17 @@ private fun MessageBubble(
                             onLongClick = onLongClick
                         )
                 ) {
-                    Text(
+                    // لینک‌ها (با/بدونِ http) و رشته‌های عددی داخلِ متنِ پیام، آبی/زیرخط‌دار
+                    // و کلیک‌پذیر میشن (کپی/اشتراک‌گذاری/بازکردن) - تپ روی بقیه‌ی متن دست‌نخورده
+                    // به همین Surface می‌رسه (combinedClickable بالا). توی حالتِ انتخابِ
+                    // چندتایی (selectionMode) این رهگیری کاملاً خاموشه تا تپ روی لینک هم
+                    // فقط انتخاب/عدمِ‌انتخاب کنه.
+                    LinkifiedMessageText(
                         text = message.body,
-                        color = textColor,
+                        textColor = textColor,
                         fontSize = fontSize,
+                        isOutgoing = message.isOutgoing,
+                        enabled = !selectionMode,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                     )
                 }
