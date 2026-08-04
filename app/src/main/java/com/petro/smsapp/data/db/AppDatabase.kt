@@ -28,7 +28,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FilterGroupPatternEntity::class,
         FilterGroupMatchedMessageEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -92,6 +92,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * نسخه‌ی ۵ -> ۶: افزودنِ ستونِ isQuickAddTarget به filter_groups - مشخص می‌کنه
+         * کدوم گروه مقصدِ دکمه‌ی جدیدِ «افزودن سریع به گروه»ِ روی نوتیفه (بدونِ بازشدنِ
+         * اپ یا نمایشِ شیتِ انتخابِ گروه). پیش‌فرض ۰ (false) - یعنی بعد از آپدیت، تا
+         * وقتی کاربر از تنظیماتِ خودِ یکی از گروه‌ها این گزینه رو روشن نکنه، هیچ گروهی
+         * هدف نیست و اون دکمه عملاً کاری انجام نمیده.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE filter_groups ADD COLUMN isQuickAddTarget INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -99,7 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sms_app.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }

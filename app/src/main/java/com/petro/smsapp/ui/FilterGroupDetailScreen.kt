@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Sms
@@ -21,8 +22,12 @@ import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «داخلِ یه گروه» - جایگزینِ عمومیِ BlockScreen/BlockSettingsScreen قبلی، ولی
- * برای یه گروهِ مشخص. بالای صفحه اسمِ گروه (با امکانِ ویرایش) + چهار سوییچِ تنظیمات، پایینش
+ * برای یه گروهِ مشخص. بالای صفحه اسمِ گروه (با امکانِ ویرایش) + پنج سوییچِ تنظیمات، پایینش
  * سه کارتِ ورودی (شماره/کلمه/الگو) و یه کارتِ نمایشِ پیام‌ها.
+ *
+ * سوییچِ «هدفِ افزودنِ سریع» جدا از بقیه‌ی تنظیمات (که با دکمه‌ی «ذخیره» یه‌جا ذخیره
+ * میشن) بلافاصله با تغییرش اعمال میشه - چون رفتارش رادیوییه (فقط یه گروه می‌تونه
+ * هم‌زمان هدف باشه) و باید فوراً روی بقیه‌ی گروه‌ها هم اثر بذاره (خاموش کردنشون).
  */
 @Composable
 fun FilterGroupDetailScreen(
@@ -32,7 +37,8 @@ fun FilterGroupDetailScreen(
     onOpenKeywords: () -> Unit,
     onOpenPatterns: () -> Unit,
     onOpenMessages: () -> Unit,
-    onSave: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean, showInNotificationPicker: Boolean) -> Unit
+    onSave: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean, showInNotificationPicker: Boolean) -> Unit,
+    onSetQuickAddTarget: (Boolean) -> Unit = {}
 ) {
     var name by remember(summary.group.id) { mutableStateOf(summary.group.name) }
     var hideFromMainList by remember(summary.group.id) { mutableStateOf(summary.group.hideFromMainList) }
@@ -81,9 +87,45 @@ fun FilterGroupDetailScreen(
             SettingSwitchRow("از لیستِ اصلی مخفی بشه", hideFromMainList) { hideFromMainList = it }
             SettingSwitchRow("با اینکه افتاد تو این گروه، بازم نوتیف بده", showNotifications) { showNotifications = it }
             SettingSwitchRow("فرستنده‌های خارج از مخاطبین خودکار بیان اینجا", blockNonContacts) { blockNonContacts = it }
-            SettingSwitchRow("تو انتخابگرِ سریعِ دکمه‌ی نوتیفیکیشن («افزودن به گروه») هم نشون داده بشه", showInNotificationPicker) { showInNotificationPicker = it }
+            SettingSwitchRow("تو انتخابگرِ شیتِ «افزودن به گروه»ِ نوتیف هم نشون داده بشه", showInNotificationPicker) { showInNotificationPicker = it }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (summary.group.isQuickAddTarget) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                }
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Bolt,
+                            contentDescription = null,
+                            tint = if (summary.group.isQuickAddTarget) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "هدفِ دکمه‌ی «افزودن سریع به گروه» در نوتیف",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = summary.group.isQuickAddTarget,
+                            onCheckedChange = { checked -> onSetQuickAddTarget(checked) }
+                        )
+                    }
+                    Text(
+                        "با فعال‌کردنش، دکمه‌ی «افزودن سریع به گروه» روی نوتیف پیامک، بدونِ باز شدنِ اپ یا نمایشِ لیست، مستقیم فرستنده رو به همین گروه اضافه می‌کنه. همیشه فقط یه گروه می‌تونه این باشه؛ روشن‌کردنش برای این گروه، بقیه‌ی گروه‌ها رو خودکار خاموش می‌کنه.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.ui.graphics.Color.Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             FilterGroupSectionRow(
                 icon = Icons.Filled.Sms,

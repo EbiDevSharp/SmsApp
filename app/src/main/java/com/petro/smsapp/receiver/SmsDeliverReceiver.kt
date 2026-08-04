@@ -93,7 +93,13 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             return
         }
 
-        showNotification(context, sender, fullBody, threadId, messageId)
+        // اسمِ همون یه گروهی که الان هدفِ «افزودن سریع» ئه - برای نمایش روی خودِ دکمه‌ی
+        // نوتیف (مثلاً «افزودن به تبلیغاتی»)، تا کاربر بدونِ باز کردنِ اپ بدونه این دکمه
+        // دقیقاً کجا اضافه می‌کنه. اگه هیچ گروهی هدف نباشه null می‌مونه.
+        val quickAddTargetGroupName = filterGroupRepository.getQuickAddTargetGroupId()
+            ?.let { filterGroupRepository.getGroup(it)?.name }
+
+        showNotification(context, sender, fullBody, threadId, messageId, quickAddTargetGroupName)
     }
 
     private fun showNotification(
@@ -101,7 +107,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         sender: String,
         body: String,
         threadId: Long,
-        messageId: Long
+        messageId: Long,
+        quickAddTargetGroupName: String?
     ) {
         val channelId = "sms_channel"
         val notificationId = sender.hashCode()
@@ -143,6 +150,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 NotificationActionType.DELETE -> buildDeleteAction(context, messageId, notificationId)
                 NotificationActionType.REPLY -> buildReplyAction(context, sender, notificationId)
                 NotificationActionType.BLOCK -> buildAddToGroupAction(context, threadId, sender, notificationId)
+                NotificationActionType.QUICK_ADD_GROUP -> buildQuickAddGroupAction(context, threadId, sender, notificationId, quickAddTargetGroupName)
                 NotificationActionType.CALL -> buildCallAction(context, sender, notificationId)
             }
             builder.addAction(action)
@@ -187,8 +195,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
     /**
      * قبلاً این دکمه مستقیم شماره رو بلاک می‌کرد. الان چون مقصدِ ثابتی نیست (کاربر N
-     * تا گروه داره)، اپ رو با یه Intent باز می‌کنه (NotificationActionReceiver.ACTION_BLOCK
-     * خودِ کارِ باز کردنِ اپ رو انجام میده) و اونجا یه شیتِ «به کدوم گروه اضافه بشه؟» نشون داده میشه.
+     * تا گروهِ دلخواه داره)، این دکمه اپ رو باز می‌کنه و یه شیتِ کوچیکِ «به کدوم گروه اضافه
+     * بشه؟» نشون میده (NotificationActionReceiver.ACTION_BLOCK خودِ کارِ باز کردنِ اپ رو انجام میده).
      */
     private fun buildAddToGroupAction(context: Context, threadId: Long, address: String, notificationId: Int): NotificationCompat.Action {
         val blockIntent = Intent(context, NotificationActionReceiver::class.java).apply {
@@ -203,6 +211,38 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Action.Builder(R.drawable.ic_block, "افزودن به گروه", blockPendingIntent).build()
+    }
+
+    /**
+     * برخلافِ BLOCK، این دکمه هیچ اپ/شیتی رو باز نمی‌کنه - مستقیم و بی‌درنگ توسطِ
+     * NotificationActionReceiver (goAsync) فرستنده رو به همون گروهی که از قبل توی
+     * صفحه‌ی تنظیماتِ خودِ گروه به‌عنوانِ «هدفِ افزودنِ سریع» انتخاب شده اضافه می‌کنه.
+     *
+     * برچسبِ خودِ دکمه هم دیگه ثابت نیست - اگه یه گروهِ هدف انتخاب شده باشه، مستقیم
+     * اسمِ همون گروه روش نشون داده میشه (مثلاً «افزودن به تبلیغاتی») تا کاربر بدونِ
+     * باز کردنِ اپ بدونه این دکمه دقیقاً کجا اضافه می‌کنه. اگه هیچ گروهی هدف نباشه،
+     * برچسبِ عمومیِ قبلی می‌مونه (زدنش هم در این حالت کاری انجام نمیده).
+     */
+    private fun buildQuickAddGroupAction(
+        context: Context,
+        threadId: Long,
+        address: String,
+        notificationId: Int,
+        quickAddTargetGroupName: String?
+    ): NotificationCompat.Action {
+        val quickAddIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_QUICK_ADD_GROUP
+            data = Uri.parse("smsapp://quick-add-group/$threadId")
+            putExtra(NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
+            putExtra(NotificationActionReceiver.EXTRA_ADDRESS, address)
+            putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val quickAddPendingIntent = PendingIntent.getBroadcast(
+            context, notificationId * 10 + 6, quickAddIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val label = quickAddTargetGroupName ?: "افزودن سریع به گروه"
+        return NotificationCompat.Action.Builder(R.drawable.ic_group_add, label, quickAddPendingIntent).build()
     }
 
     private fun buildCallAction(context: Context, address: String, notificationId: Int): NotificationCompat.Action {

@@ -515,6 +515,25 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * تنظیم/برداشتنِ هدفِ دکمه‌ی «افزودن سریع به گروه»ِ روی نوتیف - از داخلِ صفحه‌ی
+     * تنظیماتِ خودِ گروه (FilterGroupDetailScreen) صدا زده میشه. groupId=null یعنی
+     * هدف کلاً برداشته بشه. چون همیشه حداکثر یه گروه می‌تونه هدف باشه، ست‌کردنِ یه
+     * گروهِ جدید خودکار بقیه رو خاموش می‌کنه (منطقش توی Repository/Dao ئه).
+     * نیازی به loadConversations یا هیچ refreshِ دستی نیست چون filterGroupSummaries
+     * از قبل یه Flow روی جدولِ filter_groups ئه و خودش با تغییرِ همین ستون آپدیت میشه.
+     */
+    fun setQuickAddTargetGroup(groupId: Long?) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { filterGroupRepository.setQuickAddTargetGroup(groupId) }
+            _operationMessage.value = if (groupId != null) {
+                "این گروه، هدفِ «افزودن سریع به گروه» شد"
+            } else {
+                "هدفِ «افزودن سریع به گروه» برداشته شد"
+            }
+        }
+    }
+
     fun addNumberToFilterGroup(groupId: Long, address: String, displayName: String) {
         if (address.isBlank()) return
         viewModelScope.launch {

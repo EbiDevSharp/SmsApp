@@ -229,6 +229,22 @@ interface FilterGroupDao {
     @Query("DELETE FROM filter_groups WHERE id = :id")
     suspend fun deleteGroup(id: Long)
 
+    // ---- هدفِ دکمه‌ی «افزودن سریع به گروه»ِ روی نوتیف ----
+
+    /**
+     * چون همیشه حداکثر یه گروه می‌تونه هدفِ افزودنِ سریع باشه (رفتارِ رادیویی، نه
+     * چندانتخابی)، ست‌کردنِ یه گروهِ جدید همیشه با یه UPDATE اول همه رو صفر می‌کنه.
+     */
+    @Query("UPDATE filter_groups SET isQuickAddTarget = 0")
+    suspend fun clearQuickAddTarget()
+
+    @Query("UPDATE filter_groups SET isQuickAddTarget = 1 WHERE id = :id")
+    suspend fun setQuickAddTarget(id: Long)
+
+    /** id همون یه گروهی که الان هدفِ افزودنِ سریعه - null اگه هیچ‌کدوم انتخاب نشده باشه */
+    @Query("SELECT id FROM filter_groups WHERE isQuickAddTarget = 1 LIMIT 1")
+    suspend fun getQuickAddTargetGroupId(): Long?
+
     // ---- شماره‌ها ----
 
     @Query("SELECT * FROM filter_group_numbers WHERE groupId = :groupId ORDER BY addedAt DESC")

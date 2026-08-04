@@ -7,7 +7,9 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.petro.smsapp.MainActivity
+import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.ContactsCache
+import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.SmsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -81,13 +83,53 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     Log.d("NotifAction", "پاسخ سریع برای $address ارسال شد")
                 }
             }
+            ACTION_QUICK_ADD_GROUP -> {
+                handleQuickAddGroup(context, repository, intent)
+            }
         }
+    }
+
+    /**
+     * برخلافِ ACTION_BLOCK، اینجا هیچ اپ/شیتی باز نمیشه - مستقیم و بی‌درنگ فرستنده رو
+     * به همون گروهی که از قبل توی تنظیماتِ خودِ گروه به‌عنوانِ «هدفِ افزودنِ سریع»
+     * (FilterGroup.isQuickAddTarget) مشخص شده اضافه می‌کنه. اگه هیچ گروهی هدف نباشه،
+     * فقط یه لاگِ هشدار می‌ذاره و کاری انجام نمیده - کاربر باید اول از صفحه‌ی تنظیماتِ
+     * یکی از گروه‌ها این گزینه رو روشن کنه.
+     */
+    private suspend fun handleQuickAddGroup(context: Context, repository: SmsRepository, intent: Intent) {
+        val address = intent.getStringExtra(EXTRA_ADDRESS) ?: return
+        val threadId = intent.getLongExtra(EXTRA_THREAD_ID, -1L)
+
+        val filterGroupRepository = AppContainer.filterGroupRepository(context)
+        val targetGroupId = filterGroupRepository.getQuickAddTargetGroupId()
+        if (targetGroupId == null) {
+            Log.w("NotifAction", "دکمه‌ی «افزودن سریع به گروه» زده شد ولی هیچ گروهی به‌عنوانِ هدف انتخاب نشده")
+            return
+        }
+
+        val privateRepository = AppContainer.privateRepository(context)
+        if (privateRepository.isAddressPrivate(address)) {
+            Log.w("NotifAction", "این شماره خصوصیه، برای افزودنِ سریع به گروه رد شد")
+            return
+        }
+
+        val displayName = ContactsCache.getName(context, address) ?: address
+        val added = filterGroupRepository.addNumber(targetGroupId, address, displayName)
+        if (added && threadId != -1L) {
+            // پیام‌های از قبل موجودِ همین thread هم به این گروه وصل بشن، دقیقاً هم‌قاعده‌ی
+            // افزودنِ دستی از داخلِ اپ - وگرنه تنظیماتِ گروه (مثلاً مخفی از لیستِ اصلی)
+            // فقط رویِ پیام‌های *بعدی* این فرستنده اثر می‌کرد
+            repository.applyGroupToExistingThreadMessages(targetGroupId, threadId, address)
+        }
+        DataChangeSignal.notifyChanged()
+        Log.d("NotifAction", "افزودنِ سریع: $displayName -> گروه $targetGroupId (added=$added)")
     }
 
     companion object {
         const val ACTION_MARK_READ = "com.petro.smsapp.ACTION_MARK_READ"
         const val ACTION_DELETE = "com.petro.smsapp.ACTION_DELETE"
         const val ACTION_BLOCK = "com.petro.smsapp.ACTION_BLOCK"
+        const val ACTION_QUICK_ADD_GROUP = "com.petro.smsapp.ACTION_QUICK_ADD_GROUP"
         const val ACTION_REPLY = "com.petro.smsapp.ACTION_REPLY"
         const val EXTRA_THREAD_ID = "extra_thread_id"
         const val EXTRA_MESSAGE_ID = "extra_message_id"

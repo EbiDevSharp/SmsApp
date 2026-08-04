@@ -70,6 +70,7 @@ object AppSettings {
         NotificationActionSetting(NotificationActionType.DELETE, true),
         NotificationActionSetting(NotificationActionType.REPLY, false),
         NotificationActionSetting(NotificationActionType.BLOCK, false),
+        NotificationActionSetting(NotificationActionType.QUICK_ADD_GROUP, false),
         NotificationActionSetting(NotificationActionType.CALL, false)
     )
 

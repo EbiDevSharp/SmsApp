@@ -116,6 +116,20 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
         dao.getMatchesForGroup(id).forEach { dao.deleteMatch(it.messageId) }
     }
 
+    // ---- هدفِ دکمه‌ی «افزودن سریع به گروه»ِ روی نوتیف ----
+
+    /**
+     * حداکثر یه گروه می‌تونه هدفِ افزودنِ سریع باشه (رفتارِ رادیویی)؛ groupId=null یعنی
+     * هدف کلاً برداشته بشه (دکمه‌ی نوتیف تا انتخابِ دوباره‌ی یه گروه، غیرِفعال می‌مونه).
+     */
+    suspend fun setQuickAddTargetGroup(groupId: Long?) {
+        dao.clearQuickAddTarget()
+        if (groupId != null) dao.setQuickAddTarget(groupId)
+    }
+
+    /** موقعِ زدنِ دکمه‌ی نوتیف صدا زده میشه - id همون یه گروهِ هدف، یا null اگه هیچ‌کدوم انتخاب نشده */
+    suspend fun getQuickAddTargetGroupId(): Long? = dao.getQuickAddTargetGroupId()
+
     // ---- شماره‌ها ----
 
     fun observeNumbersForGroup(groupId: Long): Flow<List<FilterGroupNumber>> =
@@ -291,7 +305,8 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
     }
 
     private fun FilterGroupEntity.toDomain() = FilterGroup(
-        id, name, priority, hideFromMainList, showNotifications, blockNonContacts, showInNotificationPicker, createdAt
+        id, name, priority, hideFromMainList, showNotifications, blockNonContacts,
+        showInNotificationPicker, isQuickAddTarget, createdAt
     )
     private fun FilterGroupNumberEntity.toDomain() = FilterGroupNumber(groupId, address, displayName, addedAt)
     private fun FilterGroupKeywordEntity.toDomain() = FilterGroupKeyword(id, groupId, text, addedAt)

@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Folder
@@ -38,6 +39,10 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
  * اولویتِ چک‌شدنه (بالاتر = زودتر چک میشه). به‌جای دکمه‌های بالا/پایین، حالا درست مثلِ
  * صفحه‌ی «دکمه‌های نوتیفیکیشن» کاملاً با درگ‌اند‌دراپ (دستگیره‌ی سمتِ راستِ هر ردیف)
  * جابه‌جا میشه؛ هر جابه‌جایی بلافاصله ذخیره میشه.
+ *
+ * اگه یه گروه هدفِ دکمه‌ی «افزودن سریع به گروه»ِ نوتیف باشه (isQuickAddTarget)، کنارِ
+ * اسمش یه آیکنِ رعد (⚡) کوچیک نشون داده میشه تا کاربر بدونِ باز کردنِ تک‌تکِ گروه‌ها
+ * بفهمه الان کدوم گروه هدفه.
  */
 @Composable
 fun FilterGroupsScreen(
@@ -199,7 +204,18 @@ private fun FilterGroupRow(
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(summary.group.name, style = MaterialTheme.typography.bodyLarge.autoDirection())
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(summary.group.name, style = MaterialTheme.typography.bodyLarge.autoDirection())
+                if (summary.group.isQuickAddTarget) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Filled.Bolt,
+                        contentDescription = "هدفِ افزودنِ سریع",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
             Text(
                 "${summary.numberCount} شماره · ${summary.keywordCount} کلمه · ${summary.patternCount} الگو · ${summary.messageCount} پیام",
                 style = MaterialTheme.typography.labelSmall,

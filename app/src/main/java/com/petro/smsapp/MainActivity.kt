@@ -665,6 +665,9 @@ fun AppNavigation(
                         },
                         onSave = { name, hide, notify, nonContacts, notifPicker ->
                             viewModel.updateFilterGroup(groupId, name, hide, notify, nonContacts, notifPicker)
+                        },
+                        onSetQuickAddTarget = { checked ->
+                            viewModel.setQuickAddTargetGroup(if (checked) groupId else null)
                         }
                     )
                 } else {
