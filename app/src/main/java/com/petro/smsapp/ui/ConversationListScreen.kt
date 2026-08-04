@@ -55,6 +55,7 @@ import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.runtime.rememberCoroutineScope
 import com.petro.smsapp.util.autoDirection
 import kotlinx.coroutines.launch
@@ -209,7 +210,7 @@ fun ConversationListScreen(
                                 ComingSoonMenuItem(Icons.Filled.Share, "اشتراک‌گذاری") { showMoreMenu = false }
                                 DropdownMenuItem(
                                     text = { Text("افزودن به گروه") },
-                                    leadingIcon = { Icon(Icons.Filled.Block, contentDescription = null) },
+                                    leadingIcon = { Icon(Icons.Filled.Folder, contentDescription = null) },
                                     onClick = {
                                         showMoreMenu = false
                                         val selectedConversations = conversations.filter { it.threadId in selectedIds }
@@ -234,12 +235,13 @@ fun ConversationListScreen(
             } else {
                 TopAppBar(
                     title = {
-                        Text("پیام‌ها", fontWeight = FontWeight.Bold,
+                        Text(
+                            "پیام‌ها",
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier.clickable {
                                 scope.launch { listState.animateScrollToItem(0) }
-                            })
-
-
+                            }
+                        )
                     },
                     navigationIcon = {
                         IconButton(onClick = onMenuClick) {
@@ -341,7 +343,7 @@ fun ConversationListScreen(
 
 @Composable
 private fun ComingSoonMenuItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     onDismiss: () -> Unit
 ) {
@@ -393,48 +395,48 @@ private fun SwipeableConversationRow(
     }
 
     val draggableState = rememberDraggableState { delta ->
-        val minBound = if (rightToLeftAction != SwipeAction.NONE) -maxDragPx else 0f
-        val maxBound = if (leftToRightAction != SwipeAction.NONE) maxDragPx else 0f
-        offsetX = (offsetX + delta).coerceIn(minBound, maxBound)
-    }
-
-    val revealedAction: SwipeAction? = when {
-        offsetX <= -1f -> rightToLeftAction
-        offsetX >= 1f -> leftToRightAction
-        else -> null
+        val minBound = if (leftToRightAction != SwipeAction.NONE) -maxDragPx else 0f
+        val maxBound = if (rightToLeftAction != SwipeAction.NONE) maxDragPx else 0f
+        // با offsetX - delta حرکت ردیف از نظر شما درست است
+        offsetX = (offsetX - delta).coerceIn(minBound, maxBound)
     }
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        if (revealedAction != null && revealedAction != SwipeAction.NONE) {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Row(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(swipeActionColor(revealedAction)),
-                    horizontalArrangement = if (offsetX < 0) Arrangement.End else Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 26.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = swipeActionIcon(revealedAction),
-                            contentDescription = revealedAction.label,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = revealedAction.label,
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall
-                        )
+        // پنل عملیات هنگام کشیدن به چپ (Right -> Left)
+        // پنل عملیات هنگام کشیدن از راست به چپ
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    when {
+                        offsetX > 0 -> swipeActionColor(rightToLeftAction)
+                        offsetX < 0 -> swipeActionColor(leftToRightAction)
+                        else -> Color.Transparent
                     }
+                ),
+            contentAlignment = when {
+                offsetX > 0 -> Alignment.CenterStart
+                offsetX < 0 -> Alignment.CenterEnd
+                else -> Alignment.Center
+            }
+        ) {
+            when {
+                offsetX > 0 && rightToLeftAction != SwipeAction.NONE -> {
+                    SwipeActionLabel(
+                        action = rightToLeftAction,
+                        modifier = Modifier.padding(start = 32.dp)
+                    )
+                }
+                offsetX < 0 && leftToRightAction != SwipeAction.NONE -> {
+                    SwipeActionLabel(
+                        action = leftToRightAction,
+                        modifier = Modifier.padding(end = 32.dp)
+                    )
                 }
             }
         }
 
+        // محتوای ردیف (روی پنل‌ها می‌لغزد)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -443,15 +445,21 @@ private fun SwipeableConversationRow(
                 .draggable(
                     state = draggableState,
                     orientation = Orientation.Horizontal,
-                    enabled = !selectionMode && (rightToLeftAction != SwipeAction.NONE || leftToRightAction != SwipeAction.NONE),
-                    onDragStopped = { _ ->
-                        val current = offsetX
+                    enabled = !selectionMode &&
+                            (rightToLeftAction != SwipeAction.NONE || leftToRightAction != SwipeAction.NONE),
+                    onDragStopped = {
                         val triggeredAction = when {
-                            current <= -actionThresholdPx -> rightToLeftAction
-                            current >= actionThresholdPx -> leftToRightAction
+                            // offsetX منفی → لیبل leftToRight دیده می‌شود → همان را اجرا کن
+                            offsetX <= -actionThresholdPx -> leftToRightAction
+                            // offsetX مثبت → لیبل rightToLeft دیده می‌شود → همان را اجرا کن
+                            offsetX >= actionThresholdPx -> rightToLeftAction
                             else -> null
                         }
-                        animate(initialValue = offsetX, targetValue = 0f, animationSpec = tween(220)) { value, _ ->
+                        animate(
+                            initialValue = offsetX,
+                            targetValue = 0f,
+                            animationSpec = tween(220)
+                        ) { value, _ ->
                             offsetX = value
                         }
                         if (triggeredAction != null && triggeredAction != SwipeAction.NONE) {
@@ -472,12 +480,36 @@ private fun SwipeableConversationRow(
     }
 }
 
+@Composable
+private fun SwipeActionLabel(
+    action: SwipeAction,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = swipeActionIcon(action),
+            contentDescription = action.label,
+            tint = Color.White,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = action.label,
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
 private fun swipeActionIcon(action: SwipeAction): ImageVector = when (action) {
     SwipeAction.MARK_READ -> Icons.Filled.Done
     SwipeAction.MARK_UNREAD -> Icons.Filled.Circle
     SwipeAction.DELETE -> Icons.Filled.Delete
     SwipeAction.CALL -> Icons.Filled.Call
-    SwipeAction.BLOCK -> Icons.Filled.Block
+    SwipeAction.BLOCK -> Icons.Filled.Folder
     SwipeAction.NONE -> Icons.Filled.Close
 }
 
@@ -486,7 +518,7 @@ private fun swipeActionColor(action: SwipeAction): Color = when (action) {
     SwipeAction.MARK_UNREAD -> Color(0xFF757575)
     SwipeAction.DELETE -> Color(0xFFE53935)
     SwipeAction.CALL -> Color(0xFF43A047)
-    SwipeAction.BLOCK -> Color(0xFF6D4C41)
+    SwipeAction.BLOCK -> Color(0xFF8E24AA)
     SwipeAction.NONE -> Color.Transparent
 }
 
