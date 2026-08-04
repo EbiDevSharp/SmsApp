@@ -24,6 +24,9 @@ import com.petro.smsapp.util.autoDirection
  * صفحه‌ی «زمان‌بندی‌شده» - همه‌ی پیام‌های هنوز-ارسال‌نشده‌ی زمان‌بندی‌شده، از همه‌ی
  * مکالمه‌ها با هم (نه فقط یک چت)، مرتب‌شده بر اساس نزدیک‌ترین زمانِ ارسال. کلیک روی
  * هرکدوم همون منوی «ویرایش زمان / اکنون ارسال شود / لغو زمان‌بندی» که توی چت هم هست رو باز می‌کنه.
+ *
+ * ویرایشِ زمان از DateTimePickerSheet (کامپوننتِ سه‌مرحله‌ایِ «طرح ۲») استفاده می‌کنه -
+ * جایگزینِ DateTimePickerDialog قدیمی.
  */
 @Composable
 fun ScheduledMessagesScreen(
@@ -55,7 +58,8 @@ fun ScheduledMessagesScreen(
 
     val currentEditing = editing
     if (currentEditing != null) {
-        DateTimePickerDialog(
+        DateTimePickerSheet(
+            title = "ویرایش زمان ارسال",
             initialMillis = currentEditing.scheduledAt,
             onConfirm = {
                 onUpdateTime(currentEditing.id, it)

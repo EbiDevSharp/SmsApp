@@ -52,6 +52,10 @@ import com.petro.smsapp.util.DateFormatter
  * همون گوشه‌ی فیزیکیِ چپِ کادر میشه. یه چیپِ کوچیکِ مستطیلی با شماره‌ی سیمِ فعال (۱ یا
  * ۲) نشون داده میشه؛ کلیک روش همون منوی قبلی (DropdownMenu با اسمِ هر سیم) رو باز
  * می‌کنه. فقط وقتی گوشی حداقل دو سیم‌کارتِ فعال داشته باشه نشون داده میشه.
+ *
+ * زمان‌بندی: قبلاً DateTimePickerDialog (استپرِ ساده) بود؛ الان از DateTimePickerSheet
+ * (کامپوننتِ سه‌مرحله‌ایِ «طرح ۲» - تب‌های سریع + گریدِ تقویم + ویل‌پیکرِ ساعت) استفاده
+ * می‌کنه.
  */
 @Composable
 fun MessageInputBar(
@@ -80,7 +84,8 @@ fun MessageInputBar(
     }
 
     if (showTimePicker) {
-        DateTimePickerDialog(
+        DateTimePickerSheet(
+            title = "زمان ارسال",
             initialMillis = scheduledAt ?: System.currentTimeMillis(),
             onConfirm = {
                 onScheduledAtChange(it)
@@ -204,7 +209,7 @@ private fun ScheduledInlineChip(
                 .align(Alignment.TopEnd)
                 .offset(x = 6.dp, y = (-6).dp)
                 .size(16.dp)
-                .clip(androidx.compose.foundation.shape.CircleShape)
+                .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.error)
                 .clickable(onClick = onCancel),
             contentAlignment = Alignment.Center
