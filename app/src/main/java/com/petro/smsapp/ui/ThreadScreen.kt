@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -553,10 +554,25 @@ private fun MessageBubble(
     }
     val fontSize = (16 * fontScale).sp
 
+    // کلیک/دابل‌کلیک/لانگ‌کلیک قبلاً فقط رویِ خودِ Surfaceِ حباب بود - یعنی زدن به
+    // فضای خالیِ کنارِ حباب (نیمه‌ی دیگه‌ی عرضِ ردیف) هیچ واکنشی نداشت. الان
+    // combinedClickable رویِ کلِ Rowِ بیرونی نشسته تا زدن به هرجای ردیف (نه فقط خودِ
+    // حباب) همون منوی اکشن/انتخاب رو باز کنه. indication عمداً خاموشه چون افکتِ
+    // ripple رویِ کلِ عرضِ ردیف (که همیشه نصفش خالیه) بصری بد میشه؛ فیدبکِ بصریِ
+    // انتخاب همچنان از رنگِ پس‌زمینه‌ی isSelected میاد.
+    val interactionSource = remember { MutableInteractionSource() }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent),
+            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = if (message.isFailed && !selectionMode) onResend else onClick,
+                onDoubleClick = onDoubleClick,
+                onLongClick = onLongClick
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (selectionMode) {
@@ -576,18 +592,14 @@ private fun MessageBubble(
                     shape = bubbleShape(message.isOutgoing),
                     shadowElevation = 0.5.dp,
                     border = if (isPinned) BorderStroke(1.5.dp, Color(0xFFFFA000)) else null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .combinedClickable(
-                            onClick = if (message.isFailed && !selectionMode) onResend else onClick,
-                            onDoubleClick = onDoubleClick,
-                            onLongClick = onLongClick
-                        )
+                    // دیگه combinedClickable خودشو نداره - کلیک از Rowِ بیرونی میاد؛
+                    // فقط padding/shape/رنگِ ظاهریِ حباب اینجا می‌مونه
+                    modifier = Modifier.padding(4.dp)
                 ) {
-                    // لینک‌ها (با/بدونِ http) و رشته‌های عددی داخلِ متنِ پیام، آبی/زیرخط‌دار
-                    // و کلیک‌پذیر میشن (کپی/اشتراک‌گذاری/بازکردن) - تپ روی بقیه‌ی متن دست‌نخورده
-                    // به همین Surface می‌رسه (combinedClickable بالا). توی حالتِ انتخابِ
-                    // چندتایی (selectionMode) این رهگیری کاملاً خاموشه تا تپ روی لینک هم
+                    // لینک‌ها، شماره‌تلفن‌ها و رشته‌های عددیِ داخلِ متنِ پیام، آبی/زیرخط‌دار
+                    // و کلیک‌پذیر میشن (کپی/اشتراک‌گذاری/تماس/بازکردن) - تپ روی بقیه‌ی متن
+                    // دست‌نخورده به Rowِ بیرونی می‌رسه. توی حالتِ انتخابِ چندتایی
+                    // (selectionMode) این رهگیری کاملاً خاموشه تا تپ روی لینک/شماره هم
                     // فقط انتخاب/عدمِ‌انتخاب کنه.
                     LinkifiedMessageText(
                         text = message.body,
@@ -622,9 +634,7 @@ private fun MessageBubble(
                                 imageVector = Icons.Filled.ErrorOutline,
                                 contentDescription = "ارسال نشد - برای ارسال دوباره بزن",
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .combinedClickable(onClick = onResend, onLongClick = {})
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                         message.isSending || message.isQueued -> {
