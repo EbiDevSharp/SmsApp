@@ -39,6 +39,14 @@ object ContactsCache {
     @Volatile private var cache: Map<String, Entry> = emptyMap()
     @Volatile private var isLoaded = false
 
+    /**
+     * پیشوندهای رایجی که شماره‌های ایرانی موقعِ ذخیره تو مخاطبین یا موقعِ دریافتِ
+     * پیامک (originatingAddress) ممکنه باهاش شروع بشن: 0098 / 98 / 0 (کاراکترِ +
+     * قبلش، چون فقط رقم فیلتر میشه، از قبل حذف شده). ریجکس عمداً به‌ترتیبِ طولِ
+     * پیشوند (بلندتر اول) نوشته شده تا "0098" اشتباهی با شاخه‌ی "0" مچ نشه.
+     */
+    private val IRAN_PHONE_PREFIX_REGEX = Regex("^(0098|98|0)")
+
     /** موقعی صدا زده میشه که مخاطبین گوشی عوض شده باشن (اضافه/حذف/ادیت) تا دفعه‌ی بعد دوباره خونده بشن */
     fun invalidate() {
         isLoaded = false
@@ -101,8 +109,24 @@ object ContactsCache {
         return map
     }
 
+    /**
+     * نرمال‌سازیِ شماره برای استفاده به‌عنوانِ کلیدِ HashMap - مستقل از اینکه شماره با
+     * 0، +98، 0098 یا 98 شروع شده باشه یا هیچ‌کدوم.
+     *
+     * مرحله‌ی اول: با IRAN_PHONE_PREFIX_REGEX پیشوندهای رایجِ ایرانی رو صریحاً حذف
+     * می‌کنیم تا به هسته‌ی ۱۰ رقمیِ شماره (بدونِ کدِ کشور/صفرِ ابتدایی) برسیم.
+     *
+     * مرحله‌ی دوم (لایه‌ی دفاعیِ اضافه): حتی اگه مرحله‌ی اول به هر دلیلی پیشوند رو
+     * تشخیص نده (مثلاً یه فرمتِ غیرمنتظره یا شماره‌ی خارجی)، بازم فقط ۹ رقمِ آخر
+     * به‌عنوانِ کلیدِ نهایی در نظر گرفته میشه - این باعث میشه هر دو طرفِ مقایسه
+     * (شماره‌ی ذخیره‌شده تو مخاطبین و شماره‌ی رسیده تو پیامک) حتی با فرمت‌های
+     * متفاوت، سرِ همون هسته‌ی مشترک به هم برسن.
+     */
     private fun normalize(number: String): String {
         val digitsOnly = number.filter { it.isDigit() }
-        return if (digitsOnly.length > 9) digitsOnly.takeLast(9) else digitsOnly
+        if (digitsOnly.isBlank()) return ""
+        val withoutPrefix = digitsOnly.replaceFirst(IRAN_PHONE_PREFIX_REGEX, "")
+        val core = withoutPrefix.ifBlank { digitsOnly }
+        return if (core.length > 9) core.takeLast(9) else core
     }
 }

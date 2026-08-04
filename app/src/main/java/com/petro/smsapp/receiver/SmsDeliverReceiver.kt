@@ -99,12 +99,20 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         val quickAddTargetGroupName = filterGroupRepository.getQuickAddTargetGroupId()
             ?.let { filterGroupRepository.getGroup(it)?.name }
 
-        showNotification(context, sender, fullBody, threadId, messageId, quickAddTargetGroupName)
+        // نکته‌ی مهم (رفعِ باگ): قبلاً همینجا عنوانِ نوتیف مستقیم خودِ sender (شماره‌ی
+        // خام) بود و اصلاً سراغِ ContactsCache نمی‌رفت - یعنی حتی برای فرستنده‌هایی که
+        // تو مخاطبینِ گوشی ذخیره بودن، نوتیف فقط شماره رو نشون می‌داد. الان دقیقاً
+        // هم‌قاعده‌ی بقیه‌ی برنامه (لیستِ مکالمات، صفحه‌ی چت) از ContactsCache.getName
+        // استفاده می‌کنیم و اگه مخاطب پیدا نشه، به‌عنوانِ fallback خودِ شماره میاد.
+        val displayName = ContactsCache.getName(context, sender) ?: sender
+
+        showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName)
     }
 
     private fun showNotification(
         context: Context,
         sender: String,
+        displayName: String,
         body: String,
         threadId: Long,
         messageId: Long,
@@ -117,7 +125,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_THREAD_ID, threadId)
             putExtra(MainActivity.EXTRA_ADDRESS, sender)
-            putExtra(MainActivity.EXTRA_DISPLAY_NAME, ContactsCache.getName(context, sender) ?: sender)
+            putExtra(MainActivity.EXTRA_DISPLAY_NAME, displayName)
         }
         val contentPendingIntent = PendingIntent.getActivity(
             context, notificationId, openIntent,
@@ -130,9 +138,9 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_message)
-            .setContentTitle(sender)
+            .setContentTitle(displayName)
             .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body).setBigContentTitle(sender))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body).setBigContentTitle(displayName))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
