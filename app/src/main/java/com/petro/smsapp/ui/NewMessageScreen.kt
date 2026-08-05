@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.ContactInfo
 import com.petro.smsapp.data.MessageGroupMember
 import com.petro.smsapp.data.MessageGroupSummary
@@ -106,6 +107,7 @@ fun NewMessageScreen(
     var groupNameInput by remember { mutableStateOf("") }
     var editingGroup by remember { mutableStateOf<MessageGroupSummary?>(null) }
     val scope = rememberCoroutineScope()
+    val settings by AppSettings.state.collectAsState()
 
     /** فقط اضافه می‌کنه (اگه از قبل نبود) - برای مخاطبِ دستی، مخاطبِ گروه، و اعضای بارگذاری‌شده از گروه */
     fun addContactIfAbsent(contact: ContactInfo) {
@@ -294,7 +296,8 @@ fun NewMessageScreen(
                         placeholder = "متن پیام",
                         sims = sims,
                         selectedSubscriptionId = selectedSimId,
-                        onSimSelect = { selectedSimId = it }
+                        onSimSelect = { selectedSimId = it },
+                        sendDelaySeconds = settings.sendDelaySeconds
                     )
                 }
             }

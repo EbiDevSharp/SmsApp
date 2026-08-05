@@ -47,6 +47,8 @@ object AppSettings {
     private const val KEY_ALPHABET_INDEX_BAR_ENABLED_NAME = "alphabet_index_bar_enabled"
     // جدید: نمایشِ پاپ‌آپِ روی صفحه به‌جای نوتیفِ معمولی برای پیامکِ تازه‌رسیده
     private const val KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME = "popup_instead_of_notification_enabled"
+    // تأخیر ارسال پیام (ثانیه) - ۰ = فوری، ۱ تا ۱۵
+    private const val KEY_SEND_DELAY_SECONDS_NAME = "send_delay_seconds"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -62,8 +64,12 @@ object AppSettings {
     private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
     private val KEY_ALPHABET_INDEX_BAR_ENABLED = booleanPreferencesKey(KEY_ALPHABET_INDEX_BAR_ENABLED_NAME)
     private val KEY_POPUP_INSTEAD_OF_NOTIFICATION = booleanPreferencesKey(KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME)
+    private val KEY_SEND_DELAY_SECONDS = intPreferencesKey(KEY_SEND_DELAY_SECONDS_NAME)
 
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
+    const val DEFAULT_SEND_DELAY_SECONDS = 0
+    const val MIN_SEND_DELAY_SECONDS = 0
+    const val MAX_SEND_DELAY_SECONDS = 15
 
     val DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION = SwipeAction.DELETE
     val DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION = SwipeAction.MARK_READ
@@ -105,7 +111,9 @@ object AppSettings {
         val swipeDeleteRequiresConfirmation: Boolean = true,
         val alphabetIndexBarEnabled: Boolean = true,
         // جدید: به‌جای نوتیفِ معمولی، پیامکِ تازه‌رسیده با یه پاپ‌آپِ روی صفحه نشون داده بشه
-        val popupInsteadOfNotificationEnabled: Boolean = false
+        val popupInsteadOfNotificationEnabled: Boolean = false,
+        // تأخیر ارسال (ثانیه) - ۰ = فوری
+        val sendDelaySeconds: Int = DEFAULT_SEND_DELAY_SECONDS
     )
 
     private val _state = MutableStateFlow(State())
@@ -138,7 +146,9 @@ object AppSettings {
                         swipeLeftToRightAction = SwipeAction.fromId(prefs[KEY_SWIPE_LEFT_TO_RIGHT_ACTION], DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION),
                         swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true,
                         alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true,
-                        popupInsteadOfNotificationEnabled = prefs[KEY_POPUP_INSTEAD_OF_NOTIFICATION] ?: false
+                        popupInsteadOfNotificationEnabled = prefs[KEY_POPUP_INSTEAD_OF_NOTIFICATION] ?: false,
+                        sendDelaySeconds = (prefs[KEY_SEND_DELAY_SECONDS] ?: DEFAULT_SEND_DELAY_SECONDS)
+                            .coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS)
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -203,6 +213,13 @@ object AppSettings {
     fun isPopupInsteadOfNotificationEnabled(context: Context): Boolean = _state.value.popupInsteadOfNotificationEnabled
     fun setPopupInsteadOfNotificationEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_POPUP_INSTEAD_OF_NOTIFICATION] = enabled }
+
+    /** تأخیر ارسال پیام به ثانیه (۰ = فوری، ۱ تا ۱۵) */
+    fun getSendDelaySeconds(context: Context): Int = _state.value.sendDelaySeconds
+    fun setSendDelaySeconds(context: Context, seconds: Int) {
+        val clamped = seconds.coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS)
+        write(context) { it[KEY_SEND_DELAY_SECONDS] = clamped }
+    }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

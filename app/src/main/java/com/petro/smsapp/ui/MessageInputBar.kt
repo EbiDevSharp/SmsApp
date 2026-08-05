@@ -56,6 +56,9 @@ import com.petro.smsapp.util.DateFormatter
  * زمان‌بندی: قبلاً DateTimePickerDialog (استپرِ ساده) بود؛ الان از DateTimePickerSheet
  * (کامپوننتِ سه‌مرحله‌ایِ «طرح ۲» - تب‌های سریع + گریدِ تقویم + ویل‌پیکرِ ساعت) استفاده
  * می‌کنه.
+ *
+ * تأخیر ارسال: اگه sendDelaySeconds > 0، با زدنِ ارسال اول PendingMessageBubble نشون
+ * داده میشه و بعد از اون ثانیه واقعاً onSendClick صدا زده میشه؛ کنسل متن رو برمی‌گردونه.
  */
 @Composable
 fun MessageInputBar(
@@ -68,10 +71,13 @@ fun MessageInputBar(
     modifier: Modifier = Modifier,
     sims: List<SimInfo> = emptyList(),
     selectedSubscriptionId: Int? = null,
-    onSimSelect: (Int) -> Unit = {}
+    onSimSelect: (Int) -> Unit = {},
+    sendDelaySeconds: Int = 0
 ) {
     var showAttachMenu by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var isPending by remember { mutableStateOf(false) }
+    var pendingSnapshot by remember { mutableStateOf("") }
 
     if (showAttachMenu) {
         AttachMenuSheet(
@@ -95,80 +101,110 @@ fun MessageInputBar(
         )
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // اول میاد تا توی چیدمان راست‌به‌چپ سمت راستِ کادر بشینه (دقیقاً هم‌جهت با قبل)
-        Box(contentAlignment = Alignment.TopCenter) {
-            FilledIconButton(
-                onClick = onSendClick,
-                enabled = value.isNotBlank(),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = if (scheduledAt != null) "زمان‌بندی ارسال" else "ارسال",
-                    tint = Color.White
-                )
-            }
-            if (value.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 2.dp,
-                    modifier = Modifier.offset(y = (-18).dp)
-                ) {
-                    SmsSegmentIndicator(
-                        text = value,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (isPending && sendDelaySeconds > 0) {
+            PendingMessageBubble(
+                text = pendingSnapshot,
+                delaySeconds = sendDelaySeconds,
+                onCancel = {
+                    onValueChange(pendingSnapshot)
+                    isPending = false
+                    pendingSnapshot = ""
+                },
+                onSendTimeout = {
+                    onValueChange(pendingSnapshot)
+                    onSendClick()
+                    isPending = false
+                    pendingSnapshot = ""
                 }
-            }
-
+            )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 48.dp),
-            placeholder = { Text(placeholder) },
-            maxLines = 5,
-            shape = RoundedCornerShape(22.dp),
-            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
-            // چیپِ زمان‌بندی - کاملاً داخلِ خودِ باکسِ متن، تا قبل از ارسال بیرون نمی‌پره
-            leadingIcon = {
-                if (scheduledAt != null) {
-                    ScheduledInlineChip(
-                        scheduledAt = scheduledAt,
-                        onClick = { showTimePicker = true },
-                        onCancel = { onScheduledAtChange(null) }
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // اول میاد تا توی چیدمان راست‌به‌چپ سمت راستِ کادر بشینه (دقیقاً هم‌جهت با قبل)
+            Box(contentAlignment = Alignment.TopCenter) {
+                FilledIconButton(
+                    onClick = {
+                        if (value.isBlank() || isPending) return@FilledIconButton
+                        if (sendDelaySeconds > 0 && scheduledAt == null) {
+                            pendingSnapshot = value
+                            onValueChange("")
+                            isPending = true
+                        } else {
+                            onSendClick()
+                        }
+                    },
+                    enabled = value.isNotBlank() && !isPending,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = if (scheduledAt != null) "زمان‌بندی ارسال" else "ارسال",
+                        tint = Color.White
                     )
                 }
-            },
-            // چیپِ کوچیکِ انتخابِ سیم - داخلِ خودِ کادر، گوشه‌ی «انتها»یِ متن که تو
-            // چیدمانِ راست‌به‌چپِ برنامه دقیقاً گوشه‌ی فیزیکیِ چپ میشه
-            trailingIcon = {
-                if (sims.size >= 2) {
-                    SimQuickSelectChip(
-                        sims = sims,
-                        selectedSubscriptionId = selectedSubscriptionId,
-                        onSelect = onSimSelect
-                    )
+                if (value.isNotEmpty() && !isPending) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.offset(y = (-18).dp)
+                    ) {
+                        SmsSegmentIndicator(
+                            text = value,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
                 }
+
             }
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        // آخرین آیتم -> توی چیدمانِ راست‌به‌چپ سمتِ چپِ کادر می‌شینه
-        IconButton(onClick = { showAttachMenu = true }) {
-            Icon(Icons.Filled.Add, contentDescription = "افزودن")
+
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
+                placeholder = { Text(placeholder) },
+                maxLines = 5,
+                enabled = !isPending,
+                shape = RoundedCornerShape(22.dp),
+                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
+                // چیپِ زمان‌بندی - کاملاً داخلِ خودِ باکسِ متن، تا قبل از ارسال بیرون نمی‌پره
+                leadingIcon = {
+                    if (scheduledAt != null) {
+                        ScheduledInlineChip(
+                            scheduledAt = scheduledAt,
+                            onClick = { showTimePicker = true },
+                            onCancel = { onScheduledAtChange(null) }
+                        )
+                    }
+                },
+                // چیپِ کوچیکِ انتخابِ سیم - داخلِ خودِ کادر، گوشه‌ی «انتها»یِ متن که تو
+                // چیدمانِ راست‌به‌چپِ برنامه دقیقاً گوشه‌ی فیزیکیِ چپ میشه
+                trailingIcon = {
+                    if (sims.size >= 2) {
+                        SimQuickSelectChip(
+                            sims = sims,
+                            selectedSubscriptionId = selectedSubscriptionId,
+                            onSelect = onSimSelect
+                        )
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            // آخرین آیتم -> توی چیدمانِ راست‌به‌چپ سمتِ چپِ کادر می‌شینه
+            IconButton(onClick = { showAttachMenu = true }, enabled = !isPending) {
+                Icon(Icons.Filled.Add, contentDescription = "افزودن")
+            }
         }
     }
 }

@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.ScheduledMessage
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
@@ -92,6 +93,7 @@ fun ThreadScreen(
 ) {
     var input by remember { mutableStateOf("") }
     var draftApplied by remember { mutableStateOf(false) }
+    val settings by AppSettings.state.collectAsState()
     LaunchedEffect(initialDraft) {
         if (!draftApplied && initialDraft.isNotBlank()) {
             draftApplied = true
@@ -351,7 +353,8 @@ fun ThreadScreen(
                             onScheduledAtChange = { scheduledAt = it },
                             sims = sims,
                             selectedSubscriptionId = selectedSimId,
-                            onSimSelect = { selectedSimId = it }
+                            onSimSelect = { selectedSimId = it },
+                            sendDelaySeconds = settings.sendDelaySeconds
                         )
                     } else {
                         Row(

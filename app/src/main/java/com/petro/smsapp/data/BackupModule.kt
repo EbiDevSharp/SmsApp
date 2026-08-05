@@ -39,7 +39,7 @@ enum class BackupCategory(
 ) {
     APPEARANCE("appearance", "ظاهر", "تم، نوع تقویم و فرمت ساعت"),
     CONVERSATIONS("conversations", "لیست مکالمات", "نمایش شماره، نوار الفبا، سویپ‌ها و سقف پین"),
-    MESSAGING("messaging", "پیام‌رسانی", "سطل زباله و گروه‌های پیامکی"),
+    MESSAGING("messaging", "پیام‌رسانی", "سطل زباله، گروه‌های پیامکی و تأخیر ارسال"),
     NOTIFICATIONS("notifications", "اعلان‌ها", "دلیوری، دکمه‌های نوتیف و پاپ‌آپ"),
     SMS("sms", "پیامک‌ها", "تمام پیامک‌های موجود در گوشی"),
     APP_DATA("app_data", "داده‌های برنامه", "فیوریت، پین، سطل زباله، گروه‌ها، فیلترها و ...");
@@ -119,6 +119,7 @@ object BackupModule {
         return JSONObject().apply {
             put("trashEnabled", s.trashEnabled)
             put("groupMessagingEnabled", s.groupMessagingEnabled)
+            put("sendDelaySeconds", s.sendDelaySeconds)
         }
     }
 
@@ -437,6 +438,8 @@ object BackupModule {
             AppSettings.setTrashEnabled(context, data.getBoolean("trashEnabled"))
         if (data.has("groupMessagingEnabled"))
             AppSettings.setGroupMessagingEnabled(context, data.getBoolean("groupMessagingEnabled"))
+        if (data.has("sendDelaySeconds"))
+            AppSettings.setSendDelaySeconds(context, data.getInt("sendDelaySeconds"))
     }
 
     private fun importNotifications(context: Context, data: JSONObject) {

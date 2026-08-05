@@ -336,6 +336,23 @@ fun SettingsScreen(
                     onChecked = { AppSettings.setGroupMessagingEnabled(context, it) },
                     onInfo = { infoDialogText = it }
                 )
+                ThinDivider()
+                ListItem(
+                    headlineContent = { Text("تأخیر ارسال") },
+                    supportingContent = {
+                        Text(
+                            if (settings.sendDelaySeconds == 0) "فوری (بدون تأخیر)"
+                            else "${settings.sendDelaySeconds} ثانیه فرصت لغو"
+                        )
+                    },
+                    trailingContent = {
+                        SendDelayStepper(
+                            value = settings.sendDelaySeconds,
+                            onValueChange = { AppSettings.setSendDelaySeconds(context, it) }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                )
             }
 
             // اعلان‌ها
@@ -633,6 +650,27 @@ private fun PinCountStepper(value: Int, onValueChange: (Int) -> Unit) {
             modifier = Modifier.padding(horizontal = 8.dp)
         )
         IconButton(onClick = { if (value < 20) onValueChange(value + 1) }) {
+            Icon(Icons.Filled.Add, contentDescription = "زیاد کردن")
+        }
+    }
+}
+
+@Composable
+private fun SendDelayStepper(value: Int, onValueChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = {
+            if (value > AppSettings.MIN_SEND_DELAY_SECONDS) onValueChange(value - 1)
+        }) {
+            Icon(Icons.Filled.Remove, contentDescription = "کم کردن")
+        }
+        Text(
+            text = if (value == 0) "۰" else value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        IconButton(onClick = {
+            if (value < AppSettings.MAX_SEND_DELAY_SECONDS) onValueChange(value + 1)
+        }) {
             Icon(Icons.Filled.Add, contentDescription = "زیاد کردن")
         }
     }

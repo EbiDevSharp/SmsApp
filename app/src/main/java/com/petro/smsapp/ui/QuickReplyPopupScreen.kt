@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.NotificationActionType
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.autoDirection
@@ -118,6 +119,9 @@ fun QuickReplyPopupScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
+    val settings by AppSettings.state.collectAsState()
+    var isPending by remember { mutableStateOf(false) }
+    var pendingSnapshot by remember { mutableStateOf("") }
 
     val messagesScrollState = rememberScrollState()
     LaunchedEffect(messages.size) {
@@ -126,7 +130,13 @@ fun QuickReplyPopupScreen(
 
     fun sendCurrentReply() {
         val text = replyText
-        if (text.isNotBlank()) {
+        if (text.isBlank() || isPending) return
+        val delay = settings.sendDelaySeconds
+        if (delay > 0) {
+            pendingSnapshot = text
+            onReplyTextChange("")
+            isPending = true
+        } else {
             onSendReply(text)
             onReplyTextChange("")
         }
@@ -315,6 +325,24 @@ fun QuickReplyPopupScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    if (isPending && settings.sendDelaySeconds > 0) {
+                        PendingMessageBubble(
+                            text = pendingSnapshot,
+                            delaySeconds = settings.sendDelaySeconds,
+                            onCancel = {
+                                onReplyTextChange(pendingSnapshot)
+                                isPending = false
+                                pendingSnapshot = ""
+                            },
+                            onSendTimeout = {
+                                onSendReply(pendingSnapshot)
+                                isPending = false
+                                pendingSnapshot = ""
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
                     // ---- ردیفِ ورودیِ پاسخِ سریع - همیشه نمایش داده میشه (دیگه نیازی به
                     // زدنِ دکمه‌ی «پاسخ» برای بازکردنش نیست) ----
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -327,6 +355,7 @@ fun QuickReplyPopupScreen(
                                 .focusRequester(replyFocusRequester),
                             placeholder = { Text("پاسخ سریع...") },
                             singleLine = true,
+                            enabled = !isPending,
                             shape = RoundedCornerShape(20.dp),
                             textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -335,7 +364,7 @@ fun QuickReplyPopupScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         FilledIconButton(
                             onClick = { sendCurrentReply() },
-                            enabled = replyText.isNotBlank()
+                            enabled = replyText.isNotBlank() && !isPending
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "ارسال پاسخ")
                         }
