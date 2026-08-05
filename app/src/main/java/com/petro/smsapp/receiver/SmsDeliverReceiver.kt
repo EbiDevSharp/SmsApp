@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.Settings
 import android.provider.Telephony
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -21,6 +22,7 @@ import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
+import com.petro.smsapp.service.PopupOverlayService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,7 +61,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                handleFilterAndNotify(context, sender, fullBody, threadId, messageId)
+                handleFilterAndNotify(context, sender, fullBody, threadId, messageId, receivedTimestamp)
             } finally {
                 pendingResult.finish()
             }
@@ -71,7 +73,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         sender: String,
         fullBody: String,
         threadId: Long,
-        messageId: Long
+        messageId: Long,
+        receivedTimestamp: Long
     ) {
         val privateRepository = AppContainer.privateRepository(context)
         val filterGroupRepository = AppContainer.filterGroupRepository(context)
@@ -113,12 +116,28 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         // استفاده میشه، پس کوئریِ اضافه‌ای به Contacts Provider زده نمیشه.
         val contactPhotoUri = ContactsCache.getPhotoUri(context, sender)
 
-        // اگه کاربر از تنظیمات «پاپ‌آپِ پیامک روی صفحه» رو فعال کرده باشه، به‌جای
-        // نوتیفِ کاملِ اکشن‌دار، یه نوتیفِ حداقلی با fullScreenIntent می‌سازیم که
-        // QuickReplyPopupActivity رو مستقیم روی صفحه (حتی صفحه‌قفل) باز می‌کنه.
-        // خودِ دکمه‌ها/اکشن‌ها داخلِ همون پاپ‌آپ (Compose) پیاده‌سازی شدن، نه اینجا.
+        // اگه کاربر از تنظیمات «پاپ‌آپِ پیامک روی صفحه» رو فعال کرده باشه:
+        //
+        // - اگه پرمیشنِ «نمایش روی برنامه‌های دیگر» (SYSTEM_ALERT_WINDOW) رو هم داده
+        //   باشه، فقط پاپ‌آپِ overlay نشون داده میشه (بدونِ هیچ نوتیفِ اضافه‌ای) - این
+        //   تنها راهیه که تضمین می‌کنه پاپ‌آپ همیشه، صرفِ‌نظر از قفل/باز بودنِ صفحه یا
+        //   باز/بسته بودنِ اپ، وسطِ صفحه بیاد (fullScreenIntent از اندروید ۱۰ به بعد
+        //   فقط روی صفحه‌قفل خودکار اجرا میشه).
+        // - اگه پرمیشنِ overlay داده نشده، دقیقاً رفتارِ قبلی (نوتیفِ حداقلی +
+        //   fullScreenIntent) ادامه پیدا می‌کنه که فقط روی صفحه‌قفل تضمین‌شده کار می‌کنه.
         if (AppSettings.isPopupInsteadOfNotificationEnabled(context)) {
-            showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = System.currentTimeMillis())
+            if (Settings.canDrawOverlays(context)) {
+                PopupOverlayService.show(
+                    context = context,
+                    threadId = threadId,
+                    messageId = messageId,
+                    address = sender,
+                    body = fullBody,
+                    date = receivedTimestamp
+                )
+            } else {
+                showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = receivedTimestamp)
+            }
         } else {
             showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
         }

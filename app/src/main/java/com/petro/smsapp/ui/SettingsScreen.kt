@@ -1,5 +1,8 @@
 package com.petro.smsapp.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.CalendarType
 import com.petro.smsapp.data.ClockFormat
@@ -51,6 +58,21 @@ import androidx.compose.foundation.verticalScroll
 fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val settings by AppSettings.state.collectAsState()
+
+    // پرمیشنِ «نمایش روی برنامه‌های دیگر» یه پرمیشنِ ویژه‌ست که فقط از تنظیماتِ خودِ
+    // گوشی قابلِ دادنه، پس هر بار کاربر از اون صفحه برگرده اینجا (ON_RESUME) وضعیتش
+    // رو دوباره چک می‌کنیم
+    var overlayPermissionGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                overlayPermissionGranted = Settings.canDrawOverlays(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var showSwipeRightToLeftDialog by remember { mutableStateOf(false) }
     var showSwipeLeftToRightDialog by remember { mutableStateOf(false) }
@@ -269,6 +291,32 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
                 }
             )
             Divider()
+
+            // بدونِ این پرمیشن، پاپ‌آپ فقط روی صفحه‌قفل تضمین‌شده کار می‌کنه (محدودیتِ
+            // خودِ اندروید ۱۰ به بعد برای fullScreenIntent) - وقتی صفحه باز و اپ بسته‌ست
+            // بدونِ این پرمیشن فقط یه نوتیفِ ساده میاد
+            if (settings.popupInsteadOfNotificationEnabled && !overlayPermissionGranted) {
+                ListItem(
+                    headlineContent = {
+                        Text("پرمیشنِ «نمایش روی برنامه‌های دیگر» لازمه", color = MaterialTheme.colorScheme.error)
+                    },
+                    supportingContent = {
+                        Text("بدونِ این پرمیشن، پاپ‌آپ فقط وقتی صفحه‌قفله میاد. برای اینکه همیشه - حتی وقتی صفحه بازه و اپ بسته‌ست - وسطِ صفحه بیاد، این پرمیشن رو بده.")
+                    },
+                    trailingContent = {
+                        TextButton(onClick = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }) {
+                            Text("دادنِ پرمیشن")
+                        }
+                    }
+                )
+                Divider()
+            }
 
             // حداکثر تعداد مکالمه‌ای که میشه هم‌زمان توی لیست اصلی پین کرد (پین‌کردنِ خودِ
             // مکالمه از منوی «انتخاب چندتایی» توی لیست اصلی انجام میشه، اینجا فقط سقفشه)

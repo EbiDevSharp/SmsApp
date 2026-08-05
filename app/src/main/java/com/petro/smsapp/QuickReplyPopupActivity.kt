@@ -77,7 +77,7 @@ class QuickReplyPopupActivity : ComponentActivity() {
         setContent {
             SmsAppTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         PopupHost(
                             threadId = threadId,
                             messageId = messageId,

@@ -1,12 +1,8 @@
 package com.petro.smsapp.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,16 +15,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.NotificationActionType
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.autoDirection
+import kotlin.math.roundToInt
 
 /**
  * یک دکمه‌ی اکشنِ پاپ‌آپ - عیناً هم‌خانواده‌ی NotificationActionSetting، فقط اینجا
@@ -68,22 +69,53 @@ fun QuickReplyPopupScreen(
     onSendReply: (text: String) -> Unit,
     onClose: () -> Unit
 ) {
-    var replyMode by remember { mutableStateOf(false) }
     var replyText by remember { mutableStateOf("") }
     var overflowExpanded by remember { mutableStateOf(false) }
+    val replyFocusRequester = remember { FocusRequester() }
+
+    // آفستِ عمودیِ دستی (با درگ‌کردنِ هدر) - جدا از جابه‌جاییِ خودکارِ بالای کیبورد
+    var dragOffsetY by remember { mutableStateOf(0f) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
+            // وقتی کیبورد باز میشه، کارت خودش خودکار میره بالای کیبورد تا زیرش گم نشه
+            .imePadding()
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(0, dragOffsetY.roundToInt()) },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 12.dp
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+
+                // ---- دستگیره‌ی درگ - با کشیدنش می‌تونی کارت رو بالاتر/پایین‌تر ببری
+                // (مثلاً وقتی کیبورد بازه و می‌خوای دکمه‌های پایینی رو ببینی) ----
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    dragOffsetY = (dragOffsetY + dragAmount.y)
+                                        .coerceIn(-1600f, 400f)
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 4.dp)
+                            .size(width = 36.dp, height = 4.dp)
+                            .background(Color.Gray.copy(alpha = 0.4f), RoundedCornerShape(2.dp))
+                    )
+                }
 
                 // ---- هدر: آواتار + اسم/شماره + ساعت + بستن ----
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,50 +180,43 @@ fun QuickReplyPopupScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // ---- ردیفِ ورودیِ پاسخِ سریع (فقط وقتی «پاسخ» زده شده) ----
-                AnimatedVisibility(
-                    visible = replyMode,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = replyText,
-                                onValueChange = { replyText = it },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp),
-                                placeholder = { Text("پاسخ سریع...") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(20.dp),
-                                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(onSend = {
-                                    if (replyText.isNotBlank()) {
-                                        onSendReply(replyText)
-                                        replyText = ""
-                                        replyMode = false
-                                    }
-                                })
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            FilledIconButton(
-                                onClick = {
-                                    if (replyText.isNotBlank()) {
-                                        onSendReply(replyText)
-                                        replyText = ""
-                                        replyMode = false
-                                    }
-                                },
-                                enabled = replyText.isNotBlank()
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "ارسال پاسخ")
+                // ---- ردیفِ ورودیِ پاسخِ سریع - همیشه نمایش داده میشه (دیگه نیازی به
+                // زدنِ دکمه‌ی «پاسخ» برای بازکردنش نیست) ----
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = replyText,
+                        onValueChange = { replyText = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .focusRequester(replyFocusRequester),
+                        placeholder = { Text("پاسخ سریع...") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(20.dp),
+                        textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            if (replyText.isNotBlank()) {
+                                onSendReply(replyText)
+                                replyText = ""
                             }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
+                        })
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    FilledIconButton(
+                        onClick = {
+                            if (replyText.isNotBlank()) {
+                                onSendReply(replyText)
+                                replyText = ""
+                            }
+                        },
+                        enabled = replyText.isNotBlank()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "ارسال پاسخ")
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // ---- ردیفِ دکمه‌های اکشن ----
                 Row(
@@ -210,7 +235,7 @@ fun QuickReplyPopupScreen(
                                 icon = action.icon,
                                 onClick = {
                                     if (isReplyAction) {
-                                        replyMode = !replyMode
+                                        replyFocusRequester.requestFocus()
                                     } else {
                                         action.onClick()
                                     }
