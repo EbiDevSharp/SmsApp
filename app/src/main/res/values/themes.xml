@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.SmsApp" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+        تمِ اختصاصیِ QuickReplyPopupActivity - پس‌زمینه کاملاً شفافه تا صفحه‌ی واقعی
+        (یا صفحه‌قفل) پشتِ کارتِ پاپ‌آپِ Compose دیده بشه، دقیقاً هم‌قاعده‌ی الگوی
+        نوتیفِ تماسِ ورودی. خودِ چیدمان/گردیِ کارت از داخلِ QuickReplyPopupScreen میاد.
+    -->
+    <style name="Theme.SmsApp.Popup" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
 </resources>

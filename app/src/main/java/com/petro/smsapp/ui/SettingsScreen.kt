@@ -254,6 +254,22 @@ fun SettingsScreen(onOpenNotificationActions: () -> Unit, onMenuClick: () -> Uni
             )
             Divider()
 
+            // پیامکِ تازه‌رسیده به‌جای نوتیفِ معمولی، با یه پاپ‌آپِ روی صفحه (شبیهِ
+            // نوتیفِ تماسِ ورودی) نشون داده بشه - از همون دکمه‌های بالا استفاده می‌کنه
+            ListItem(
+                headlineContent = { Text("پاپ‌آپِ پیامک روی صفحه") },
+                supportingContent = {
+                    Text("به‌جای نوتیفِ معمولی، پیامکِ تازه‌رسیده یه پاپ‌آپ روی صفحه (حتی صفحه‌قفل) نشون بده - دکمه‌هاش همون دکمه‌های نوتیفیکیشن بالان")
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.popupInsteadOfNotificationEnabled,
+                        onCheckedChange = { enabled -> AppSettings.setPopupInsteadOfNotificationEnabled(context, enabled) }
+                    )
+                }
+            )
+            Divider()
+
             // حداکثر تعداد مکالمه‌ای که میشه هم‌زمان توی لیست اصلی پین کرد (پین‌کردنِ خودِ
             // مکالمه از منوی «انتخاب چندتایی» توی لیست اصلی انجام میشه، اینجا فقط سقفشه)
             ListItem(

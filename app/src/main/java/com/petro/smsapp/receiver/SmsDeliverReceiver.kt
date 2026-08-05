@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
+import com.petro.smsapp.QuickReplyPopupActivity
 import com.petro.smsapp.R
 import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
@@ -112,7 +113,68 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         // استفاده میشه، پس کوئریِ اضافه‌ای به Contacts Provider زده نمیشه.
         val contactPhotoUri = ContactsCache.getPhotoUri(context, sender)
 
-        showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
+        // اگه کاربر از تنظیمات «پاپ‌آپِ پیامک روی صفحه» رو فعال کرده باشه، به‌جای
+        // نوتیفِ کاملِ اکشن‌دار، یه نوتیفِ حداقلی با fullScreenIntent می‌سازیم که
+        // QuickReplyPopupActivity رو مستقیم روی صفحه (حتی صفحه‌قفل) باز می‌کنه.
+        // خودِ دکمه‌ها/اکشن‌ها داخلِ همون پاپ‌آپ (Compose) پیاده‌سازی شدن، نه اینجا.
+        if (AppSettings.isPopupInsteadOfNotificationEnabled(context)) {
+            showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = System.currentTimeMillis())
+        } else {
+            showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
+        }
+    }
+
+    /**
+     * یه نوتیفِ حداقلی (فقط برای اینکه fullScreenIntent مجاز باشه به اجرا دربیاد) که
+     * به‌جای نمایشِ خودش، مستقیم QuickReplyPopupActivity رو باز می‌کنه. contentIntent
+     * هم به همون اکتیویتی اشاره می‌کنه تا اگه heads-up توسطِ سیستم به‌جای پاپ‌آپِ
+     * تمام‌صفحه نشون داده شد (مثلاً وقتی گوشی درحالِ استفاده‌ست)، تپ روی خودِ نوتیف هم
+     * بازش کنه.
+     */
+    private fun showFullScreenPopupNotification(
+        context: Context,
+        sender: String,
+        displayName: String,
+        body: String,
+        threadId: Long,
+        messageId: Long,
+        receivedAtMillis: Long
+    ) {
+        val channelId = "sms_channel"
+        val notificationId = sender.hashCode()
+
+        val popupIntent = Intent(context, QuickReplyPopupActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_USER_ACTION
+            putExtra(QuickReplyPopupActivity.EXTRA_THREAD_ID, threadId)
+            putExtra(QuickReplyPopupActivity.EXTRA_MESSAGE_ID, messageId)
+            putExtra(QuickReplyPopupActivity.EXTRA_ADDRESS, sender)
+            putExtra(QuickReplyPopupActivity.EXTRA_BODY, body)
+            putExtra(QuickReplyPopupActivity.EXTRA_DATE, receivedAtMillis)
+            putExtra(QuickReplyPopupActivity.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val popupPendingIntent = PendingIntent.getActivity(
+            context, notificationId, popupIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_message)
+            .setContentTitle(displayName)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(popupPendingIntent)
+            .setFullScreenIntent(popupPendingIntent, true)
+            .build()
+
+        NotificationManagerCompat.from(context).apply {
+            try {
+                notify(notificationId, notification)
+            } catch (e: SecurityException) {
+                // پرمیشن نوتیفیکیشن داده نشده
+            }
+        }
     }
 
     private fun showNotification(

@@ -17,6 +17,10 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- بعد از ریستارت گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار دوباره ثبت بشن -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- برای اینکه پاپ‌آپِ پیامکِ تازه‌رسیده (QuickReplyPopupActivity) بتونه با
+         fullScreenIntent مستقیم روی صفحه/صفحه‌قفل باز بشه (وقتی کاربر از تنظیمات
+         فعالش کرده باشه) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-feature
         android:name="android.hardware.telephony"
         android:required="true" />
@@ -52,6 +56,18 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- پاپ‌آپِ پیامکِ تازه‌رسیده روی صفحه/صفحه‌قفل - فقط از داخلِ خودِ اپ
+             (fullScreenIntentِ SmsDeliverReceiver) باز میشه، نه از بیرون -->
+        <activity
+            android:name=".QuickReplyPopupActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SmsApp.Popup" />
 
         <!-- دریافت پیامک‌های ورودی - اجباری برای اپ پیش‌فرض -->
         <receiver

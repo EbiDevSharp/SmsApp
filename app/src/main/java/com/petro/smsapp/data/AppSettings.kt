@@ -45,6 +45,8 @@ object AppSettings {
     private const val KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME = "swipe_left_to_right_action"
     private const val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME = "swipe_delete_requires_confirmation"
     private const val KEY_ALPHABET_INDEX_BAR_ENABLED_NAME = "alphabet_index_bar_enabled"
+    // جدید: نمایشِ پاپ‌آپِ روی صفحه به‌جای نوتیفِ معمولی برای پیامکِ تازه‌رسیده
+    private const val KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME = "popup_instead_of_notification_enabled"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -59,6 +61,7 @@ object AppSettings {
     private val KEY_SWIPE_LEFT_TO_RIGHT_ACTION = stringPreferencesKey(KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME)
     private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
     private val KEY_ALPHABET_INDEX_BAR_ENABLED = booleanPreferencesKey(KEY_ALPHABET_INDEX_BAR_ENABLED_NAME)
+    private val KEY_POPUP_INSTEAD_OF_NOTIFICATION = booleanPreferencesKey(KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME)
 
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
 
@@ -100,7 +103,9 @@ object AppSettings {
         val swipeRightToLeftAction: SwipeAction = DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION,
         val swipeLeftToRightAction: SwipeAction = DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION,
         val swipeDeleteRequiresConfirmation: Boolean = true,
-        val alphabetIndexBarEnabled: Boolean = true
+        val alphabetIndexBarEnabled: Boolean = true,
+        // جدید: به‌جای نوتیفِ معمولی، پیامکِ تازه‌رسیده با یه پاپ‌آپِ روی صفحه نشون داده بشه
+        val popupInsteadOfNotificationEnabled: Boolean = false
     )
 
     private val _state = MutableStateFlow(State())
@@ -132,7 +137,8 @@ object AppSettings {
                         swipeRightToLeftAction = SwipeAction.fromId(prefs[KEY_SWIPE_RIGHT_TO_LEFT_ACTION], DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION),
                         swipeLeftToRightAction = SwipeAction.fromId(prefs[KEY_SWIPE_LEFT_TO_RIGHT_ACTION], DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION),
                         swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true,
-                        alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true
+                        alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true,
+                        popupInsteadOfNotificationEnabled = prefs[KEY_POPUP_INSTEAD_OF_NOTIFICATION] ?: false
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -192,6 +198,11 @@ object AppSettings {
     fun isAlphabetIndexBarEnabled(context: Context): Boolean = _state.value.alphabetIndexBarEnabled
     fun setAlphabetIndexBarEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_ALPHABET_INDEX_BAR_ENABLED] = enabled }
+
+    /** پیامکِ تازه‌رسیده به‌جای نوتیفِ معمولی، با پاپ‌آپِ روی صفحه (QuickReplyPopupActivity) نشون داده بشه */
+    fun isPopupInsteadOfNotificationEnabled(context: Context): Boolean = _state.value.popupInsteadOfNotificationEnabled
+    fun setPopupInsteadOfNotificationEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_POPUP_INSTEAD_OF_NOTIFICATION] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {
