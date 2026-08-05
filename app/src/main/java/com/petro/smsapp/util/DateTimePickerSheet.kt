@@ -72,7 +72,11 @@ fun DateTimePickerSheet(
     title: String,
     initialMillis: Long,
     onConfirm: (Long) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // وقتی false باشه، انتخابِ زمانِ گذشته مجازه و دکمه‌ی تأیید غیرفعال/هشدار نمی‌شه.
+    // پیش‌فرض true چون این شیت اصلی‌ترین کاربردش زمان‌بندیِ ارسالِ پیامه که باید تو آینده باشه؛
+    // ولی برای مواردی مثل فیلترِ بازه‌ی زمانیِ گذشته (که ذاتاً گذشته انتخاب می‌شه) باید false پاس بشه.
+    restrictPast: Boolean = true
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val settings by AppSettings.state.collectAsState()
@@ -140,7 +144,7 @@ fun DateTimePickerSheet(
     }
 
     val selectedMillis = millisFor(year, month, day, hour, minute)
-    val isPast = selectedMillis <= System.currentTimeMillis()
+    val isPast = restrictPast && selectedMillis <= System.currentTimeMillis()
 
     fun applyQuickTab(tab: QuickTab) {
         quickTab = tab

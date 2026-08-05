@@ -229,7 +229,8 @@ fun ThreadScreen(
 
     val currentEditingScheduled = editingScheduledMessage
     if (currentEditingScheduled != null) {
-        DateTimePickerDialog(
+        DateTimePickerSheet(
+            title = "ویرایش زمان ارسال",
             initialMillis = currentEditingScheduled.scheduledAt,
             onConfirm = {
                 onUpdateScheduledTime(currentEditingScheduled.id, it)

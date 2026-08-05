@@ -40,6 +40,9 @@ import com.petro.smsapp.data.TimeFilterSelection
 import com.petro.smsapp.data.TimeRangePreset
 import com.petro.smsapp.util.DateFormatter
 
+/** مراحلِ انتخابِ بازه‌ی دلخواه با DateTimePickerSheet: اول «از تاریخ»، بعد «تا تاریخ» */
+private enum class RangePickerStage { FROM, TO }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DrawerFilterAccordion(
@@ -53,25 +56,52 @@ fun DrawerFilterAccordion(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var showCustomTimeDialog by remember { mutableStateOf(false) }
+    var rangePickerStage by remember { mutableStateOf<RangePickerStage?>(null) }
+    var pendingFromMillis by remember { mutableStateOf<Long?>(null) }
     val chevronRotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "drawer_filter_chevron")
 
     val activeCount = selectedIds.size +
             (if (timeSelection != TimeFilterSelection.None) 1 else 0) +
             (if (sortType != null) 1 else 0)
 
-    if (showCustomTimeDialog) {
-        val existingCustom = (timeSelection as? TimeFilterSelection.Custom)?.range
-        val defaultFrom = System.currentTimeMillis() - 6L * 24 * 60 * 60 * 1000
-        CustomTimeRangeDialog(
-            initialFromMillis = existingCustom?.fromMillis ?: defaultFrom,
-            initialToMillis = existingCustom?.toMillis ?: System.currentTimeMillis(),
-            onConfirm = { from, to ->
-                onTimeSelectionChange(TimeFilterSelection.Custom(CustomTimeRange(from, to)))
-                showCustomTimeDialog = false
-            },
-            onDismiss = { showCustomTimeDialog = false }
-        )
+    val existingCustom = (timeSelection as? TimeFilterSelection.Custom)?.range
+    val defaultFrom = System.currentTimeMillis() - 6L * 24 * 60 * 60 * 1000
+
+    when (rangePickerStage) {
+        RangePickerStage.FROM -> {
+            DateTimePickerSheet(
+                title = "از تاریخ",
+                initialMillis = existingCustom?.fromMillis ?: defaultFrom,
+                restrictPast = false,
+                onConfirm = { from ->
+                    pendingFromMillis = from
+                    rangePickerStage = RangePickerStage.TO
+                },
+                onDismiss = { rangePickerStage = null }
+            )
+        }
+        RangePickerStage.TO -> {
+            DateTimePickerSheet(
+                title = "تا تاریخ",
+                initialMillis = existingCustom?.toMillis ?: System.currentTimeMillis(),
+                restrictPast = false,
+                onConfirm = { to ->
+                    val from = pendingFromMillis
+                    if (from != null) {
+                        // اگه کاربر «تا» رو قبل از «از» انتخاب کرد، جابه‌جاشون می‌کنیم تا بازه معتبر بمونه
+                        val range = if (from <= to) CustomTimeRange(from, to) else CustomTimeRange(to, from)
+                        onTimeSelectionChange(TimeFilterSelection.Custom(range))
+                    }
+                    rangePickerStage = null
+                    pendingFromMillis = null
+                },
+                onDismiss = {
+                    rangePickerStage = null
+                    pendingFromMillis = null
+                }
+            )
+        }
+        null -> {}
     }
 
     Surface(
@@ -176,7 +206,7 @@ fun DrawerFilterAccordion(
                                 "بازه‌ی دلخواه"
                             },
                             selected = customSelection != null,
-                            onClick = { showCustomTimeDialog = true },
+                            onClick = { rangePickerStage = RangePickerStage.FROM },
                             trailingIcon = if (customSelection != null) Icons.Filled.Close else null,
                             onTrailingClick = if (customSelection != null) {
                                 { onTimeSelectionChange(TimeFilterSelection.None) }
