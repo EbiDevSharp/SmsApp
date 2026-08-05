@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -262,15 +263,36 @@ private fun IconFilterChip(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp)
-    )
-}
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // خط سمت چپ
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            thickness = 1.dp
+        )
 
+        // متن در وسط
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+
+        // خط سمت راست
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            thickness = 1.dp
+        )
+    }
+}
 private fun iconForFilter(type: ConversationFilterType): ImageVector = when (type) {
     ConversationFilterType.UNREAD -> Icons.Filled.MarkChatUnread
     ConversationFilterType.PINNED -> Icons.Filled.PushPin
@@ -280,7 +302,7 @@ private fun iconForFilter(type: ConversationFilterType): ImageVector = when (typ
 }
 
 private fun iconForTimePreset(preset: TimeRangePreset): ImageVector = when (preset.ordinal) {
-    0 -> Icons.Filled.Today
+    0 -> Icons.Filled.Filter1
     1 -> Icons.Filled.History
     2 -> Icons.Filled.DateRange
     3 -> Icons.Filled.CalendarMonth
