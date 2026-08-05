@@ -13,53 +13,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -72,6 +42,7 @@ import com.petro.smsapp.data.backup.BackupCategory
 import com.petro.smsapp.data.backup.BackupModule
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onOpenNotificationActions: () -> Unit,
@@ -115,10 +86,10 @@ fun SettingsScreen(
         scope.launch {
             BackupModule.export(context, selectedCategories, uri)
                 .onSuccess {
-                    Toast.makeText(context, "بک‌آپ ذخیره شد", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "بک‌آپ با موفقیت ذخیره شد", Toast.LENGTH_SHORT).show()
                 }
                 .onFailure {
-                    Toast.makeText(context, "خطا در ذخیره", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "خطا در ذخیره فایل", Toast.LENGTH_SHORT).show()
                 }
         }
     }
@@ -134,7 +105,7 @@ fun SettingsScreen(
                     Toast.makeText(context, "بازیابی شد: $names", Toast.LENGTH_LONG).show()
                 }
                 .onFailure {
-                    Toast.makeText(context, "خطا در بازیابی", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "خطا در بازیابی داده‌ها", Toast.LENGTH_SHORT).show()
                 }
         }
     }
@@ -169,7 +140,7 @@ fun SettingsScreen(
     if (showBackupDialog) {
         AlertDialog(
             onDismissRequest = { showBackupDialog = false },
-            title = { Text("انتخاب بخش‌ها") },
+            title = { Text("انتخاب بخش‌های بک‌آپ") },
             text = {
                 Column {
                     BackupCategory.entries.forEach { cat ->
@@ -195,7 +166,7 @@ fun SettingsScreen(
                                 }
                             )
                             Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text(cat.title)
+                                Text(cat.title, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     cat.description,
                                     style = MaterialTheme.typography.bodySmall,
@@ -207,16 +178,16 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         if (selectedCategories.isEmpty()) {
                             Toast.makeText(context, "حداقل یک بخش انتخاب کن", Toast.LENGTH_SHORT).show()
-                            return@TextButton
+                            return@Button
                         }
                         showBackupDialog = false
                         exportLauncher.launch(BackupModule.suggestedFileName())
                     }
-                ) { Text("ذخیره") }
+                ) { Text("ذخیره بک‌آپ") }
             },
             dismissButton = {
                 TextButton(onClick = { showBackupDialog = false }) { Text("انصراف") }
@@ -227,7 +198,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("تنظیمات") },
+                title = { Text("تنظیمات", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onMenuClick) {
                         Icon(Icons.Filled.Menu, contentDescription = "منو")
@@ -242,12 +213,14 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // بخش ظاهر
             AccordionSection(
-                title = "ظاهر",
-                expanded = expandedConversations,
-                onToggle = { expandedConversations = !expandedConversations }
+                title = "ظاهر و پوسته",
+                icon = Icons.Outlined.Palette,
+                expanded = expandedAppearance,
+                onToggle = { expandedAppearance = !expandedAppearance }
             ) {
                 SettingRow(
                     title = "تم برنامه",
@@ -289,8 +262,10 @@ fun SettingsScreen(
                 }
             }
 
+            // لیست مکالمات
             AccordionSection(
                 title = "لیست مکالمات",
+                icon = Icons.Outlined.Forum,
                 expanded = expandedConversations,
                 onToggle = { expandedConversations = !expandedConversations }
             ) {
@@ -340,8 +315,10 @@ fun SettingsScreen(
                 )
             }
 
+            // پیام‌رسانی
             AccordionSection(
                 title = "پیام‌رسانی",
+                icon = Icons.Outlined.MarkChatUnread,
                 expanded = expandedMessaging,
                 onToggle = { expandedMessaging = !expandedMessaging }
             ) {
@@ -361,8 +338,10 @@ fun SettingsScreen(
                 )
             }
 
+            // اعلان‌ها
             AccordionSection(
                 title = "اعلان‌ها",
+                icon = Icons.Outlined.Notifications,
                 expanded = expandedNotifications,
                 onToggle = { expandedNotifications = !expandedNotifications }
             ) {
@@ -390,29 +369,35 @@ fun SettingsScreen(
                         headlineContent = {
                             Text(
                                 "پرمیشن «نمایش روی برنامه‌های دیگر» لازمه",
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold
                             )
                         },
                         supportingContent = {
                             Text("بدون این پرمیشن پاپ‌آپ فقط روی صفحه‌قفل میاد. برای نمایش همیشه این پرمیشن رو بده.")
                         },
                         trailingContent = {
-                            TextButton(onClick = {
-                                context.startActivity(
-                                    Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${context.packageName}")
+                            Button(
+                                onClick = {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
                                     )
-                                )
-                            }) { Text("دادن پرمیشن") }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) { Text("اعطا") }
                         },
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
                     )
                 }
             }
 
+            // عمومی
             AccordionSection(
                 title = "عمومی",
+                icon = Icons.Outlined.Tune,
                 expanded = expandedGeneral,
                 onToggle = { expandedGeneral = !expandedGeneral }
             ) {
@@ -423,8 +408,10 @@ fun SettingsScreen(
                 )
             }
 
+            // پشتیبان‌گیری
             AccordionSection(
-                title = "پشتیبان‌گیری",
+                title = "پشتیبان‌گیری و بازیابی",
+                icon = Icons.Outlined.Backup,
                 expanded = expandedBackup,
                 onToggle = { expandedBackup = !expandedBackup }
             ) {
@@ -439,13 +426,23 @@ fun SettingsScreen(
                             selectedCategories = BackupCategory.entries.toSet()
                             showBackupDialog = true
                         },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("بک‌آپ") }
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Filled.FileUpload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("بک‌آپ")
+                    }
 
                     OutlinedButton(
                         onClick = { importLauncher.launch(arrayOf("application/json")) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("بازیابی") }
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Filled.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("بازیابی")
+                    }
                 }
             }
         }
@@ -455,34 +452,43 @@ fun SettingsScreen(
 @Composable
 private fun AccordionSection(
     title: String,
+    icon: ImageVector,
     expanded: Boolean,
     onToggle: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggle)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 Icon(
                     imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = null,
@@ -497,8 +503,9 @@ private fun AccordionSection(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
                         .background(MaterialTheme.colorScheme.surface)
-                        .padding(bottom = 4.dp)
+                        .padding(bottom = 8.dp)
                 ) {
                     content()
                 }
@@ -510,9 +517,9 @@ private fun AccordionSection(
 @Composable
 private fun ThinDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
     )
 }
 
@@ -525,13 +532,13 @@ private fun SettingRow(
     onClick: (() -> Unit)? = null
 ) {
     ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = subtitle?.let { { Text(it) } },
+        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
+        supportingContent = subtitle?.let { { Text(it, color = MaterialTheme.colorScheme.primary) } },
         trailingContent = info?.let {
             {
                 IconButton(onClick = { onInfo?.invoke(it) }) {
                     Icon(
-                        Icons.Filled.Info,
+                        Icons.Outlined.Info,
                         contentDescription = "توضیحات",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -552,12 +559,12 @@ private fun SwitchRow(
     onInfo: (String) -> Unit
 ) {
     ListItem(
-        headlineContent = { Text(title) },
+        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { onInfo(info) }) {
                     Icon(
-                        Icons.Filled.Info,
+                        Icons.Outlined.Info,
                         contentDescription = "توضیحات",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -592,7 +599,7 @@ private fun SwipeActionPickerDialog(
                                     onDismiss()
                                 }
                             )
-                            .padding(vertical = 6.dp),
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
@@ -622,8 +629,8 @@ private fun PinCountStepper(value: Int, onValueChange: (Int) -> Unit) {
         }
         Text(
             text = value.toString(),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(horizontal = 4.dp)
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 8.dp)
         )
         IconButton(onClick = { if (value < 20) onValueChange(value + 1) }) {
             Icon(Icons.Filled.Add, contentDescription = "زیاد کردن")
@@ -637,7 +644,7 @@ private fun CalendarOptionRow(label: String, selected: Boolean, onSelect: () -> 
         modifier = Modifier
             .fillMaxWidth()
             .selectable(selected = selected, onClick = onSelect)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(selected = selected, onClick = onSelect)
