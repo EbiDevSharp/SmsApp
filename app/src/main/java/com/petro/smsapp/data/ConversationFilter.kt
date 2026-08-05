@@ -21,7 +21,9 @@ enum class ConversationFilterType(val id: String, val label: String) {
     // مربوط به سنجاق‌شدنِ خودِ مکالمه از لیستِ اصلیه
     HAS_PINNED_MESSAGE("has_pinned_message", "سنجاق‌شده"),
     // چت‌هایی که حداقل یه پیامِ فیوریت‌شده (علاقه‌مندی) داخلشون هست
-    HAS_FAVORITE_MESSAGE("has_favorite_message", "علاقه‌مند");
+    HAS_FAVORITE_MESSAGE("has_favorite_message", "علاقه‌مند"),
+    // چت‌هایی که یه پیش‌نویسِ ذخیره‌شده دارن (Conversation.isDraft)
+    DRAFT("draft", "پیش‌نویس");
 
     /**
      * این مکالمه با این فیلتر مچ میشه یا نه. فیلترهایی که فقط به فیلدهای خودِ Conversation
@@ -36,6 +38,7 @@ enum class ConversationFilterType(val id: String, val label: String) {
             NON_CONTACT -> conversation.address.isNotBlank() && conversation.address == conversation.displayName
             HAS_PINNED_MESSAGE -> context.pinnedMessageThreadIds.contains(conversation.threadId)
             HAS_FAVORITE_MESSAGE -> context.favoriteThreadIds.contains(conversation.threadId)
+            DRAFT -> conversation.isDraft
         }
 
     companion object {

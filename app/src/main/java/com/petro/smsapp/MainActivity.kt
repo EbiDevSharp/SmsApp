@@ -462,6 +462,11 @@ fun AppNavigation(
                     },
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onSearchClick = { navController.navigate("search") },
+                    hasActiveFilter = selectedFilterIds.isNotEmpty() || timeSelection != TimeFilterSelection.None,
+                    onClearFilters = {
+                        selectedFilterIds = emptySet()
+                        timeSelection = TimeFilterSelection.None
+                    },
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
                     onAddToGroupClick = { selectedConversations -> viewModel.requestAddConversationsToGroup(selectedConversations) },
                     onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -75,6 +76,8 @@ fun ConversationListScreen(
     onComposeClick: () -> Unit,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit = {},
+    hasActiveFilter: Boolean = false,
+    onClearFilters: () -> Unit = {},
     onDeleteConversations: (Set<Long>) -> Unit,
     onAddToGroupClick: (List<Conversation>) -> Unit,
     onMakeConversationsPrivate: (List<Conversation>) -> Unit,
@@ -251,6 +254,20 @@ fun ConversationListScreen(
                         }
                     },
                     actions = {
+                        if (hasActiveFilter) {
+                            IconButton(onClick = onClearFilters) {
+                                Box {
+                                    Icon(Icons.Filled.FilterAlt, contentDescription = "لیست فیلتر شده - برای خارج شدن از فیلتر بزنید")
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .align(Alignment.TopEnd)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.error)
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = onSearchClick) {
                             Icon(Icons.Filled.Search, contentDescription = "جستجو")
                         }
