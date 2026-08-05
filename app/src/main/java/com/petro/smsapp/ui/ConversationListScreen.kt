@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -73,6 +74,7 @@ fun ConversationListScreen(
     onConversationClick: (Conversation) -> Unit,
     onComposeClick: () -> Unit,
     onMenuClick: () -> Unit,
+    onSearchClick: () -> Unit = {},
     onDeleteConversations: (Set<Long>) -> Unit,
     onAddToGroupClick: (List<Conversation>) -> Unit,
     onMakeConversationsPrivate: (List<Conversation>) -> Unit,
@@ -246,6 +248,11 @@ fun ConversationListScreen(
                     navigationIcon = {
                         IconButton(onClick = onMenuClick) {
                             Icon(Icons.Filled.Menu, contentDescription = "منو")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = onSearchClick) {
+                            Icon(Icons.Filled.Search, contentDescription = "جستجو")
                         }
                     }
                 )

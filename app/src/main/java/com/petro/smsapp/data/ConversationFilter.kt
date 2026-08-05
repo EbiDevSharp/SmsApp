@@ -16,12 +16,12 @@ enum class ConversationFilterType(val id: String, val label: String) {
     PINNED("pinned", "سنجاق‌شده"),
     // چت‌هایی که طرفِ مکالمه‌شون تو مخاطبینِ گوشی ذخیره نشده - یعنی اسمِ نمایشی همون
     // خودِ آدرس/شماره‌ست (address == displayName)، نه یه اسمِ واقعیِ گرفته‌شده از ContactsCache
-    NON_CONTACT("non_contact", "چت‌های غیر مخاطب"),
+    NON_CONTACT("non_contact", "غیر مخاطب"),
     // چت‌هایی که حداقل یه پیام (نه خودِ چت) داخلشون سنجاق شده - جدا از فیلترِ PINNED که
     // مربوط به سنجاق‌شدنِ خودِ مکالمه از لیستِ اصلیه
-    HAS_PINNED_MESSAGE("has_pinned_message", "دارای پیام سنجاق‌شده"),
+    HAS_PINNED_MESSAGE("has_pinned_message", "سنجاق‌شده"),
     // چت‌هایی که حداقل یه پیامِ فیوریت‌شده (علاقه‌مندی) داخلشون هست
-    HAS_FAVORITE_MESSAGE("has_favorite_message", "دارای پیام علاقه‌مند");
+    HAS_FAVORITE_MESSAGE("has_favorite_message", "علاقه‌مند");
 
     /**
      * این مکالمه با این فیلتر مچ میشه یا نه. فیلترهایی که فقط به فیلدهای خودِ Conversation

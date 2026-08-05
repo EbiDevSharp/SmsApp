@@ -61,6 +61,7 @@ import com.petro.smsapp.ui.PrivateNumbersScreen
 import com.petro.smsapp.ui.PrivatePinScreen
 import com.petro.smsapp.ui.PrivatePinSettingsScreen
 import com.petro.smsapp.ui.PrivateScreen
+import com.petro.smsapp.ui.SearchScreen
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.ui.NotificationActionsSettingsScreen
 import com.petro.smsapp.ui.SettingsScreen
@@ -460,6 +461,7 @@ fun AppNavigation(
                         navController.navigate("new")
                     },
                     onMenuClick = { scope.launch { drawerState.open() } },
+                    onSearchClick = { navController.navigate("search") },
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
                     onAddToGroupClick = { selectedConversations -> viewModel.requestAddConversationsToGroup(selectedConversations) },
                     onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },
@@ -471,6 +473,21 @@ fun AppNavigation(
                     alphabetIndexBarEnabled = appSettings.alphabetIndexBarEnabled,
                     onMarkThreadRead = { threadId -> viewModel.markThreadReadFromSwipe(threadId) },
                     onMarkThreadUnread = { threadId -> viewModel.markThreadUnreadFromSwipe(threadId) }
+                )
+            }
+            composable("search") {
+                SearchScreen(
+                    conversations = conversations,
+                    pinnedMessageThreadIds = pinnedMessageThreadIds,
+                    favoriteThreadIds = favoriteThreadIds,
+                    showContactNumberEnabled = appSettings.showContactNumberInListEnabled,
+                    onBack = { navController.popBackStack() },
+                    onConversationClick = { conversation ->
+                        if (conversation.address.isNotBlank()) {
+                            viewModel.loadThread(conversation.threadId)
+                            navController.navigate("thread/${conversation.threadId}/${Uri.encode(conversation.address)}/${Uri.encode(conversation.displayName)}")
+                        }
+                    }
                 )
             }
             composable("new") {
