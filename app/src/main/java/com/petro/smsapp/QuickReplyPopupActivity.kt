@@ -131,16 +131,22 @@ class QuickReplyPopupActivity : ComponentActivity() {
         // نگه داشته میشه - نیازی به queueCount/سوییچ نیست
         val messages = remember { mutableStateListOf(MessageEntry(text = body, isOutgoing = false, timestampMillis = date)) }
         var replyText by remember { mutableStateOf("") }
+        var historyLoaded by remember { mutableStateOf(false) }
 
-        // تاریخچه‌ی قبلیِ همین گفتگو - دقیقاً هم‌قاعده‌ی نسخه‌ی Overlay Service
-        LaunchedEffect(threadId) {
-            val history = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
-            val historyEntries = history
-                .filter { it.id != messageId }
-                .takeLast(5)
-                .map { MessageEntry(text = it.body, isOutgoing = it.isOutgoing, timestampMillis = it.date) }
-            if (historyEntries.isNotEmpty()) {
-                messages.addAll(0, historyEntries)
+        // تاریخچه‌ی قبلیِ همین گفتگو - عمداً خودکار نه، فقط با تپِ کاربر رویِ دکمه‌ی
+        // «نمایشِ پیام‌های قبلی» (دقیقاً هم‌قاعده‌ی نسخه‌ی Overlay Service)
+        fun loadHistory() {
+            if (historyLoaded) return
+            historyLoaded = true
+            lifecycleScope.launch {
+                val history = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
+                val historyEntries = history
+                    .filter { it.id != messageId }
+                    .takeLast(5)
+                    .map { MessageEntry(text = it.body, isOutgoing = it.isOutgoing, timestampMillis = it.date) }
+                if (historyEntries.isNotEmpty()) {
+                    messages.addAll(0, historyEntries)
+                }
             }
         }
 
@@ -313,6 +319,8 @@ class QuickReplyPopupActivity : ComponentActivity() {
                 receivedAtMillis = date,
                 primaryActions = primary,
                 overflowActions = overflow,
+                showHistoryButton = !historyLoaded,
+                onLoadHistory = { loadHistory() },
                 onOpenThread = { openThread() },
                 onCallSender = { callSender() },
                 onSendReply = { text -> sendReply(text) },

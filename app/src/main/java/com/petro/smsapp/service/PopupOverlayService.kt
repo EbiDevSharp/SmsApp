@@ -127,6 +127,7 @@ class PopupOverlayService :
         val messages: SnapshotStateList<MessageEntry> = mutableStateListOf()
         var replyText by mutableStateOf("")
         var lastMessageAtMillis by mutableStateOf(0L)
+        var historyLoaded by mutableStateOf(false)
     }
 
     // صفِ مکالمه‌ها - اولیش همون چیزیه که الان روی پاپ‌آپ نشون داده میشه
@@ -186,7 +187,6 @@ class PopupOverlayService :
 
         val wasEmpty = sessions.isEmpty()
         sessions.add(newSession)
-        loadHistoryForSession(newSession)
 
         if (wasEmpty) {
             // اولین مکالمه‌ست - تازه اینجاست که واقعاً باید پنجره ساخته بشه
@@ -199,13 +199,16 @@ class PopupOverlayService :
 
     /**
      * تاریخچه‌ی قبلیِ همین مکالمه (از خودِ اپ، نه فقط پیام‌هایی که تا الان تو همین
-     * پاپ‌آپ رد و بدل شده) رو از دیتابیس می‌خونه و جلوی پیامِ تازه‌رسیده اضافه می‌کنه؛
-     * تا کاربر بدونِ باز کردنِ کلِ اپ، سیاق‌وسباقِ آخرین پیام‌های این گفتگو رو هم تو
-     * بلوکِ پیام‌های پاپ‌آپ ببینه. چون خودِ کوئری روی IO ئه و ممکنه چند صد میلی‌ثانیه
-     * طول بکشه، پاپ‌آپ منتظرش نمی‌مونه - همون پیامِ تازه فوراً نشون داده میشه و
-     * تاریخچه هروقت رسید جلوش اضافه میشه.
+     * پاپ‌آپ رد و بدل شده) رو از دیتابیس می‌خونه و جلوی پیامِ تازه‌رسیده اضافه می‌کنه.
+     *
+     * عمداً خودکار صدا زده نمیشه - فقط با تپِ کاربر رویِ دکمه‌ی «نمایشِ پیام‌های
+     * قبلی» تو خودِ QuickReplyPopupScreen. اینجوری پاپ‌آپ همیشه فوری (بدونِ منتظر
+     * موندن برایِ یه کوئریِ IO) ظاهر میشه، و کوئری فقط وقتی واقعاً لازمه اجرا میشه.
      */
     private fun loadHistoryForSession(session: Session) {
+        if (session.historyLoaded) return
+        session.historyLoaded = true
+
         lifecycleScope.launch {
             val history = withContext(Dispatchers.IO) {
                 repository.getMessagesForThread(session.threadId)
@@ -471,6 +474,8 @@ class PopupOverlayService :
             currentSessionPosition = activeIndex + 1,
             onSwitchToPrevious = { switchToPreviousSession() },
             onSwitchToNext = { switchToNextSession() },
+            showHistoryButton = !session.historyLoaded,
+            onLoadHistory = { loadHistoryForSession(session) },
             onOpenThread = { openThread() },
             onCallSender = { callSender() },
             onSendReply = { text -> sendReply(text) },

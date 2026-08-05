@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
@@ -102,6 +103,11 @@ fun QuickReplyPopupScreen(
     currentSessionPosition: Int = 1,
     onSwitchToPrevious: () -> Unit = {},
     onSwitchToNext: () -> Unit = {},
+    // دکمه‌ی «نمایشِ پیام‌های قبلی» - فقط وقتی showHistoryButton=true نشون داده
+    // میشه (یعنی هنوز برای این مکالمه لود نشده)؛ زدنش onLoadHistory رو صدا می‌زنه
+    // و خودش بعدِ لود (چه نتیجه خالی چه پر) از طرفِ caller مخفی میشه.
+    showHistoryButton: Boolean = false,
+    onLoadHistory: () -> Unit = {},
     onOpenThread: () -> Unit,
     onCallSender: () -> Unit,
     onSendReply: (text: String) -> Unit,
@@ -263,6 +269,23 @@ fun QuickReplyPopupScreen(
 
                         IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Filled.Close, contentDescription = "بستن")
+                        }
+                    }
+
+                    // ---- دکمه‌ی «نمایشِ پیام‌های قبلی» - عمداً به‌جای لودِ خودکار، فقط
+                    // با تپِ کاربر تاریخچه‌ی این گفتگو از دیتابیس خونده میشه (تا پاپ‌آپ
+                    // بدونِ تاخیر/کوئریِ اضافه‌ی همیشگی ظاهر بشه) ----
+                    if (showHistoryButton) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            TextButton(onClick = onLoadHistory, modifier = Modifier.padding(top = 4.dp)) {
+                                Icon(
+                                    Icons.Filled.History,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("نمایشِ پیام‌های قبلی", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
 
