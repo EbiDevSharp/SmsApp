@@ -33,6 +33,7 @@ import com.petro.smsapp.data.FilterGroupSummary
 import com.petro.smsapp.data.NotificationActionType
 import com.petro.smsapp.data.SmsRepository
 import com.petro.smsapp.ui.GroupPickerSheet
+import com.petro.smsapp.ui.MessageEntry
 import com.petro.smsapp.ui.QuickReplyPopupAction
 import com.petro.smsapp.ui.QuickReplyPopupScreen
 import com.petro.smsapp.ui.SmsAppTheme
@@ -106,8 +107,8 @@ class QuickReplyPopupActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
             )
         }
     }
@@ -125,6 +126,23 @@ class QuickReplyPopupActivity : ComponentActivity() {
     ) {
         var visible by remember { mutableStateOf(true) }
         var groupPickerGroups by remember { mutableStateOf<List<FilterGroupSummary>?>(null) }
+        // این Activity (برخلافِ نسخه‌ی Overlay Service) فقط یه مکالمه رو در لحظه
+        // میزبانی می‌کنه، پس تاریخچه/پاسخِ درحالِ تایپ همینجا (به‌جای صفی از Sessionها)
+        // نگه داشته میشه - نیازی به queueCount/سوییچ نیست
+        val messages = remember { mutableStateListOf(MessageEntry(text = body, isOutgoing = false, timestampMillis = date)) }
+        var replyText by remember { mutableStateOf("") }
+
+        // تاریخچه‌ی قبلیِ همین گفتگو - دقیقاً هم‌قاعده‌ی نسخه‌ی Overlay Service
+        LaunchedEffect(threadId) {
+            val history = withContext(Dispatchers.IO) { repository.getMessagesForThread(threadId) }
+            val historyEntries = history
+                .filter { it.id != messageId }
+                .takeLast(5)
+                .map { MessageEntry(text = it.body, isOutgoing = it.isOutgoing, timestampMillis = it.date) }
+            if (historyEntries.isNotEmpty()) {
+                messages.addAll(0, historyEntries)
+            }
+        }
 
         fun closeSelf() {
             visible = false
@@ -168,10 +186,13 @@ class QuickReplyPopupActivity : ComponentActivity() {
         }
 
         fun sendReply(text: String) {
+            messages.add(MessageEntry(text = text, isOutgoing = true, timestampMillis = System.currentTimeMillis()))
             lifecycleScope.launch {
                 withContext(Dispatchers.IO) { repository.sendSms(address, text) }
                 DataChangeSignal.notifyChanged()
-                closeSelf()
+                // دیگه بعدِ فرستادنِ پاسخ پنجره بسته نمیشه - شاید کاربر بخواد دوباره
+                // پیام بده؛ QuickReplyPopupScreen خودش تاریخچه‌ی رد و بدل‌شده‌ها رو نشون
+                // میده. بستن فقط با دکمه‌ی × یا بقیه‌ی اکشن‌ها (باز کردن/حذف/...) اتفاق می‌افته
             }
         }
 
@@ -286,11 +307,14 @@ class QuickReplyPopupActivity : ComponentActivity() {
                 senderAddress = address,
                 isKnownContact = isKnownContact,
                 photoUri = photoUri,
-                messageBody = body,
+                messages = messages,
+                replyText = replyText,
+                onReplyTextChange = { replyText = it },
                 receivedAtMillis = date,
                 primaryActions = primary,
                 overflowActions = overflow,
                 onOpenThread = { openThread() },
+                onCallSender = { callSender() },
                 onSendReply = { text -> sendReply(text) },
                 onClose = { closeSelf() }
             )

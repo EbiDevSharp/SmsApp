@@ -21,8 +21,10 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -48,6 +50,7 @@ import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
 import com.petro.smsapp.data.SmsRepository
+import com.petro.smsapp.ui.MessageEntry
 import com.petro.smsapp.ui.QuickReplyPopupAction
 import com.petro.smsapp.ui.QuickReplyPopupScreen
 import com.petro.smsapp.ui.SmsAppTheme
@@ -74,6 +77,20 @@ import kotlinx.coroutines.withContext
  * چون این یه Service معمولیه نه یه Activity، برای میزبانیِ Compose باید خودمون
  * LifecycleOwner / ViewModelStoreOwner / SavedStateRegistryOwner رو دستی پیاده‌سازی
  * کنیم (چیزی که ComponentActivity به‌صورتِ رایگان میده).
+ *
+ * نکته‌ی مهم (رفعِ باگ): قبلاً هر پیامِ جدید - چه از همون مخاطبِ بازِ پاپ‌آپ، چه از یه
+ * مخاطبِ دیگه - باعث می‌شد پنجره کامل حذف و یه ComposeView کاملاً تازه ساخته بشه.
+ * چون کلِ state (پاسخِ درحالِ تایپ، تاریخچه‌ی پیام‌های همون گفتگو) داخلِ خودِ اون
+ * Composeای بود که نابود می‌شد، عملاً با هر پیامِ تازه از هر مخاطبی، پاپ‌آپ می‌بست و
+ * از نو با همون پیامِ جدید ظاهر می‌شد.
+ *
+ * الان به‌جاش یه صفِ [sessions] (یکی به‌ازای هر مخاطب) نگه داشته میشه که خارج از
+ * Composeای که نمایشش میده زندگی می‌کنه؛ خودِ پنجره فقط یه‌بار (وقتی صف از خالی به یه
+ * آیتم می‌رسه) ساخته میشه:
+ * - پیامِ جدید از همون مخاطبی که پاپ‌آپش الان بازه → فقط به تاریخچه‌ی همون Session
+ *   اضافه میشه، بدونِ اینکه پنجره یا پاسخِ درحالِ تایپ دست بخوره.
+ * - پیامِ جدید از یه مخاطبِ دیگه → یه Session تازه به صف اضافه میشه ولی پاپ‌آپِ فعلی
+ *   دست‌نخورده می‌مونه؛ کاربر با چیپِ «صف» بالای پاپ‌آپ می‌تونه بینشون سوییچ کنه.
  */
 class PopupOverlayService :
     Service(),
@@ -93,6 +110,29 @@ class PopupOverlayService :
     private var windowManager: WindowManager? = null
     private var overlayView: ComposeView? = null
 
+    /**
+     * یه گفتگوی درحالِ نمایش/انتظار توی پاپ‌آپ. همه‌ی فیلدهای قابلِ‌تغییرش state
+     * هستن تا Compose خودش با تغییرشون دوباره کامپوز بشه؛ چون Session بیرونِ خودِ
+     * Compose (توی خودِ Service) زندگی می‌کنه، عوض‌شدنِ محتوای این‌ها هرگز باعثِ
+     * ساخته‌شدنِ دوباره‌ی ComposeView نمیشه.
+     */
+    private class Session(
+        val threadId: Long,
+        val address: String,
+        var messageId: Long,
+        val displayName: String,
+        val photoUri: String?,
+        val isKnownContact: Boolean
+    ) {
+        val messages: SnapshotStateList<MessageEntry> = mutableStateListOf()
+        var replyText by mutableStateOf("")
+        var lastMessageAtMillis by mutableStateOf(0L)
+    }
+
+    // صفِ مکالمه‌ها - اولیش همون چیزیه که الان روی پاپ‌آپ نشون داده میشه
+    private val sessions = mutableStateListOf<Session>()
+    private var activeIndex by mutableStateOf(0)
+
     override fun onCreate() {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
@@ -111,19 +151,80 @@ class PopupOverlayService :
         val body = intent.getStringExtra(EXTRA_BODY) ?: ""
         val date = intent.getLongExtra(EXTRA_DATE, System.currentTimeMillis())
 
-        showOverlay(threadId, messageId, address, body, date)
+        handleIncomingMessage(threadId, messageId, address, body, date)
         return START_NOT_STICKY
     }
 
-    private fun showOverlay(threadId: Long, messageId: Long, address: String, body: String, date: Long) {
-        // اگه یه پاپ‌آپ از قبل روی صفحه‌ست (مثلاً پیامِ دومی همون لحظه رسیده)، اول
-        // اون رو برمی‌داریم و پاپ‌آپِ جدید (آخرین پیام) رو جایگزینش می‌کنیم
-        removeOverlayView()
+    /**
+     * پیامِ تازه‌رسیده رو یا به Sessionِ موجودِ همون مخاطب اضافه می‌کنه (پنجره دست‌نخورده)
+     * یا (اگه مخاطب تازه‌ست) یه Session جدید به ته صف اضافه می‌کنه.
+     */
+    private fun handleIncomingMessage(threadId: Long, messageId: Long, address: String, body: String, date: Long) {
+        val existing = sessions.firstOrNull { it.address == address || (threadId != -1L && it.threadId == threadId) }
 
-        val displayName = ContactsCache.getName(this, address) ?: address
-        val photoUri = ContactsCache.getPhotoUri(this, address)
-        val isKnownContact = ContactsCache.getName(this, address) != null
+        if (existing != null) {
+            existing.messages.add(MessageEntry(text = body, isOutgoing = false, timestampMillis = date))
+            existing.messageId = messageId
+            existing.lastMessageAtMillis = date
+            // اگه این Session همون چیزیه که الان نشون داده میشه، Compose خودش با
+            // تغییرِ messages/lastMessageAtMillis بازسازی میشه. اگه Session دیگه‌ای
+            // فعاله، این یکی توی صف به‌روز می‌مونه تا کاربر بعداً سراغش بره.
+            return
+        }
 
+        val newSession = Session(
+            threadId = threadId,
+            address = address,
+            messageId = messageId,
+            displayName = ContactsCache.getName(this, address) ?: address,
+            photoUri = ContactsCache.getPhotoUri(this, address),
+            isKnownContact = ContactsCache.getName(this, address) != null
+        ).apply {
+            messages.add(MessageEntry(text = body, isOutgoing = false, timestampMillis = date))
+            lastMessageAtMillis = date
+        }
+
+        val wasEmpty = sessions.isEmpty()
+        sessions.add(newSession)
+        loadHistoryForSession(newSession)
+
+        if (wasEmpty) {
+            // اولین مکالمه‌ست - تازه اینجاست که واقعاً باید پنجره ساخته بشه
+            activeIndex = 0
+            createOverlayWindow()
+        }
+        // اگه از قبل یه پاپ‌آپ باز بود، همونجوری که هست می‌مونه؛ کاربر با فلش‌های
+        // ناوبریِ بالای پاپ‌آپ (اگه بخواد) می‌تونه بره سراغِ همین Session تازه
+    }
+
+    /**
+     * تاریخچه‌ی قبلیِ همین مکالمه (از خودِ اپ، نه فقط پیام‌هایی که تا الان تو همین
+     * پاپ‌آپ رد و بدل شده) رو از دیتابیس می‌خونه و جلوی پیامِ تازه‌رسیده اضافه می‌کنه؛
+     * تا کاربر بدونِ باز کردنِ کلِ اپ، سیاق‌وسباقِ آخرین پیام‌های این گفتگو رو هم تو
+     * بلوکِ پیام‌های پاپ‌آپ ببینه. چون خودِ کوئری روی IO ئه و ممکنه چند صد میلی‌ثانیه
+     * طول بکشه، پاپ‌آپ منتظرش نمی‌مونه - همون پیامِ تازه فوراً نشون داده میشه و
+     * تاریخچه هروقت رسید جلوش اضافه میشه.
+     */
+    private fun loadHistoryForSession(session: Session) {
+        lifecycleScope.launch {
+            val history = withContext(Dispatchers.IO) {
+                repository.getMessagesForThread(session.threadId)
+            }
+            val historyEntries = history
+                .filter { it.id != session.messageId }
+                .takeLast(HISTORY_LIMIT)
+                .map { MessageEntry(text = it.body, isOutgoing = it.isOutgoing, timestampMillis = it.date) }
+
+            // اگه کاربر تا اون موقع همین Session رو بسته باشه (X یا یکی از اکشن‌ها)،
+            // دیگه چیزی برای اضافه‌کردن نیست
+            if (historyEntries.isNotEmpty() && sessions.contains(session)) {
+                session.messages.addAll(0, historyEntries)
+            }
+        }
+    }
+
+    /** پنجره‌ی Overlay و ComposeView رو فقط یه‌بار می‌سازه؛ محتواش از سشنِ فعال می‌خونه (reactive). */
+    private fun createOverlayWindow() {
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager = wm
 
@@ -139,10 +240,10 @@ class PopupOverlayService :
             WindowManager.LayoutParams.MATCH_PARENT,
             overlayType,
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.CENTER
@@ -159,16 +260,7 @@ class PopupOverlayService :
                 SmsAppTheme {
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            OverlayPopupHost(
-                                threadId = threadId,
-                                messageId = messageId,
-                                address = address,
-                                displayName = displayName,
-                                photoUri = photoUri,
-                                isKnownContact = isKnownContact,
-                                body = body,
-                                date = date
-                            )
+                            OverlayPopupHost()
                         }
                     }
                 }
@@ -186,6 +278,7 @@ class PopupOverlayService :
             // ندن؛ نوتیفِ معمولی (که همیشه جدا از این سرویس هم فرستاده میشه) به‌عنوانِ
             // بک‌آپ کافیه
             overlayView = null
+            sessions.clear()
             stopSelf()
         }
     }
@@ -201,9 +294,33 @@ class PopupOverlayService :
         overlayView = null
     }
 
-    private fun closeOverlay() {
+    /** فقط Sessionِ فعال رو از صف برمی‌داره؛ اگه صف خالی شد، کلِ پنجره هم بسته میشه. */
+    private fun closeActiveSession() {
+        if (activeIndex !in sessions.indices) return
+        sessions.removeAt(activeIndex)
+        if (sessions.isEmpty()) {
+            removeOverlayView()
+            stopSelf()
+        } else if (activeIndex >= sessions.size) {
+            activeIndex = sessions.size - 1
+        }
+    }
+
+    /** کلِ پاپ‌آپ (همه‌ی صف) رو می‌بنده - برای وقتی کاربر داره میره داخلِ خودِ اپ. */
+    private fun closeEverything() {
+        sessions.clear()
         removeOverlayView()
         stopSelf()
+    }
+
+    private fun switchToNextSession() {
+        if (sessions.size <= 1) return
+        activeIndex = (activeIndex + 1) % sessions.size
+    }
+
+    private fun switchToPreviousSession() {
+        if (sessions.size <= 1) return
+        activeIndex = (activeIndex - 1 + sessions.size) % sessions.size
     }
 
     override fun onDestroy() {
@@ -215,60 +332,61 @@ class PopupOverlayService :
     override fun onBind(intent: Intent?): IBinder? = null
 
     @androidx.compose.runtime.Composable
-    private fun OverlayPopupHost(
-        threadId: Long,
-        messageId: Long,
-        address: String,
-        displayName: String,
-        photoUri: String?,
-        isKnownContact: Boolean,
-        body: String,
-        date: Long
-    ) {
+    private fun OverlayPopupHost() {
+        // حالتِ گذرا: بینِ closeActiveSession() و اثرگذاشتنِ stopSelf() ممکنه یه فریم
+        // با صفِ خالی کامپوز بشه؛ همینجا بی‌خیالش می‌شیم تا کرش نکنه
+        val session = sessions.getOrNull(activeIndex) ?: return
+
         fun openThread() {
             val openIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(MainActivity.EXTRA_THREAD_ID, threadId)
-                putExtra(MainActivity.EXTRA_ADDRESS, address)
-                putExtra(MainActivity.EXTRA_DISPLAY_NAME, displayName)
+                putExtra(MainActivity.EXTRA_THREAD_ID, session.threadId)
+                putExtra(MainActivity.EXTRA_ADDRESS, session.address)
+                putExtra(MainActivity.EXTRA_DISPLAY_NAME, session.displayName)
             }
             startActivity(openIntent)
-            closeOverlay()
+            closeEverything()
         }
 
         fun markRead() {
+            val threadId = session.threadId
             lifecycleScope.launch {
                 withContext(Dispatchers.IO) { repository.markThreadAsRead(threadId) }
                 DataChangeSignal.notifyChanged()
-                closeOverlay()
+                closeActiveSession()
             }
         }
 
         fun deleteThisMessage() {
+            val messageId = session.messageId
             lifecycleScope.launch {
                 if (messageId != -1L) withContext(Dispatchers.IO) { repository.deleteMessage(messageId) }
                 DataChangeSignal.notifyChanged()
-                closeOverlay()
+                closeActiveSession()
             }
         }
 
         fun callSender() {
             try {
-                val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address")).apply {
+                val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${session.address}")).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 startActivity(dialIntent)
             } catch (e: Exception) {
                 // اپِ تماسی پیدا نشد
             }
-            closeOverlay()
+            closeActiveSession()
         }
 
         fun sendReply(text: String) {
+            val address = session.address
+            session.messages.add(MessageEntry(text = text, isOutgoing = true, timestampMillis = System.currentTimeMillis()))
             lifecycleScope.launch {
                 withContext(Dispatchers.IO) { repository.sendSms(address, text) }
                 DataChangeSignal.notifyChanged()
-                closeOverlay()
+                // دیگه بعدِ فرستادنِ پاسخ پنجره بسته نمیشه - شاید کاربر بخواد دوباره
+                // پیام بده؛ QuickReplyPopupScreen خودش تاریخچه‌ی رد و بدل‌شده‌ها رو نشون
+                // میده. بستن فقط با دکمه‌ی × یا بقیه‌ی اکشن‌ها (باز کردن/حذف/...) اتفاق می‌افته
             }
         }
 
@@ -278,6 +396,9 @@ class PopupOverlayService :
         // اکشن‌های گروه‌محور (افزودن به گروه) دقیقاً هم‌رفتارِ نوتیفِ معمولیِ قدیمی،
         // اپ رو باز می‌کنیم تا از همونجا مدیریت بشه.
         fun addToGroupTargetFast() {
+            val address = session.address
+            val displayName = session.displayName
+            val threadId = session.threadId
             lifecycleScope.launch {
                 val filterGroupRepository = AppContainer.filterGroupRepository(this@PopupOverlayService)
                 val targetId = withContext(Dispatchers.IO) { filterGroupRepository.getQuickAddTargetGroupId() }
@@ -290,7 +411,7 @@ class PopupOverlayService :
                     }
                     DataChangeSignal.notifyChanged()
                 }
-                closeOverlay()
+                closeActiveSession()
             }
         }
 
@@ -336,17 +457,24 @@ class PopupOverlayService :
         val overflow = allActions.drop(3)
 
         QuickReplyPopupScreen(
-            senderDisplayName = displayName,
-            senderAddress = address,
-            isKnownContact = isKnownContact,
-            photoUri = photoUri,
-            messageBody = body,
-            receivedAtMillis = date,
+            senderDisplayName = session.displayName,
+            senderAddress = session.address,
+            isKnownContact = session.isKnownContact,
+            photoUri = session.photoUri,
+            messages = session.messages,
+            replyText = session.replyText,
+            onReplyTextChange = { session.replyText = it },
+            receivedAtMillis = session.lastMessageAtMillis,
             primaryActions = primary,
             overflowActions = overflow,
+            totalSessions = sessions.size,
+            currentSessionPosition = activeIndex + 1,
+            onSwitchToPrevious = { switchToPreviousSession() },
+            onSwitchToNext = { switchToNextSession() },
             onOpenThread = { openThread() },
+            onCallSender = { callSender() },
             onSendReply = { text -> sendReply(text) },
-            onClose = { closeOverlay() }
+            onClose = { closeActiveSession() }
         )
     }
 
@@ -356,6 +484,10 @@ class PopupOverlayService :
         const val EXTRA_ADDRESS = "extra_address"
         const val EXTRA_BODY = "extra_body"
         const val EXTRA_DATE = "extra_date"
+
+        // تعدادِ پیامِ قبلیِ همین گفتگو که موقعِ باز شدنِ پاپ‌آپ به‌عنوانِ سیاق‌وسباق
+        // (context) جلوی پیامِ تازه نشون داده میشه - زیاد نه، چون پاپ‌آپ جای محدودیه
+        private const val HISTORY_LIMIT = 5
 
         fun show(
             context: Context,

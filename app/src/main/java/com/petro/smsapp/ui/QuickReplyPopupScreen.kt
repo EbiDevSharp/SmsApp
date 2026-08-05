@@ -1,15 +1,22 @@
 package com.petro.smsapp.ui
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +27,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDirection
@@ -45,6 +57,22 @@ data class QuickReplyPopupAction(
 )
 
 /**
+ * یه پیامِ نمایش‌داده‌شده تو تاریخچه‌ی کوچیکِ داخلِ پاپ‌آپ - یا همون پیامِ اصلیِ
+ * تازه‌رسیده (isOutgoing=false)، یا یه پاسخی که خودِ کاربر همینجا فرستاده
+ * (isOutgoing=true). چون دیگه با فرستادنِ پاسخ پنجره بسته نمیشه، این لیست نگه‌داشته
+ * میشه تا کاربر ببینه چی رفت و بیاد و لازم شد دوباره جواب بده.
+ *
+ * نکته: این کلاس دیگه private نیست چون PopupOverlayService حالا این لیست رو
+ * به‌ازای هر مکالمه (Session) خودش نگه می‌داره و بین چند مکالمه‌ی هم‌زمان صف‌بندی
+ * می‌کنه - پس باید از بیرونِ این فایل هم قابلِ ساختن باشه.
+ */
+data class MessageEntry(
+    val text: String,
+    val isOutgoing: Boolean,
+    val timestampMillis: Long
+)
+
+/**
  * پاپ‌آپِ روی صفحه‌ی پیامکِ تازه‌رسیده - جایگزینِ نوتیفِ معمولی وقتی کاربر از تنظیمات
  * فعالش کرده باشه. کاملاً مستقل از Activity/Context میزبانه؛ فقط دیتا و کال‌بک می‌گیره.
  *
@@ -55,213 +83,288 @@ data class QuickReplyPopupAction(
  * زدنِ «پاسخ» به‌جای بازکردنِ RemoteInput سیستمی، همینجا یه فیلدِ متنیِ inline باز
  * می‌کنه (چون خودمون UI کامل داریم و نیازی به RemoteInput نیست).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QuickReplyPopupScreen(
     senderDisplayName: String,
     senderAddress: String,
     isKnownContact: Boolean,
     photoUri: String?,
-    messageBody: String,
+    messages: List<MessageEntry>,
+    replyText: String,
+    onReplyTextChange: (String) -> Unit,
     receivedAtMillis: Long,
     primaryActions: List<QuickReplyPopupAction>,
     overflowActions: List<QuickReplyPopupAction>,
+    // ناوبریِ صف - وقتی همزمان چند مکالمه تو صفِ پاپ‌آپ منتظرن. totalSessions<=۱
+    // یعنی صف خالیه و کلِ ناوبری مخفی میشه.
+    totalSessions: Int = 1,
+    currentSessionPosition: Int = 1,
+    onSwitchToPrevious: () -> Unit = {},
+    onSwitchToNext: () -> Unit = {},
     onOpenThread: () -> Unit,
+    onCallSender: () -> Unit,
     onSendReply: (text: String) -> Unit,
     onClose: () -> Unit
 ) {
-    var replyText by remember { mutableStateOf("") }
     var overflowExpanded by remember { mutableStateOf(false) }
     val replyFocusRequester = remember { FocusRequester() }
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val density = LocalDensity.current
 
-    // آفستِ عمودیِ دستی (با درگ‌کردنِ هدر) - جدا از جابه‌جاییِ خودکارِ بالای کیبورد
+    val messagesScrollState = rememberScrollState()
+    LaunchedEffect(messages.size) {
+        messagesScrollState.animateScrollTo(messagesScrollState.maxValue)
+    }
+
+    fun sendCurrentReply() {
+        val text = replyText
+        if (text.isNotBlank()) {
+            onSendReply(text)
+            onReplyTextChange("")
+        }
+    }
+
+    // آفستِ عمودیِ دستی (با درگ‌کردنِ کارت) - جدا از جابه‌جاییِ خودکارِ بالای کیبورد
     var dragOffsetY by remember { mutableStateOf(0f) }
+    // ارتفاعِ واقعیِ کارت (پیکسل) - برای اینکه بدونیم تا کجا میشه درگش کرد بدون
+    // اینکه از بالای صفحه بیرون بزنه
+    var cardHeightPx by remember { mutableStateOf(0f) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            // وقتی کیبورد باز میشه، کارت خودش خودکار میره بالای کیبورد تا زیرش گم نشه
+            // وقتی کیبورد باز میشه، این پدینگ خودش فضای در دسترس رو کم می‌کنه، پس
+            // BoxWithConstraintsِ زیرش از همون اول ارتفاعِ درستِ بالای کیبورد رو می‌بینه
             .imePadding()
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(0, dragOffsetY.roundToInt()) },
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 12.dp
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val maxHeightPx = with(density) { maxHeight.toPx() }
 
-                // ---- دستگیره‌ی درگ - با کشیدنش می‌تونی کارت رو بالاتر/پایین‌تر ببری
-                // (مثلاً وقتی کیبورد بازه و می‌خوای دکمه‌های پایینی رو ببینی) ----
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragOffsetY = (dragOffsetY + dragAmount.y)
-                                        .coerceIn(-1600f, 400f)
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
+            // هر بار که فضای در دسترس عوض بشه (مثلاً کیبورد باز/بسته بشه) یا ارتفاعِ
+            // کارت مشخص/عوض بشه، آفستِ فعلی رو با محدوده‌ی جدید تنظیم می‌کنیم تا کارت
+            // هیچ‌وقت از بالای صفحه (یا زیرِ کیبورد) بیرون نزنه
+            LaunchedEffect(maxHeightPx, cardHeightPx) {
+                val minOffset = -(maxHeightPx - cardHeightPx).coerceAtLeast(0f)
+                dragOffsetY = dragOffsetY.coerceIn(minOffset, 400f)
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+                    .onSizeChanged { cardHeightPx = it.height.toFloat() }
+                    // کلِ کارت درگ‌پذیره، نه فقط دستگیره‌ی بالاش - چون move فقط بعد از
+                    // consume شدنِ حرکت اعمال میشه، تپ‌های معمولی رو (روی دکمه‌ها، فیلدِ
+                    // متن و ...) دست‌نخورده می‌ذاره
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                val minOffset = -(maxHeightPx - cardHeightPx).coerceAtLeast(0f)
+                                dragOffsetY = (dragOffsetY + dragAmount.y)
+                                    .coerceIn(minOffset, 400f)
+                            }
+                        )
+                    },
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 12.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    // ---- دستگیره‌ی درگ - صرفاً نشونه‌ی بصریه؛ خودِ درگ رویِ کلِ کارت
+                    // فعاله (بالاتر، رویِ Surface) ----
                     Box(
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .size(width = 36.dp, height = 4.dp)
-                            .background(Color.Gray.copy(alpha = 0.4f), RoundedCornerShape(2.dp))
-                    )
-                }
-
-                // ---- هدر: آواتار + اسم/شماره + ساعت + بستن ----
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (photoUri != null) {
-                        ContactAvatar(
-                            name = senderDisplayName,
-                            address = senderAddress,
-                            size = 44.dp,
-                            modifier = Modifier.clickable(onClick = onOpenThread)
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .size(width = 36.dp, height = 4.dp)
+                                .background(Color.Gray.copy(alpha = 0.4f), RoundedCornerShape(2.dp))
                         )
-                    } else {
-                        InitialAvatar(name = senderDisplayName, onClick = onOpenThread)
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    // ---- هدر: آواتار + اسم/شماره + ساعت + بستن - زدنِ آواتار/اسم/شماره
+                    // میره برایِ تماس ----
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (photoUri != null) {
+                            ContactAvatar(
+                                name = senderDisplayName,
+                                address = senderAddress,
+                                size = 44.dp,
+                                modifier = Modifier.clickable(onClick = onCallSender)
+                            )
+                        } else {
+                            InitialAvatar(name = senderDisplayName, onClick = onCallSender)
+                        }
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(onClick = onOpenThread)
-                    ) {
-                        Text(
-                            text = senderDisplayName,
-                            style = MaterialTheme.typography.titleMedium.autoDirection(),
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        // اگه این آدرس واقعاً یه مخاطبِ ذخیره‌شده باشه، شماره‌ی خودش هم
-                        // زیرِ اسم نشون داده بشه - همیشه چپ‌به‌راست
-                        if (isKnownContact && senderAddress.isNotBlank() && senderAddress != senderDisplayName) {
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(onClick = onCallSender)
+                        ) {
                             Text(
-                                text = senderAddress,
-                                style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
-                                color = Color.Gray,
-                                maxLines = 1
+                                text = senderDisplayName,
+                                style = MaterialTheme.typography.titleMedium.autoDirection(),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                        }
-                    }
-
-                    Text(
-                        text = DateFormatter.formatSmart(receivedAtMillis),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-
-                    IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "بستن")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // ---- بدنه‌ی پیام ----
-                Text(
-                    text = messageBody,
-                    style = MaterialTheme.typography.bodyLarge.autoDirection(),
-                    maxLines = 6,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ---- ردیفِ ورودیِ پاسخِ سریع - همیشه نمایش داده میشه (دیگه نیازی به
-                // زدنِ دکمه‌ی «پاسخ» برای بازکردنش نیست) ----
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = replyText,
-                        onValueChange = { replyText = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
-                            .focusRequester(replyFocusRequester),
-                        placeholder = { Text("پاسخ سریع...") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(20.dp),
-                        textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = {
-                            if (replyText.isNotBlank()) {
-                                onSendReply(replyText)
-                                replyText = ""
-                            }
-                        })
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    FilledIconButton(
-                        onClick = {
-                            if (replyText.isNotBlank()) {
-                                onSendReply(replyText)
-                                replyText = ""
-                            }
-                        },
-                        enabled = replyText.isNotBlank()
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "ارسال پاسخ")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // ---- ردیفِ دکمه‌های اکشن ----
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        primaryActions.forEach { action ->
-                            val isReplyAction = action.type == NotificationActionType.REPLY
-                            PopupActionButton(
-                                label = action.label,
-                                icon = action.icon,
-                                onClick = {
-                                    if (isReplyAction) {
-                                        replyFocusRequester.requestFocus()
-                                    } else {
-                                        action.onClick()
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    if (overflowActions.isNotEmpty()) {
-                        Box {
-                            IconButton(onClick = { overflowExpanded = true }) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
-                            }
-                            DropdownMenu(
-                                expanded = overflowExpanded,
-                                onDismissRequest = { overflowExpanded = false }
-                            ) {
-                                overflowActions.forEach { action ->
-                                    DropdownMenuItem(
-                                        text = { Text(action.label) },
-                                        leadingIcon = { Icon(action.icon, contentDescription = null) },
-                                        onClick = {
-                                            overflowExpanded = false
-                                            action.onClick()
+                            // اگه این آدرس واقعاً یه مخاطبِ ذخیره‌شده باشه، شماره‌ی خودش هم
+                            // زیرِ اسم نشون داده بشه - همیشه چپ‌به‌راست. لانگ‌کلیک روش
+                            // شماره رو کپی می‌کنه (تپِ معمولیش هم مثلِ بقیه‌ی هدر میره تماس)
+                            if (isKnownContact && senderAddress.isNotBlank() && senderAddress != senderDisplayName) {
+                                Text(
+                                    text = senderAddress,
+                                    style = MaterialTheme.typography.labelSmall.copy(textDirection = TextDirection.Ltr),
+                                    color = Color.Gray,
+                                    maxLines = 1,
+                                    modifier = Modifier.combinedClickable(
+                                        onClick = onCallSender,
+                                        onLongClick = {
+                                            clipboardManager.setText(AnnotatedString(senderAddress))
+                                            Toast.makeText(context, "شماره کپی شد", Toast.LENGTH_SHORT).show()
                                         }
                                     )
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = DateFormatter.formatSmart(receivedAtMillis),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+
+                        // ---- ناوبریِ صف - فقط وقتی بیشتر از یه مکالمه تو صفه نشون داده
+                        // میشه. فلش‌ها بینِ مکالمه‌های صف می‌چرخونن، بدونِ اینکه چیزی از
+                        // هیچ‌کدوم (تاریخچه/پاسخِ درحالِ تایپ) از دست بره ----
+                        if (totalSessions > 1) {
+                            IconButton(onClick = onSwitchToPrevious, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "مکالمه‌ی قبلی")
+                            }
+                            Text(
+                                text = "$currentSessionPosition/$totalSessions",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                            IconButton(onClick = onSwitchToNext, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "مکالمه‌ی بعدی")
+                            }
+                        }
+
+                        IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "بستن")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // ---- بدنه‌ی پیام‌ها - تاریخچه‌ی کوچیکِ پیامِ اصلی + پاسخ‌هایی که همینجا
+                    // فرستاده شدن، قابلِ اسکرول (سقفِ ارتفاع تا کارت زیادی بزرگ نشه). تپِ
+                    // هرکدوم میره داخلِ برنامه رویِ همون پیام، لانگ‌کلیک متنش رو کپی می‌کنه ----
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(messagesScrollState),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        messages.forEach { entry ->
+                            MessageBubbleRow(
+                                entry = entry,
+                                onClick = onOpenThread,
+                                onLongClick = {
+                                    clipboardManager.setText(AnnotatedString(entry.text))
+                                    Toast.makeText(context, "متن پیام کپی شد", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // ---- ردیفِ ورودیِ پاسخِ سریع - همیشه نمایش داده میشه (دیگه نیازی به
+                    // زدنِ دکمه‌ی «پاسخ» برای بازکردنش نیست) ----
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = replyText,
+                            onValueChange = onReplyTextChange,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .focusRequester(replyFocusRequester),
+                            placeholder = { Text("پاسخ سریع...") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(20.dp),
+                            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { sendCurrentReply() })
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FilledIconButton(
+                            onClick = { sendCurrentReply() },
+                            enabled = replyText.isNotBlank()
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "ارسال پاسخ")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // ---- ردیفِ دکمه‌های اکشن ----
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            primaryActions.forEach { action ->
+                                val isReplyAction = action.type == NotificationActionType.REPLY
+                                PopupActionButton(
+                                    label = action.label,
+                                    icon = action.icon,
+                                    onClick = {
+                                        if (isReplyAction) {
+                                            replyFocusRequester.requestFocus()
+                                        } else {
+                                            action.onClick()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        if (overflowActions.isNotEmpty()) {
+                            Box {
+                                IconButton(onClick = { overflowExpanded = true }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
+                                }
+                                DropdownMenu(
+                                    expanded = overflowExpanded,
+                                    onDismissRequest = { overflowExpanded = false }
+                                ) {
+                                    overflowActions.forEach { action ->
+                                        DropdownMenuItem(
+                                            text = { Text(action.label) },
+                                            leadingIcon = { Icon(action.icon, contentDescription = null) },
+                                            onClick = {
+                                                overflowExpanded = false
+                                                action.onClick()
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -278,6 +381,55 @@ private fun PopupActionButton(label: String, icon: ImageVector, onClick: () -> U
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(4.dp))
         Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * یه ردیفِ پیام تو تاریخچه‌ی کوچیکِ داخلِ پاپ‌آپ - پیامِ رسیده سمتِ شروع (رنگِ خنثی)،
+ * پاسخِ فرستاده‌شده سمتِ پایان (رنگِ اصلیِ تم)، شبیهِ حباب‌های خودِ صفحه‌ی چت ولی
+ * ساده‌تر چون فضای پاپ‌آپ محدوده.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MessageBubbleRow(
+    entry: MessageEntry,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = if (entry.isOutgoing) Alignment.End else Alignment.Start,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = if (entry.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
+        ) {
+            Surface(
+                color = if (entry.isOutgoing) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .widthIn(max = 260.dp)
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            ) {
+                Text(
+                    text = entry.text,
+                    style = MaterialTheme.typography.bodyMedium.autoDirection(),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+        // ---- تاریخ+ساعتِ همین پیام - زیرِ حباب، هم‌جهت با خودِ حباب (فرستاده‌شده
+        // سمتِ پایان، دریافتی سمتِ شروع) ----
+        Text(
+            text = DateFormatter.formatDateTimeShort(entry.timestampMillis),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Gray,
+            modifier = Modifier.padding(start = 4.dp, top = 2.dp, end = 4.dp)
+        )
     }
 }
 

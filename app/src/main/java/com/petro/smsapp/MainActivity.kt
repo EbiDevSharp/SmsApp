@@ -115,6 +115,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SmsAppTheme {
+                // خطِ اطمینان: preload اصلی حالا توی SmsApplication.ensureContactsObserverRegistered
+                // (خیلی زودتر، قبل از این فریم) صدا زده میشه؛ این خط فقط برای حالتِ نادری
+                // که مجوزِ مخاطبین بینِ اون لحظه و این‌جا گرفته شده باشه یه بک‌آپه.
+                // preload() خودش idempotent هست پس تکرارش هزینه‌ای نداره.
+                LaunchedEffect(Unit) {
+                    ContactsCache.preload(this@MainActivity)
+                }
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),

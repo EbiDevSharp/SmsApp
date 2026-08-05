@@ -53,8 +53,16 @@ class SmsApplication : Application() {
      * دوباره صداش بزنه و observer واقعاً ثبت بشه.
      */
     fun ensureContactsObserverRegistered() {
+        // نکته‌ی مهم (سرعتِ لودِ آواتارها): preload اینجا (نه توی MainActivity) صدا زده
+        // میشه چون این تابع هم توی Application.onCreate (یعنی زودتر از اولین فریمِ
+        // MainActivity) و هم بلافاصله بعدِ گرفتنِ موفقِ مجوزِ مخاطبین صدا زده میشه؛
+        // یعنی کوئریِ Background قبل از اینکه هر Composableای اصلاً به اسم/عکسِ یه
+        // مخاطب نیاز داشته باشه شروع میشه. خودِ preload() هم idempotent هست (اگه از قبل
+        // در حالِ لود یا لودشده باشه، بی‌سروصدا برمی‌گرده)، پس صدا زدنش اینجا هزینه‌ی
+        // اضافه‌ای نداره.
         if (contactsObserverRegistered) return
         if (!PermissionHelper.hasReadContactsPermission(this)) return
+        ContactsCache.preload(this)
         try {
             val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) {

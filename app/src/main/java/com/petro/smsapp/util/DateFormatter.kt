@@ -104,6 +104,29 @@ object DateFormatter {
         }
     }
 
+    /**
+     * تاریخِ کوتاه + ساعت، با هم - برای جاهایی که (برخلافِ formatSmart) همیشه هر دو
+     * لازمه، مثلِ زیرِ هر حبابِ پیام تو پاپ‌آپِ پاسخِ سریع. از همون تنظیماتِ
+     * شمسی/میلادی و ۱۲/۲۴ ساعته‌ی formatSmart/formatTime پیروی می‌کنه.
+     */
+    fun formatDateTimeShort(millis: Long): String {
+        if (millis <= 0L) return ""
+
+        val now = Calendar.getInstance()
+        val target = Calendar.getInstance().apply { timeInMillis = millis }
+
+        val datePart = when {
+            isSameDay(now, target) -> "امروز"
+            isYesterday(now, target) -> "دیروز"
+            else -> {
+                val (day, monthName) = dayAndMonthName(target)
+                "$day $monthName"
+            }
+        }
+
+        return "$datePart، ${formatTime(millis)}"
+    }
+
     private fun isSameDay(a: Calendar, b: Calendar): Boolean =
         a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
 
