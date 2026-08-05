@@ -33,7 +33,13 @@ private val AppDarkColors = darkColorScheme(
     background = Color(0xFF121212),
     surface = Color(0xFF1E1E1E),
     onBackground = Color.White,
-    onSurface = Color.White
+    onSurface = Color.White,
+    // حبابِ پیام‌های واردهِ حالتِ دارک از همینا رنگ می‌گیره - قبلاً ست نشده بودن
+    // و متریال۳ به‌صورتِ پیش‌فرض یه خاکستریِ متمایل‌به‌بنفش با نوشته‌ی خاکستری‌روشن
+    // می‌ذاشت. الان پس‌زمینه از background/surface روشن‌تره (سیاهیِ کمتر) و نوشته
+    // کاملاً سفیده.
+    surfaceVariant = Color(0xFF2A2A2C),
+    onSurfaceVariant = Color.White
 )
 
 @Composable

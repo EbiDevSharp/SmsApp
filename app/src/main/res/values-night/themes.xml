@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        نسخه‌ی شب/دارکِ تمِ اصلی - وقتی گوشی رو حالتِ دارکه، اندروید خودکار همینو
+        به‌جایِ values/themes.xml انتخاب می‌کنه، بدونِ اینکه به کدِ Kotlin ربطی داشته
+        باشه. windowBackground اینجا با پس‌زمینه‌ی تمِ دارکِ خودِ Compose
+        (AppDarkColors.background توی Theme.kt) هماهنگه تا قبل از رندرِ اولِ صفحه یا
+        پشتِ دیالوگ‌های سیستمی (مثلاً درخواستِ مجوزها) هیچ فلشِ سفیدی دیده نشه.
+    -->
+    <style name="Theme.SmsApp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF121212</item>
+    </style>
+
+    <!-- پاپ‌آپِ پاسخِ سریع همیشه شفافه و به تمِ روشن/تیره‌ی سیستم وابسته نیست -->
+    <style name="Theme.SmsApp.Popup" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+</resources>

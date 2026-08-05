@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
@@ -416,6 +417,7 @@ fun ThreadScreen(
                             val message = item.message
                             MessageBubble(
                                 message = message,
+                                sims = sims,
                                 isFavorite = favoriteIds.contains(message.id),
                                 isPinned = pinnedMessageIds.contains(message.id),
                                 selectionMode = selectionMode,
@@ -529,10 +531,34 @@ private fun bubbleShape(isOutgoing: Boolean) = if (isOutgoing) {
     RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 4.dp, bottomEnd = 18.dp)
 }
 
+/**
+ * چیپِ کوچیکِ مستطیلیِ سیم‌کارت - زیرِ هر پیام، دقیقاً هم‌شکلِ چیپِ انتخابِ سیم‌کارتِ
+ * داخلِ باکسِ پیام (SimQuickSelectChip توی MessageInputBar): همون سایز، شکل و
+ * منطقِ نمایشِ عدد بر اساسِ slotIndex (نه subscriptionId).
+ */
+@Composable
+private fun MessageSimBadge(slotIndex: Int) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+        modifier = Modifier.size(width = 20.dp, height = 16.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = (slotIndex + 1).toString(),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     message: SmsMessage,
+    sims: List<SimInfo> = emptyList(),
     isFavorite: Boolean,
     isPinned: Boolean,
     selectionMode: Boolean,
@@ -589,6 +615,14 @@ private fun MessageBubble(
                 .padding(vertical = 4.dp),
             horizontalAlignment = if (message.isOutgoing) Alignment.End else Alignment.Start
         ) {
+            // تاریخ+ساعتِ پیام - قبلاً فقط ساعت بود و زیرِ حباب می‌نشست؛ الان با تاریخ
+            // همراه شده و بالای حباب میاد (رفرنس: تاریخ+ساعتِ زیرِ حبابِ پاپ‌آپِ پاسخِ سریع)
+            Text(
+                text = DateFormatter.formatDateTimeShort(message.date),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
             Box(contentAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
                 Surface(
                     color = bubbleColor,
@@ -618,14 +652,19 @@ private fun MessageBubble(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 12.dp)
             ) {
-                Text(
-                    text = DateFormatter.formatSmart(message.date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
-                )
-                // شمارنده‌ی ریزِ تعداد کاراکتر/تعداد پیامک، کنارِ تاریخ - برای هر دو پیامِ
-                // ارسالی و دریافتی، تا کاربر بتونه ببینه مثلاً یه پیامِ طولانی چند پیامک حساب شده
-                Spacer(modifier = Modifier.width(4.dp))
+                // جایِ تاریخ (که حالا بالای حباب رفته) رو اینجا چیپِ کوچیکِ سیم‌کارت
+                // گرفته - همون شماره‌ی اسلاتی (۱/۲) که پیام باهاش ارسال یا دریافت شده،
+                // دقیقاً هم‌شکلِ چیپِ انتخابِ سیم‌کارتِ داخلِ باکسِ پیام. فقط وقتی گوشی
+                // بیش از یه سیم داره و subscriptionId پیام معتبره نشون داده میشه.
+                val messageSim = remember(sims, message.subscriptionId) {
+                    sims.find { it.subscriptionId == message.subscriptionId }
+                }
+                if (sims.size >= 2 && messageSim != null) {
+                    MessageSimBadge(slotIndex = messageSim.slotIndex)
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                // شمارنده‌ی ریزِ تعداد کاراکتر/تعداد پیامک - برای هر دو پیامِ ارسالی
+                // و دریافتی، تا کاربر بتونه ببینه مثلاً یه پیامِ طولانی چند پیامک حساب شده
                 Text(text = "•", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 Spacer(modifier = Modifier.width(4.dp))
                 SmsSegmentIndicator(text = message.body, showRemaining = false)
