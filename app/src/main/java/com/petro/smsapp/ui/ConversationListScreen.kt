@@ -51,8 +51,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
+import androidx.compose.material.icons.filled.FilterList
 import com.petro.smsapp.data.Conversation
+import com.petro.smsapp.data.ConversationFilterType
+import com.petro.smsapp.data.ConversationSortType
 import com.petro.smsapp.data.SwipeAction
+import com.petro.smsapp.data.TimeFilterSelection
 import com.petro.smsapp.util.AlphabetIndexHelper
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.PhoneNumberUtils
@@ -69,7 +73,7 @@ import kotlin.math.roundToInt
  * مستقیم به یه مقصدِ ثابت نمی‌ره - onAddToGroupClick صدا زده میشه و صداکننده (AppNavigation)
  * یه شیتِ کوچیک برای انتخابِ گروه نشون میده.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationListScreen(
     conversations: List<Conversation>,
@@ -79,6 +83,14 @@ fun ConversationListScreen(
     onSearchClick: () -> Unit = {},
     hasActiveFilter: Boolean = false,
     onClearFilters: () -> Unit = {},
+    // فیلترهای داینامیکِ DrawerFilterAccordion - همون stateـی که برای درایور استفاده میشه،
+    // اینجا هم پاس داده میشه تا مودالِ فیلترِ هدر همیشه با آیتم‌های به‌روز درایور یکی باشه
+    filterSelectedIds: Set<String> = emptySet(),
+    onToggleFilter: (ConversationFilterType) -> Unit = {},
+    filterTimeSelection: TimeFilterSelection = TimeFilterSelection.None,
+    onFilterTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
+    filterSortType: ConversationSortType? = null,
+    onFilterSortTypeChange: (ConversationSortType?) -> Unit = {},
     onDeleteConversations: (Set<Long>) -> Unit,
     onAddToGroupClick: (List<Conversation>) -> Unit,
     onMakeConversationsPrivate: (List<Conversation>) -> Unit,
@@ -94,6 +106,7 @@ fun ConversationListScreen(
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var swipeDeleteTarget by remember { mutableStateOf<Conversation?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
     val listState = rememberLazyListState()
@@ -153,6 +166,29 @@ fun ConversationListScreen(
                 }
             }
         )
+    }
+
+    if (showFilterSheet) {
+        val filterSheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+            sheetState = filterSheetState
+        ) {
+            // همون آیتم‌های DrawerFilterAccordion.kt (FilterFieldsContent) که تو منوی کناری هم
+            // استفاده میشه، ولی بدون هدرِ آکاردئونی - این خودِ مودال بازه، لازم نیست دوباره پشتِ
+            // یه آکاردئون قایم بشه. چون تابعِ مشترکه، هر آیتمی که بعداً اضافه بشه خودکار اینجا هم میاد
+            FilterFieldsContent(
+                selectedIds = filterSelectedIds,
+                onToggle = onToggleFilter,
+                timeSelection = filterTimeSelection,
+                onTimeSelectionChange = onFilterTimeSelectionChange,
+                sortType = filterSortType,
+                onSortTypeChange = onFilterSortTypeChange,
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = 24.dp)
+            )
+        }
     }
 
     val letterToFirstIndex = remember(conversations) {
@@ -264,10 +300,16 @@ fun ConversationListScreen(
                         }
                     },
                     actions = {
-                        if (hasActiveFilter) {
-                            IconButton(onClick = onClearFilters) {
-                                Box {
-                                    Icon(Icons.Filled.FilterAlt, contentDescription = "لیست فیلتر شده - برای خارج شدن از فیلتر بزنید")
+                        // یه آیکونِ فیلترِ واحد: تو حالتِ عادی FilterList خالیه، وقتی فیلتری
+                        // فعاله همون آیکون با یه نقطه‌ی قرمز مشخص میشه. تو هر دو حالت با زدنش
+                        // مودالِ فیلتر باز میشه (دیگه با تپ مستقیم پاک نمیشه)
+                        IconButton(onClick = { showFilterSheet = true }) {
+                            Box {
+                                Icon(
+                                    if (hasActiveFilter) Icons.Filled.FilterAlt else Icons.Filled.FilterList,
+                                    contentDescription = if (hasActiveFilter) "فیلتر (فعال)" else "فیلتر"
+                                )
+                                if (hasActiveFilter) {
                                     Box(
                                         modifier = Modifier
                                             .size(8.dp)

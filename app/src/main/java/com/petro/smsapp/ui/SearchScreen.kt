@@ -75,9 +75,9 @@ fun SearchScreen(
                 )
                 .filter { conversation ->
                     trimmedQuery.isEmpty() ||
-                        conversation.displayName.contains(trimmedQuery, ignoreCase = true) ||
-                        conversation.address.contains(trimmedQuery, ignoreCase = true) ||
-                        conversation.snippet.contains(trimmedQuery, ignoreCase = true)
+                            conversation.displayName.contains(trimmedQuery, ignoreCase = true) ||
+                            conversation.address.contains(trimmedQuery, ignoreCase = true) ||
+                            conversation.snippet.contains(trimmedQuery, ignoreCase = true)
                 }
         }
     }
@@ -221,10 +221,13 @@ private fun FilterChipsRow(
     ) {
         ConversationFilterType.entries.forEach { filter ->
             val selected = selectedFilters.contains(filter)
-            FilterChip(
+            // دقیقاً همون چیپِ آیکن‌دار+نوشته‌ی منوی آکاردئونی (IconFilterChip تو
+            // DrawerFilterAccordion.kt) - برای یکسان بودنِ ظاهرِ چیپ‌ها تو کل اپ
+            IconFilterChip(
+                icon = iconForFilter(filter),
+                contentDescription = filter.label,
                 selected = selected,
-                onClick = { onToggle(filter) },
-                label = { Text(filter.label) }
+                onClick = { onToggle(filter) }
             )
         }
     }

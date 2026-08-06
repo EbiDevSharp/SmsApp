@@ -440,6 +440,18 @@ fun AppNavigation(
                         selectedFilterIds = emptySet()
                         timeSelection = TimeFilterSelection.None
                     },
+                    filterSelectedIds = selectedFilterIds,
+                    onToggleFilter = { filterType ->
+                        selectedFilterIds = if (selectedFilterIds.contains(filterType.id)) {
+                            selectedFilterIds - filterType.id
+                        } else {
+                            selectedFilterIds + filterType.id
+                        }
+                    },
+                    filterTimeSelection = timeSelection,
+                    onFilterTimeSelectionChange = { timeSelection = it },
+                    filterSortType = sortType,
+                    onFilterSortTypeChange = { sortType = it },
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
                     onAddToGroupClick = { selectedConversations -> viewModel.requestAddConversationsToGroup(selectedConversations) },
                     onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },

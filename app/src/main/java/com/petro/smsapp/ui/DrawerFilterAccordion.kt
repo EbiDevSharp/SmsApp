@@ -57,53 +57,11 @@ fun DrawerFilterAccordion(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var rangePickerStage by remember { mutableStateOf<RangePickerStage?>(null) }
-    var pendingFromMillis by remember { mutableStateOf<Long?>(null) }
     val chevronRotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "drawer_filter_chevron")
 
     val activeCount = selectedIds.size +
             (if (timeSelection != TimeFilterSelection.None) 1 else 0) +
             (if (sortType != null) 1 else 0)
-
-    val existingCustom = (timeSelection as? TimeFilterSelection.Custom)?.range
-    val defaultFrom = System.currentTimeMillis() - 6L * 24 * 60 * 60 * 1000
-
-    when (rangePickerStage) {
-        RangePickerStage.FROM -> {
-            DateTimePickerSheet(
-                title = "از تاریخ",
-                initialMillis = existingCustom?.fromMillis ?: defaultFrom,
-                restrictPast = false,
-                onConfirm = { from ->
-                    pendingFromMillis = from
-                    rangePickerStage = RangePickerStage.TO
-                },
-                onDismiss = { rangePickerStage = null }
-            )
-        }
-        RangePickerStage.TO -> {
-            DateTimePickerSheet(
-                title = "تا تاریخ",
-                initialMillis = existingCustom?.toMillis ?: System.currentTimeMillis(),
-                restrictPast = false,
-                onConfirm = { to ->
-                    val from = pendingFromMillis
-                    if (from != null) {
-                        // اگه کاربر «تا» رو قبل از «از» انتخاب کرد، جابه‌جاشون می‌کنیم تا بازه معتبر بمونه
-                        val range = if (from <= to) CustomTimeRange(from, to) else CustomTimeRange(to, from)
-                        onTimeSelectionChange(TimeFilterSelection.Custom(range))
-                    }
-                    rangePickerStage = null
-                    pendingFromMillis = null
-                },
-                onDismiss = {
-                    rangePickerStage = null
-                    pendingFromMillis = null
-                }
-            )
-        }
-        null -> {}
-    }
 
     Surface(
         modifier = modifier
@@ -157,94 +115,169 @@ fun DrawerFilterAccordion(
             }
 
             if (expanded) {
-                Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                    SectionLabel("وضعیتِ پیام")
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items.forEach { item ->
-                            IconFilterChip(
-                                icon = iconForFilter(item),
-                                contentDescription = item.label,
-                                selected = selectedIds.contains(item.id),
-                                onClick = { onToggle(item) }
-                            )
-                        }
-                    }
-
-                    SectionLabel("زمان")
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TimeRangePreset.entries.forEach { preset ->
-                            val isSelected = (timeSelection as? TimeFilterSelection.Preset)?.preset == preset
-                            IconFilterChip(
-                                icon = iconForTimePreset(preset),
-                                contentDescription = preset.label,
-                                selected = isSelected,
-                                onClick = {
-                                    onTimeSelectionChange(
-                                        if (isSelected) TimeFilterSelection.None else TimeFilterSelection.Preset(preset)
-                                    )
-                                }
-                            )
-                        }
-
-                        val customSelection = timeSelection as? TimeFilterSelection.Custom
-                        IconFilterChip(
-                            icon = Icons.Filled.DateRange,
-                            contentDescription = if (customSelection != null) {
-                                "${DateFormatter.formatDayMonth(customSelection.range.fromMillis)} تا ${DateFormatter.formatDayMonth(customSelection.range.toMillis)}"
-                            } else {
-                                "بازه‌ی دلخواه"
-                            },
-                            selected = customSelection != null,
-                            onClick = { rangePickerStage = RangePickerStage.FROM },
-                            trailingIcon = if (customSelection != null) Icons.Filled.Close else null,
-                            onTrailingClick = if (customSelection != null) {
-                                { onTimeSelectionChange(TimeFilterSelection.None) }
-                            } else null
-                        )
-                    }
-
-                    SectionLabel("مرتب‌سازی")
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ConversationSortType.entries.forEach { type ->
-                            val isSelected = sortType == type
-                            IconFilterChip(
-                                icon = iconForSort(type),
-                                contentDescription = type.label,
-                                selected = isSelected,
-                                onClick = { onSortTypeChange(if (isSelected) null else type) }
-                            )
-                        }
-                    }
-                }
+                FilterFieldsContent(
+                    items = items,
+                    selectedIds = selectedIds,
+                    onToggle = onToggle,
+                    timeSelection = timeSelection,
+                    onTimeSelectionChange = onTimeSelectionChange,
+                    sortType = sortType,
+                    onSortTypeChange = onSortTypeChange,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
             }
         }
     }
 }
 
-private val FILTER_CHIP_WIDTH = 60.dp // کوچیک‌تر از چیپِ منوی «+» (که ۷۴dp بود)
-private val FILTER_CHIP_MIN_HEIGHT = 60.dp
-private val FILTER_CHIP_CLEAR_BADGE_SIZE = 16.dp
+/**
+ * همون آیتم‌های فیلتر/مرتب‌سازیِ داخلِ DrawerFilterAccordion، ولی بدون هدرِ
+ * آکاردئونی (بدون کلیک برای باز/بسته‌شدن) - برای جاهایی مثل مودالِ فیلترِ هدر
+ * که خودِ کانتینر (مثلاً ModalBottomSheet) بازوبسته‌شدن رو مدیریت می‌کنه و
+ * لازم نیست دوباره پشتِ یه آکاردئون قایم بشه. چون همینجا هم صدا زده میشه هم تو
+ * DrawerFilterAccordion، هر آیتمی که به تابعِ اصلی (اینجا) اضافه بشه خودکار
+ * تو هر دو جا میاد.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun FilterFieldsContent(
+    items: List<ConversationFilterType> = ConversationFilterType.entries,
+    selectedIds: Set<String>,
+    onToggle: (ConversationFilterType) -> Unit,
+    timeSelection: TimeFilterSelection = TimeFilterSelection.None,
+    onTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
+    sortType: ConversationSortType? = null,
+    onSortTypeChange: (ConversationSortType?) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    var rangePickerStage by remember { mutableStateOf<RangePickerStage?>(null) }
+    var pendingFromMillis by remember { mutableStateOf<Long?>(null) }
+
+    val existingCustom = (timeSelection as? TimeFilterSelection.Custom)?.range
+    val defaultFrom = System.currentTimeMillis() - 6L * 24 * 60 * 60 * 1000
+
+    when (rangePickerStage) {
+        RangePickerStage.FROM -> {
+            DateTimePickerSheet(
+                title = "از تاریخ",
+                initialMillis = existingCustom?.fromMillis ?: defaultFrom,
+                restrictPast = false,
+                onConfirm = { from ->
+                    pendingFromMillis = from
+                    rangePickerStage = RangePickerStage.TO
+                },
+                onDismiss = { rangePickerStage = null }
+            )
+        }
+        RangePickerStage.TO -> {
+            DateTimePickerSheet(
+                title = "تا تاریخ",
+                initialMillis = existingCustom?.toMillis ?: System.currentTimeMillis(),
+                restrictPast = false,
+                onConfirm = { to ->
+                    val from = pendingFromMillis
+                    if (from != null) {
+                        // اگه کاربر «تا» رو قبل از «از» انتخاب کرد، جابه‌جاشون می‌کنیم تا بازه معتبر بمونه
+                        val range = if (from <= to) CustomTimeRange(from, to) else CustomTimeRange(to, from)
+                        onTimeSelectionChange(TimeFilterSelection.Custom(range))
+                    }
+                    rangePickerStage = null
+                    pendingFromMillis = null
+                },
+                onDismiss = {
+                    rangePickerStage = null
+                    pendingFromMillis = null
+                }
+            )
+        }
+        null -> {}
+    }
+
+    Column(modifier = modifier) {
+        SectionLabel("وضعیتِ پیام")
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items.forEach { item ->
+                IconFilterChip(
+                    icon = iconForFilter(item),
+                    contentDescription = item.label,
+                    selected = selectedIds.contains(item.id),
+                    onClick = { onToggle(item) }
+                )
+            }
+        }
+
+        SectionLabel("زمان")
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TimeRangePreset.entries.forEach { preset ->
+                val isSelected = (timeSelection as? TimeFilterSelection.Preset)?.preset == preset
+                IconFilterChip(
+                    icon = iconForTimePreset(preset),
+                    contentDescription = preset.label,
+                    selected = isSelected,
+                    onClick = {
+                        onTimeSelectionChange(
+                            if (isSelected) TimeFilterSelection.None else TimeFilterSelection.Preset(preset)
+                        )
+                    }
+                )
+            }
+
+            val customSelection = timeSelection as? TimeFilterSelection.Custom
+            IconFilterChip(
+                icon = Icons.Filled.DateRange,
+                contentDescription = if (customSelection != null) {
+                    "${DateFormatter.formatDayMonth(customSelection.range.fromMillis)} تا ${DateFormatter.formatDayMonth(customSelection.range.toMillis)}"
+                } else {
+                    "بازه‌ی دلخواه"
+                },
+                selected = customSelection != null,
+                onClick = { rangePickerStage = RangePickerStage.FROM },
+                trailingIcon = if (customSelection != null) Icons.Filled.Close else null,
+                onTrailingClick = if (customSelection != null) {
+                    { onTimeSelectionChange(TimeFilterSelection.None) }
+                } else null
+            )
+        }
+
+        SectionLabel("مرتب‌سازی")
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ConversationSortType.entries.forEach { type ->
+                val isSelected = sortType == type
+                IconFilterChip(
+                    icon = iconForSort(type),
+                    contentDescription = type.label,
+                    selected = isSelected,
+                    onClick = { onSortTypeChange(if (isSelected) null else type) }
+                )
+            }
+        }
+    }
+}
+
+internal val FILTER_CHIP_WIDTH = 60.dp // کوچیک‌تر از چیپِ منوی «+» (که ۷۴dp بود)
+internal val FILTER_CHIP_MIN_HEIGHT = 60.dp
+internal val FILTER_CHIP_CLEAR_BADGE_SIZE = 16.dp
 
 @Composable
-private fun IconFilterChip(
+internal fun IconFilterChip(
     icon: ImageVector,
     contentDescription: String,
     selected: Boolean,
@@ -358,7 +391,7 @@ private fun SectionLabel(text: String) {
         )
     }
 }
-private fun iconForFilter(type: ConversationFilterType): ImageVector = when (type) {
+internal fun iconForFilter(type: ConversationFilterType): ImageVector = when (type) {
     ConversationFilterType.UNREAD -> Icons.Filled.MarkChatUnread
     ConversationFilterType.PINNED -> Icons.Filled.PushPin
     ConversationFilterType.NON_CONTACT -> Icons.Filled.PersonOff
