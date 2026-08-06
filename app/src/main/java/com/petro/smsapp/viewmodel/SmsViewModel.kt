@@ -515,6 +515,21 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** سوییچِ گلوبالِ «دریافتِ نوتیف» تویِ هابِ گروه‌ها - رویِ همه‌ی گروه‌های موجود یه‌جا اعمال میشه */
+    fun setAllFilterGroupsShowNotifications(enabled: Boolean) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { filterGroupRepository.setAllGroupsShowNotifications(enabled) }
+        }
+    }
+
+    /** سوییچِ گلوبالِ «نمایش در لیستِ پیام‌ها» تویِ هابِ گروه‌ها - رویِ همه‌ی گروه‌های موجود یه‌جا اعمال میشه */
+    fun setAllFilterGroupsShowInMainList(show: Boolean) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { filterGroupRepository.setAllGroupsShowInMainList(show) }
+            loadConversations()
+        }
+    }
+
     /**
      * تنظیم/برداشتنِ هدفِ دکمه‌ی «افزودن سریع به گروه»ِ روی نوتیف - از داخلِ صفحه‌ی
      * تنظیماتِ خودِ گروه (FilterGroupDetailScreen) صدا زده میشه. groupId=null یعنی

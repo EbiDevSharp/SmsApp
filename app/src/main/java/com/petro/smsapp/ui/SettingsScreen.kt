@@ -229,12 +229,15 @@ fun SettingsScreen(
                 )
                 CalendarOptionRow("سیستم", settings.themeMode == ThemeMode.SYSTEM) {
                     AppSettings.setThemeMode(context, ThemeMode.SYSTEM)
+                    (context as? android.app.Activity)?.recreate()
                 }
                 CalendarOptionRow("روشن", settings.themeMode == ThemeMode.LIGHT) {
                     AppSettings.setThemeMode(context, ThemeMode.LIGHT)
+                    (context as? android.app.Activity)?.recreate()
                 }
                 CalendarOptionRow("تاریک", settings.themeMode == ThemeMode.DARK) {
                     AppSettings.setThemeMode(context, ThemeMode.DARK)
+                    (context as? android.app.Activity)?.recreate()
                 }
                 ThinDivider()
                 SettingRow(

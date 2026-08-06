@@ -106,6 +106,15 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
         orderedGroupIds.forEachIndexed { index, id -> dao.updatePriority(id, index) }
     }
 
+    /** تنظیمِ گلوبالِ «دریافتِ نوتیف» - رویِ *همه*ی گروه‌های موجود یه‌جا اعمال میشه */
+    suspend fun setAllGroupsShowNotifications(enabled: Boolean) = dao.setAllShowNotifications(enabled)
+
+    /**
+     * تنظیمِ گلوبالِ «نمایش در لیستِ پیام‌ها» - چون فیلدِ دیتابیس برعکسه (hideFromMainList)،
+     * ورودیِ این تابع (شو=true یعنی مخفی نشه) قبل از رسیدن به DAO معکوس میشه.
+     */
+    suspend fun setAllGroupsShowInMainList(show: Boolean) = dao.setAllHideFromMainList(!show)
+
     suspend fun deleteGroup(id: Long) {
         dao.deleteGroup(id)
         // Room کلیدِ خارجی/کسکید نداره، پس ردیف‌های وابسته دستی پاک میشن

@@ -52,7 +52,9 @@ fun FilterGroupsScreen(
     onOpenGroup: (groupId: Long) -> Unit,
     onCreateGroup: (name: String, hideFromMainList: Boolean, showNotifications: Boolean, blockNonContacts: Boolean, showInNotificationPicker: Boolean) -> Unit,
     onDeleteGroup: (groupId: Long) -> Unit,
-    onReorder: (orderedGroupIds: List<Long>) -> Unit
+    onReorder: (orderedGroupIds: List<Long>) -> Unit,
+    onGlobalShowNotificationsChange: (Boolean) -> Unit,
+    onGlobalShowInMainListChange: (Boolean) -> Unit
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<FilterGroupSummary?>(null) }
@@ -139,6 +141,11 @@ fun FilterGroupsScreen(
             }
         } else {
             Column(modifier = Modifier.padding(padding)) {
+                GlobalGroupSettingsCard(
+                    groups = localOrder,
+                    onShowNotificationsChange = onGlobalShowNotificationsChange,
+                    onShowInMainListChange = onGlobalShowInMainListChange
+                )
                 Text(
                     "ترتیبِ زیر همون ترتیبِ اولویتِ چک‌کردنه - با نگه‌داشتن و کشیدنِ ردیف جابه‌جا کن",
                     style = MaterialTheme.typography.labelSmall,
@@ -160,6 +167,49 @@ fun FilterGroupsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * کارتِ تنظیماتِ گلوبالِ بالای هابِ گروه‌ها - دو سوییچی که رویِ *همه*ی گروه‌ها یه‌جا
+ * اثر می‌ذارن (به‌جای اینکه کاربر مجبور باشه تک‌تکِ گروه‌ها رو باز کنه و دستی عوض کنه).
+ * وضعیتِ هر سوییچ از رویِ خودِ لیستِ گروه‌ها مشتق میشه: روشنه فقط اگه همه‌ی گروه‌ها
+ * همون مقدار رو داشته باشن؛ اگه لیست ترکیبی باشه (بعضی روشن بعضی خاموش) سوییچ خاموش
+ * نشون داده میشه و اولین لمس همه رو یکجا روشن می‌کنه.
+ */
+@Composable
+private fun GlobalGroupSettingsCard(
+    groups: List<FilterGroupSummary>,
+    onShowNotificationsChange: (Boolean) -> Unit,
+    onShowInMainListChange: (Boolean) -> Unit
+) {
+    val allShowNotifications = groups.isNotEmpty() && groups.all { it.group.showNotifications }
+    val allShowInMainList = groups.isNotEmpty() && groups.all { !it.group.hideFromMainList }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Text(
+                "تنظیماتِ گلوبالِ همه‌ی گروه‌ها",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+            )
+            SettingSwitchRow(
+                label = "دریافتِ نوتیف برای همه‌ی گروه‌ها",
+                checked = allShowNotifications,
+                onCheckedChange = onShowNotificationsChange
+            )
+            SettingSwitchRow(
+                label = "نمایش در لیستِ پیام‌ها برای همه‌ی گروه‌ها",
+                checked = allShowInMainList,
+                onCheckedChange = onShowInMainListChange
+            )
         }
     }
 }

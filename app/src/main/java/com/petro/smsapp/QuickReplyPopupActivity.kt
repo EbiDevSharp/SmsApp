@@ -37,6 +37,7 @@ import com.petro.smsapp.ui.MessageEntry
 import com.petro.smsapp.ui.QuickReplyPopupAction
 import com.petro.smsapp.ui.QuickReplyPopupScreen
 import com.petro.smsapp.ui.SmsAppTheme
+import com.petro.smsapp.util.withPersistedThemeConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,6 +54,11 @@ import kotlinx.coroutines.flow.first
  * صفحه (یا صفحه‌قفل) پشتِ کارتِ پاپ‌آپ دیده بشه.
  */
 class QuickReplyPopupActivity : ComponentActivity() {
+
+    /** هم‌قاعده‌ی MainActivity - تمِ انتخاب‌شده‌ی کاربر رو به‌جایِ تمِ واقعیِ گوشی زور می‌کنه */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase.withPersistedThemeConfig())
+    }
 
     private val repository by lazy { SmsRepository(this) }
 

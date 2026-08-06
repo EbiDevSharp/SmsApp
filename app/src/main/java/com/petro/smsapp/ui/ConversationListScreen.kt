@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -567,7 +568,30 @@ private fun ConversationRow(
         if (selectionMode) {
             SelectionAvatar(isSelected = isSelected)
         } else {
-            ContactAvatar(name = conversation.displayName, address = conversation.address)
+            Box {
+                ContactAvatar(name = conversation.displayName, address = conversation.address)
+                // چتی که حداقل یه پیامش عضوِ یه گروهِ فیلتره - یه نشونِ کوچیکِ پوشه گوشه‌ی آواتار
+                if (conversation.isGrouped) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Folder,
+                            contentDescription = "این مکالمه عضوِ یه گروهِ فیلتره",
+                            tint = Color.White,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
+                }
+            }
         }
         Spacer(modifier = Modifier.width(12.dp))
 

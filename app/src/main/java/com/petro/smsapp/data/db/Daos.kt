@@ -226,6 +226,14 @@ interface FilterGroupDao {
     @Query("UPDATE filter_groups SET priority = :priority WHERE id = :id")
     suspend fun updatePriority(id: Long, priority: Int)
 
+    /** تنظیمِ گلوبالِ «دریافتِ نوتیف» رویِ همه‌ی گروه‌ها هم‌زمان - از هابِ اصلیِ صفحه‌ی گروه‌ها صدا زده میشه */
+    @Query("UPDATE filter_groups SET showNotifications = :enabled")
+    suspend fun setAllShowNotifications(enabled: Boolean)
+
+    /** تنظیمِ گلوبالِ «نمایش در لیستِ پیام‌ها» رویِ همه‌ی گروه‌ها هم‌زمان - hideFromMainList برعکسِ این مقداره */
+    @Query("UPDATE filter_groups SET hideFromMainList = :hide")
+    suspend fun setAllHideFromMainList(hide: Boolean)
+
     @Query("DELETE FROM filter_groups WHERE id = :id")
     suspend fun deleteGroup(id: Long)
 

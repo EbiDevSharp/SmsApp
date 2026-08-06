@@ -40,6 +40,7 @@ import com.petro.smsapp.data.TimeFilterSelection
 import com.petro.smsapp.data.applyConversationFilters
 import com.petro.smsapp.data.applySort
 import com.petro.smsapp.data.applyTimeFilter
+import com.petro.smsapp.util.withPersistedThemeConfig
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddFilterGroupNumberScreen
 import com.petro.smsapp.ui.AddFilterGroupSenderScreen
@@ -80,6 +81,14 @@ import com.petro.smsapp.data.ThemeMode
 import com.petro.smsapp.ui.SmsAppTheme
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * تمِ روشن/تاریکِ انتخاب‌شده‌ی کاربر رو به‌جای تمِ واقعیِ گوشی زور می‌کنه - نگاه
+     * کن به توضیحِ کاملِ withPersistedThemeConfig برای اینکه چرا این لازمه.
+     */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase.withPersistedThemeConfig())
+    }
 
     private val viewModel: SmsViewModel by viewModels()
 
@@ -429,6 +438,10 @@ fun AppNavigation(
                     onToggleTheme = {
                         val newMode = if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK
                         AppSettings.setThemeMode(context, newMode)
+                        // چون رزولوشنِ resourceهای values-night تویِ attachBaseContext
+                        // فقط موقعِ ساختِ اکتیویتی اجرا میشه، بعدِ تغییرِ تم باید یه بار
+                        // دوباره بسازیمش تا کانفیگِ جدید واقعاً اعمال بشه
+                        (context as? android.app.Activity)?.recreate()
                     },
                     selectedFilterIds = selectedFilterIds,
                     onToggleFilter = { filterType ->
@@ -672,7 +685,9 @@ fun AppNavigation(
                         viewModel.createFilterGroup(name, hide, notify, nonContacts, notifPicker)
                     },
                     onDeleteGroup = { groupId -> viewModel.deleteFilterGroup(groupId) },
-                    onReorder = { orderedIds -> viewModel.reorderFilterGroups(orderedIds) }
+                    onReorder = { orderedIds -> viewModel.reorderFilterGroups(orderedIds) },
+                    onGlobalShowNotificationsChange = { enabled -> viewModel.setAllFilterGroupsShowNotifications(enabled) },
+                    onGlobalShowInMainListChange = { show -> viewModel.setAllFilterGroupsShowInMainList(show) }
                 )
             }
             composable(
