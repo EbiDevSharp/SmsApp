@@ -212,6 +212,15 @@ fun ConversationListScreen(
                                         }
                                     )
                                 }
+                                DropdownMenuItem(
+                                    text = { Text("خواندن") },
+                                    leadingIcon = { Icon(Icons.Filled.Done, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        selectedIds.forEach { threadId -> onMarkThreadRead(threadId) }
+                                        selectedIds = emptySet()
+                                    }
+                                )
                                 ComingSoonMenuItem(Icons.Filled.ContentCopy, "کپی کردن") { showMoreMenu = false }
                                 ComingSoonMenuItem(Icons.Filled.Share, "اشتراک‌گذاری") { showMoreMenu = false }
                                 DropdownMenuItem(
