@@ -69,7 +69,7 @@ fun SettingsScreen(
     var showSwipeLeftToRightDialog by remember { mutableStateOf(false) }
     var infoDialogText by remember { mutableStateOf<String?>(null) }
 
-    var expandedAppearance by remember { mutableStateOf(true) }
+    var expandedAppearance by remember { mutableStateOf(false) }
     var expandedConversations by remember { mutableStateOf(false) }
     var expandedMessaging by remember { mutableStateOf(false) }
     var expandedNotifications by remember { mutableStateOf(false) }
