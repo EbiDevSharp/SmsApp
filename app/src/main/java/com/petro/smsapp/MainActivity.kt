@@ -41,7 +41,6 @@ import com.petro.smsapp.data.TimeFilterSelection
 import com.petro.smsapp.data.applyConversationFilters
 import com.petro.smsapp.data.applySort
 import com.petro.smsapp.data.applyTimeFilter
-import com.petro.smsapp.util.withPersistedThemeConfig
 import com.petro.smsapp.ui.AppDrawerContent
 import com.petro.smsapp.ui.AddFilterGroupNumberScreen
 import com.petro.smsapp.ui.AddFilterGroupSenderScreen
@@ -83,13 +82,7 @@ import com.petro.smsapp.ui.SmsAppTheme
 
 class MainActivity : ComponentActivity() {
 
-    /**
-     * تمِ روشن/تاریکِ انتخاب‌شده‌ی کاربر رو به‌جای تمِ واقعیِ گوشی زور می‌کنه - نگاه
-     * کن به توضیحِ کاملِ withPersistedThemeConfig برای اینکه چرا این لازمه.
-     */
-    override fun attachBaseContext(newBase: android.content.Context) {
-        super.attachBaseContext(newBase.withPersistedThemeConfig())
-    }
+
 
     private val viewModel: SmsViewModel by viewModels()
 
