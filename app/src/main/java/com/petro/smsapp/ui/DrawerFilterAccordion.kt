@@ -29,10 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.petro.smsapp.data.ConversationFilterType
 import com.petro.smsapp.data.ConversationSortType
 import com.petro.smsapp.data.CustomTimeRange
@@ -238,6 +239,10 @@ fun DrawerFilterAccordion(
     }
 }
 
+private val FILTER_CHIP_WIDTH = 60.dp // کوچیک‌تر از چیپِ منوی «+» (که ۷۴dp بود)
+private val FILTER_CHIP_MIN_HEIGHT = 60.dp
+private val FILTER_CHIP_CLEAR_BADGE_SIZE = 16.dp
+
 @Composable
 private fun IconFilterChip(
     icon: ImageVector,
@@ -247,46 +252,76 @@ private fun IconFilterChip(
     trailingIcon: ImageVector? = null,
     onTrailingClick: (() -> Unit)? = null
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(14.dp)
     val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-    val bgColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
-    val iconTint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val bgColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    }
+    val contentTint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(shape)
-            .background(bgColor)
-            .border(1.dp, borderColor, shape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = rememberRipple(bounded = true, color = MaterialTheme.colorScheme.primary),
-                onClick = onClick
-            )
-            .semantics { this.contentDescription = contentDescription },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconTint,
-            modifier = Modifier.size(22.dp)
-        )
-        if (trailingIcon != null && onTrailingClick != null) {
+    Box(modifier = Modifier.width(FILTER_CHIP_WIDTH)) {
+        // آیکن بالا، لیبل درست زیرش، هردو وسط‌چین - دقیقاً همون الگوی چیپِ
+        // زمان‌بندیِ منوی «+» (AttachMenuChip تو AttachMenu.kt)، فقط کوچیک‌تر؛ اگه
+        // لیبل جا نشه تا ۲ خط می‌شکنه و بعدش سه‌نقطه می‌خوره
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = FILTER_CHIP_MIN_HEIGHT)
+                .clip(shape)
+                .background(bgColor)
+                .border(1.dp, borderColor, shape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = rememberRipple(bounded = true, color = MaterialTheme.colorScheme.primary),
+                    onClick = onClick
+                )
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
             Icon(
-                imageVector = trailingIcon,
-                contentDescription = "پاک کردن",
-                tint = iconTint,
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentTint,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = contentDescription,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                color = contentTint,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (trailingIcon != null && onTrailingClick != null) {
+            // بجِ کوچیکِ گوشه‌ی چیپ - همون ظاهرِ دکمه‌ی لغوِ چیپِ زمان‌بندی
+            // (دایره‌ی قرمزِ پر با آیکنِ سفید)
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(14.dp)
-                    .offset(x = (-2).dp, y = 2.dp)
+                    .offset(x = 5.dp, y = (-5).dp)
+                    .size(FILTER_CHIP_CLEAR_BADGE_SIZE)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.error)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = onTrailingClick
-                    )
-            )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = trailingIcon,
+                    contentDescription = "پاک کردن",
+                    tint = Color.White,
+                    modifier = Modifier.size(11.dp)
+                )
+            }
         }
     }
 }
