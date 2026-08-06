@@ -41,7 +41,7 @@ import com.petro.smsapp.data.ThemeMode
 import com.petro.smsapp.data.backup.BackupCategory
 import com.petro.smsapp.data.backup.BackupModule
 import kotlinx.coroutines.launch
-
+import com.petro.smsapp.util.SettingsDropdown
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -222,47 +222,54 @@ fun SettingsScreen(
                 expanded = expandedAppearance,
                 onToggle = { expandedAppearance = !expandedAppearance }
             ) {
-                SettingRow(
+                SettingsDropdown(
                     title = "تم برنامه",
-                    info = "بر اساس تنظیمات گوشی یا دستی",
-                    onInfo = { infoDialogText = it }
+
+                    current = settings.themeMode,
+
+                    items = listOf(
+                        ThemeMode.SYSTEM to "سیستم",
+                        ThemeMode.LIGHT to "روشن",
+                        ThemeMode.DARK to "تاریک"
+                    ),
+
+                    onChange = {
+                        AppSettings.setThemeMode(context, it)
+                        (context as? android.app.Activity)?.recreate()
+                    }
                 )
-                CalendarOptionRow("سیستم", settings.themeMode == ThemeMode.SYSTEM) {
-                    AppSettings.setThemeMode(context, ThemeMode.SYSTEM)
-                    (context as? android.app.Activity)?.recreate()
-                }
-                CalendarOptionRow("روشن", settings.themeMode == ThemeMode.LIGHT) {
-                    AppSettings.setThemeMode(context, ThemeMode.LIGHT)
-                    (context as? android.app.Activity)?.recreate()
-                }
-                CalendarOptionRow("تاریک", settings.themeMode == ThemeMode.DARK) {
-                    AppSettings.setThemeMode(context, ThemeMode.DARK)
-                    (context as? android.app.Activity)?.recreate()
-                }
                 ThinDivider()
-                SettingRow(
+                SettingsDropdown(
                     title = "نمایش تاریخ",
-                    info = "تاریخ‌های داخل برنامه بر همین اساس نشون داده میشن",
-                    onInfo = { infoDialogText = it }
+
+                    current = settings.calendarType,
+
+                    items = listOf(
+                        CalendarType.GREGORIAN to "میلادی",
+                        CalendarType.JALALI to "شمسی"
+                    ),
+
+                    onChange = {
+                        AppSettings.setCalendarType(context, it)
+                    }
                 )
-                CalendarOptionRow("میلادی", settings.calendarType == CalendarType.GREGORIAN) {
-                    AppSettings.setCalendarType(context, CalendarType.GREGORIAN)
-                }
-                CalendarOptionRow("شمسی", settings.calendarType == CalendarType.JALALI) {
-                    AppSettings.setCalendarType(context, CalendarType.JALALI)
-                }
+
                 ThinDivider()
-                SettingRow(
+
+                SettingsDropdown(
                     title = "نمایش ساعت",
-                    info = "ساعت‌های داخل برنامه بر همین اساس نشون داده میشن",
-                    onInfo = { infoDialogText = it }
+
+                    current = settings.clockFormat,
+
+                    items = listOf(
+                        ClockFormat.H24 to "۲۴ ساعته",
+                        ClockFormat.H12 to "۱۲ ساعته"
+                    ),
+
+                    onChange = {
+                        AppSettings.setClockFormat(context, it)
+                    }
                 )
-                CalendarOptionRow("۲۴ ساعته", settings.clockFormat == ClockFormat.H24) {
-                    AppSettings.setClockFormat(context, ClockFormat.H24)
-                }
-                CalendarOptionRow("۱۲ ساعته", settings.clockFormat == ClockFormat.H12) {
-                    AppSettings.setClockFormat(context, ClockFormat.H12)
-                }
             }
 
             // لیست مکالمات
