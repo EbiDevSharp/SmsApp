@@ -1,5 +1,6 @@
 package com.petro.smsapp.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,6 +74,7 @@ import kotlinx.coroutines.launch
  *    میشه - قبلاً بعد از این کلیک، هم چیپِ مخاطب اضافه می‌شد هم متنِ خام همچنان تو
  *    باکس می‌موند که تکراری/گیج‌کننده بود.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NewMessageScreen(
     contacts: List<ContactInfo>,

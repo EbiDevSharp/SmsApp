@@ -176,7 +176,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, channelId)
+        val notificationBuilder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_message)
             .setContentTitle(displayName)
             .setContentText(body)
@@ -185,7 +185,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(popupPendingIntent)
             .setFullScreenIntent(popupPendingIntent, true)
-            .build()
+
+        if (AppSettings.isMarkReadOnNotificationDismissEnabled(context)) {
+            notificationBuilder.setDeleteIntent(buildDismissMarkReadPendingIntent(context, threadId, notificationId))
+        }
+
+        val notification = notificationBuilder.build()
 
         NotificationManagerCompat.from(context).apply {
             try {
@@ -237,6 +242,15 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             .setContentIntent(contentPendingIntent)
         if (largeIcon != null) {
             builder.setLargeIcon(largeIcon)
+        }
+
+        // اگه کاربر از تنظیمات «خوانده‌شدن با بیرون‌انداختنِ نوتیف» رو فعال کرده باشه،
+        // سوایپ‌کردنِ (بیرون‌انداختنِ دستیِ) خودِ نوتیف هم دقیقاً همون کاری رو بکنه که
+        // دکمه‌ی «خوانده شد» می‌کنه. توجه: setDeleteIntent فقط با سوایپِ کاربر یا «پاک‌کردنِ
+        // همه» صدا زده میشه - نه با تپ‌کردن روی نوتیف (autoCancel) و نه با زدنِ دکمه‌های
+        // روی نوتیف (که خودِ اپ مستقیم cancel می‌کنه).
+        if (AppSettings.isMarkReadOnNotificationDismissEnabled(context)) {
+            builder.setDeleteIntent(buildDismissMarkReadPendingIntent(context, threadId, notificationId))
         }
 
         val enabledActions = AppSettings.getNotificationActionSettings(context)
@@ -294,6 +308,24 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Action.Builder(R.drawable.ic_check, "خوانده شد", markReadPendingIntent).build()
+    }
+
+    /**
+     * دقیقاً همون Intent/اکشنِ دکمه‌ی «خوانده شد» (ACTION_MARK_READ)، ولی برای
+     * setDeleteIntent - یعنی وقتی کاربر خودِ نوتیف رو با سوایپ بیرون می‌ندازه. requestCode
+     * جدا (notificationId * 10 + 8) داره تا PendingIntentِ دکمه‌ی «خوانده شد» رو بازنویسی نکنه.
+     */
+    private fun buildDismissMarkReadPendingIntent(context: Context, threadId: Long, notificationId: Int): PendingIntent {
+        val dismissIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_MARK_READ
+            data = Uri.parse("smsapp://dismiss-mark-read/$threadId")
+            putExtra(NotificationActionReceiver.EXTRA_THREAD_ID, threadId)
+            putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        return PendingIntent.getBroadcast(
+            context, notificationId * 10 + 8, dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun buildDeleteAction(context: Context, messageId: Long, notificationId: Int): NotificationCompat.Action {

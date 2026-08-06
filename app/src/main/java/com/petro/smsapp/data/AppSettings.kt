@@ -49,6 +49,8 @@ object AppSettings {
     private const val KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME = "popup_instead_of_notification_enabled"
     // تأخیر ارسال پیام (ثانیه) - ۰ = فوری، ۱ تا ۱۵
     private const val KEY_SEND_DELAY_SECONDS_NAME = "send_delay_seconds"
+    // جدید: وقتی کاربر نوتیفِ پیامکِ تازه‌رسیده رو با دست (سوایپ) بیرون بندازه، اون پیام خودکار خوانده‌شده علامت بخوره
+    private const val KEY_MARK_READ_ON_NOTIFICATION_DISMISS_NAME = "mark_read_on_notification_dismiss_enabled"
 
     // اسمِ SharedPreferences جدا برای خواندنِ سینکرونِ themeMode - نگاه کن به getThemeModeSync پایین
     private const val QUICK_PREFS_NAME = "quick_theme_prefs"
@@ -69,6 +71,7 @@ object AppSettings {
     private val KEY_ALPHABET_INDEX_BAR_ENABLED = booleanPreferencesKey(KEY_ALPHABET_INDEX_BAR_ENABLED_NAME)
     private val KEY_POPUP_INSTEAD_OF_NOTIFICATION = booleanPreferencesKey(KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME)
     private val KEY_SEND_DELAY_SECONDS = intPreferencesKey(KEY_SEND_DELAY_SECONDS_NAME)
+    private val KEY_MARK_READ_ON_NOTIFICATION_DISMISS = booleanPreferencesKey(KEY_MARK_READ_ON_NOTIFICATION_DISMISS_NAME)
 
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
     const val DEFAULT_SEND_DELAY_SECONDS = 0
@@ -117,7 +120,9 @@ object AppSettings {
         // جدید: به‌جای نوتیفِ معمولی، پیامکِ تازه‌رسیده با یه پاپ‌آپِ روی صفحه نشون داده بشه
         val popupInsteadOfNotificationEnabled: Boolean = false,
         // تأخیر ارسال (ثانیه) - ۰ = فوری
-        val sendDelaySeconds: Int = DEFAULT_SEND_DELAY_SECONDS
+        val sendDelaySeconds: Int = DEFAULT_SEND_DELAY_SECONDS,
+        // جدید: با سوایپ‌کردنِ (بیرون‌انداختنِ) نوتیفِ پیامک، همون پیام خوانده‌شده علامت بخوره
+        val markReadOnNotificationDismissEnabled: Boolean = false
     )
 
     private val _state = MutableStateFlow(State())
@@ -152,7 +157,8 @@ object AppSettings {
                         alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true,
                         popupInsteadOfNotificationEnabled = prefs[KEY_POPUP_INSTEAD_OF_NOTIFICATION] ?: false,
                         sendDelaySeconds = (prefs[KEY_SEND_DELAY_SECONDS] ?: DEFAULT_SEND_DELAY_SECONDS)
-                            .coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS)
+                            .coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS),
+                        markReadOnNotificationDismissEnabled = prefs[KEY_MARK_READ_ON_NOTIFICATION_DISMISS] ?: false
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -254,6 +260,11 @@ object AppSettings {
         val clamped = seconds.coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS)
         write(context) { it[KEY_SEND_DELAY_SECONDS] = clamped }
     }
+
+    /** سوایپ‌کردنِ (بیرون‌انداختنِ دستیِ) نوتیفِ پیامکِ تازه‌رسیده، اون پیام رو خودکار خوانده‌شده کنه */
+    fun isMarkReadOnNotificationDismissEnabled(context: Context): Boolean = _state.value.markReadOnNotificationDismissEnabled
+    fun setMarkReadOnNotificationDismissEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_MARK_READ_ON_NOTIFICATION_DISMISS] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

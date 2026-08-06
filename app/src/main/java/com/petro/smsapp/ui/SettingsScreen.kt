@@ -384,6 +384,13 @@ fun SettingsScreen(
                     onChecked = { AppSettings.setPopupInsteadOfNotificationEnabled(context, it) },
                     onInfo = { infoDialogText = it }
                 )
+                SwitchRow(
+                    title = "خوانده‌شدن با بیرون‌انداختنِ نوتیف",
+                    info = "اگه نوتیفِ پیامکِ تازه‌رسیده رو با دست (سوایپ) بیرون بندازی، همون پیام خودکار خوانده‌شده علامت می‌خوره",
+                    checked = settings.markReadOnNotificationDismissEnabled,
+                    onChecked = { AppSettings.setMarkReadOnNotificationDismissEnabled(context, it) },
+                    onInfo = { infoDialogText = it }
+                )
                 if (settings.popupInsteadOfNotificationEnabled && !overlayPermissionGranted) {
                     ListItem(
                         headlineContent = {

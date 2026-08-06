@@ -61,7 +61,7 @@ private sealed class ThreadListItem {
         override val sortDate get() = scheduled.scheduledAt
     }
 }
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ThreadScreen(
     displayName: String,

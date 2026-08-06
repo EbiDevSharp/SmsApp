@@ -128,6 +128,7 @@ object BackupModule {
         return JSONObject().apply {
             put("deliveryNotificationsEnabled", s.deliveryNotificationsEnabled)
             put("popupInsteadOfNotificationEnabled", s.popupInsteadOfNotificationEnabled)
+            put("markReadOnNotificationDismissEnabled", s.markReadOnNotificationDismissEnabled)
             put("notificationActions", JSONArray().apply {
                 s.notificationActions.forEach { action ->
                     put(JSONObject().apply {
@@ -447,6 +448,8 @@ object BackupModule {
             AppSettings.setDeliveryNotificationsEnabled(context, data.getBoolean("deliveryNotificationsEnabled"))
         if (data.has("popupInsteadOfNotificationEnabled"))
             AppSettings.setPopupInsteadOfNotificationEnabled(context, data.getBoolean("popupInsteadOfNotificationEnabled"))
+        if (data.has("markReadOnNotificationDismissEnabled"))
+            AppSettings.setMarkReadOnNotificationDismissEnabled(context, data.getBoolean("markReadOnNotificationDismissEnabled"))
         if (data.has("notificationActions")) {
             val arr = data.getJSONArray("notificationActions")
             val list = mutableListOf<NotificationActionSetting>()
