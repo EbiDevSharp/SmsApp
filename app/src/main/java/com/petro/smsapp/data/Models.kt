@@ -11,7 +11,8 @@ data class Conversation(
     val unreadCount: Int,
     val isDraft: Boolean = false,
     val isPinned: Boolean = false,
-    val messageCount: Int = 0
+    val messageCount: Int = 0,
+    val isGrouped: Boolean = false
 )
 
 data class SmsMessage(

@@ -290,6 +290,8 @@ class FilterGroupRepository(private val dao: FilterGroupDao) {
 
     /** id همه‌ی پیام‌هایی که تویِ یه گروهِ hideFromMainList=true افتادن - برای فیلترِ لیستِ اصلی */
     suspend fun getHiddenMessageIds(): Set<Long> = dao.getHiddenMessageIds().toSet()
+    /** id همه‌ی پیام‌هایی که عضوِ هر گروهِ فیلتری هستن - برای فیلترِ «گروه‌بندی‌شده» */
+    suspend fun getAllMatchedMessageIds(): Set<Long> = dao.getAllMatchedMessageIds().toSet()
 
     private fun digitsOnly(value: String): String = value.filter { it.isDigit() }
 

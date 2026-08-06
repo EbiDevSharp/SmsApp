@@ -23,7 +23,9 @@ enum class ConversationFilterType(val id: String, val label: String) {
     // چت‌هایی که حداقل یه پیامِ فیوریت‌شده (علاقه‌مندی) داخلشون هست
     HAS_FAVORITE_MESSAGE("has_favorite_message", "علاقه‌مند"),
     // چت‌هایی که یه پیش‌نویسِ ذخیره‌شده دارن (Conversation.isDraft)
-    DRAFT("draft", "پیش‌نویس");
+    DRAFT("draft", "پیش‌نویس"),
+    // چت‌هایی که حداقل یه پیامشون تویِ یکی از گروه‌های فیلتر افتاده (Conversation.isGrouped)
+    GROUPED("grouped", "گروه");
 
     /**
      * این مکالمه با این فیلتر مچ میشه یا نه. فیلترهایی که فقط به فیلدهای خودِ Conversation
@@ -39,6 +41,7 @@ enum class ConversationFilterType(val id: String, val label: String) {
             HAS_PINNED_MESSAGE -> context.pinnedMessageThreadIds.contains(conversation.threadId)
             HAS_FAVORITE_MESSAGE -> context.favoriteThreadIds.contains(conversation.threadId)
             DRAFT -> conversation.isDraft
+            GROUPED -> conversation.isGrouped
         }
 
     companion object {

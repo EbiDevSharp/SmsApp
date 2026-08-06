@@ -50,7 +50,9 @@ class SmsRepository(
 
     suspend fun getConversations(): List<Conversation> {
         if (!requireReadSmsPermission("خواندن لیست مکالمات")) return emptyList()
-        val threadMeta = getAllThreadsMeta()
+        val threadsResult = getAllThreadsMeta()
+        val threadMeta = threadsResult.meta
+        val groupedThreadIds = threadsResult.groupedThreadIds
         val drafts = getAllDrafts()
 
         val allThreadIds = threadMeta.keys + drafts.keys
@@ -80,7 +82,8 @@ class SmsRepository(
                 unreadCount = meta?.unreadCount ?: 0,
                 isDraft = draftIsNewer,
                 isPinned = pinRepository.isThreadPinned(threadId),
-                messageCount = meta?.messageCount ?: 0
+                messageCount = meta?.messageCount ?: 0,
+                isGrouped = groupedThreadIds.contains(threadId)
             )
         }
         val pinnedAtByThread = conversations.filter { it.isPinned }
@@ -95,14 +98,19 @@ class SmsRepository(
 
     private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val messageCount: Int, val snippet: String)
     private data class DraftMeta(val address: String, val body: String, val date: Long)
+    /** خروجیِ getAllThreadsMeta - علاوه بر متادیتای هر ترد، threadId هایی که حداقل یه پیامِ گروه‌بندی‌شده دارن رو هم برمی‌گردونه */
+    private data class ThreadsResult(val meta: Map<Long, ThreadMeta>, val groupedThreadIds: Set<Long>)
 
-    private suspend fun getAllThreadsMeta(): Map<Long, ThreadMeta> {
+    private suspend fun getAllThreadsMeta(): ThreadsResult {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
         val messageCounts = mutableMapOf<Long, Int>()
+        val groupedThreadIds = mutableSetOf<Long>()
         val trashedIds = trashRepository.getTrashedIds()
         // پیام‌هایی که تویِ یه گروهِ فیلترِ hideFromMainList=true افتادن - از لیستِ اصلی مخفی میشن
         val hiddenByFilterGroup = filterGroupRepository.getHiddenMessageIds()
+        // پیام‌هایی که عضوِ *هر* گروهی هستن (چه مخفی چه غیرِمخفی) - برای فیلترِ «گروه‌بندی‌شده»
+        val allGroupedMessageIds = filterGroupRepository.getAllMatchedMessageIds()
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -121,11 +129,15 @@ class SmsRepository(
                 val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
                 val typeIdx = cursor.getColumnIndex(Telephony.Sms.TYPE)
                 while (cursor.moveToNext()) {
-                    if (cursor.getLong(idIdx) in trashedIds) continue
-                    if (cursor.getLong(idIdx) in hiddenByFilterGroup) continue
+                    val messageId = cursor.getLong(idIdx)
+                    if (messageId in trashedIds) continue
+                    if (messageId in hiddenByFilterGroup) continue
                     if (typeIdx >= 0 && cursor.getInt(typeIdx) == Telephony.Sms.MESSAGE_TYPE_DRAFT) continue
 
                     val threadId = cursor.getLong(threadIdIdx)
+                    if (messageId in allGroupedMessageIds) {
+                        groupedThreadIds.add(threadId)
+                    }
                     messageCounts[threadId] = (messageCounts[threadId] ?: 0) + 1
                     if (cursor.getInt(readIdx) == 0) {
                         unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
@@ -143,11 +155,12 @@ class SmsRepository(
             }
         } catch (e: SecurityException) {
             Log.w("SmsRepository", "SecurityException موقع خوندن لیست مکالمات - مجوز احتمالاً همین لحظه برداشته شده", e)
-            return emptyMap()
+            return ThreadsResult(emptyMap(), emptySet())
         }
-        return result.mapValues { (threadId, meta) ->
+        val finalMeta = result.mapValues { (threadId, meta) ->
             meta.copy(unreadCount = unreadCounts[threadId] ?: 0, messageCount = messageCounts[threadId] ?: 0)
         }
+        return ThreadsResult(finalMeta, groupedThreadIds)
     }
 
     private fun getAllDrafts(): Map<Long, DraftMeta> {

@@ -330,6 +330,7 @@ private fun iconForFilter(type: ConversationFilterType): ImageVector = when (typ
     ConversationFilterType.HAS_PINNED_MESSAGE -> Icons.Outlined.PushPin
     ConversationFilterType.HAS_FAVORITE_MESSAGE -> Icons.Filled.Star
     ConversationFilterType.DRAFT -> Icons.Filled.Edit
+    ConversationFilterType.GROUPED -> Icons.Filled.Folder
 }
 
 private fun iconForTimePreset(preset: TimeRangePreset): ImageVector = when (preset.ordinal) {

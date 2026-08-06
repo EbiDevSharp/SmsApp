@@ -338,7 +338,13 @@ interface FilterGroupDao {
                 "JOIN filter_groups g ON g.id = m.groupId WHERE g.hideFromMainList = 1"
     )
     suspend fun getHiddenMessageIds(): List<Long>
-
+    /**
+     * id همه‌ی پیام‌هایی که به هر گروهی (صرف‌نظر از hideFromMainList) مچ شدن - برای
+     * فیلترِ «گروه‌بندی‌شده»ی آکاردئونِ درآور. برخلافِ getHiddenMessageIds که فقط
+     * گروه‌های hideFromMainList=1 رو برمی‌گردونه، این همه‌ی گروه‌ها رو شامل میشه.
+     */
+    @Query("SELECT messageId FROM filter_group_matched_messages")
+    suspend fun getAllMatchedMessageIds(): List<Long>
     @Query("SELECT groupId as groupId, COUNT(*) as cnt FROM filter_group_matched_messages GROUP BY groupId")
     fun observeMessageCounts(): Flow<List<GroupIdCount>>
 }
