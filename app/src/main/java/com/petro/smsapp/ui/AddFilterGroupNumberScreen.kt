@@ -23,19 +23,22 @@ import com.petro.smsapp.util.autoDirection
 fun AddFilterGroupNumberScreen(
     groupName: String,
     contacts: List<ContactInfo>,
-    pickedContact: ContactInfo?,
-    onPickedContactConsumed: () -> Unit,
-    onPickFromContactsClick: () -> Unit,
+    pickedContactsBatch: List<ContactInfo>?,
+    onPickedContactsBatchConsumed: () -> Unit,
+    onOpenContactPicker: () -> Unit,
     onSearchChange: (String) -> Unit,
     onAddNumber: (address: String, displayName: String) -> Unit,
     onBack: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    LaunchedEffect(pickedContact) {
-        if (pickedContact != null) {
-            onAddNumber(pickedContact.phoneNumber, pickedContact.name)
-            onPickedContactConsumed()
+    // برگشت از صفحه‌ی «انتخابِ چندتاییِ مخاطبین» (همون کامپوننتی که تویِ «پیامِ جدید»
+    // استفاده میشه) - همه‌ی مخاطب‌های تیک‌خورده یه‌جا به گروه اضافه میشن
+    LaunchedEffect(pickedContactsBatch) {
+        val batch = pickedContactsBatch
+        if (batch != null) {
+            batch.forEach { onAddNumber(it.phoneNumber, it.name) }
+            onPickedContactsBatchConsumed()
             onBack()
         }
     }
@@ -67,8 +70,8 @@ fun AddFilterGroupNumberScreen(
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
                 leadingIcon = {
-                    IconButton(onClick = onPickFromContactsClick) {
-                        Icon(Icons.Filled.Person, contentDescription = "انتخاب از مخاطبین گوشی")
+                    IconButton(onClick = onOpenContactPicker) {
+                        Icon(Icons.Filled.Person, contentDescription = "انتخابِ چندتاییِ مخاطبین")
                     }
                 }
             )

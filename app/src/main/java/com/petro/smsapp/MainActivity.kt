@@ -112,14 +112,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { }
 
-    private val pickContactLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            result.data?.data?.let { uri -> handlePickedContact(uri) }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -139,11 +131,6 @@ class MainActivity : ComponentActivity() {
                     {
                         AppNavigation(
                             viewModel = viewModel,
-                            onPickContactClick = {
-                                pickContactLauncher.launch(
-                                    Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
-                                )
-                            },
                             onOpenContactInfo = { address -> openContactInfo(address) }
                         )
                     }
@@ -229,32 +216,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handlePickedContact(uri: Uri) {
-        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (!cursor.moveToFirst()) return@use
-            val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-            val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
-            val hasPhoneIdx = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
-            if (idIdx < 0 || hasPhoneIdx < 0 || cursor.getInt(hasPhoneIdx) <= 0) return@use
-
-            val contactId = cursor.getLong(idIdx)
-            val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
-
-            contentResolver.query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
-                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
-                arrayOf(contactId.toString()),
-                null
-            )?.use { phoneCursor ->
-                if (phoneCursor.moveToFirst()) {
-                    val number = phoneCursor.getString(0) ?: return@use
-                    viewModel.setPickedContact(ContactInfo(contactId, name.ifBlank { number }, number))
-                }
-            }
-        }
-    }
-
     private fun openContactInfo(address: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             val lookupUri = ContactsRepository(this@MainActivity).getContactLookupUri(address)
@@ -288,7 +249,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation(
     viewModel: SmsViewModel,
-    onPickContactClick: () -> Unit,
     onOpenContactInfo: (String) -> Unit
 ) {
     val navController = rememberNavController()
@@ -742,9 +702,12 @@ fun AppNavigation(
                 AddFilterGroupNumberScreen(
                     groupName = summary?.group?.name ?: "",
                     contacts = contacts,
-                    pickedContact = pickedContact,
-                    onPickedContactConsumed = { viewModel.consumePickedContact() },
-                    onPickFromContactsClick = onPickContactClick,
+                    pickedContactsBatch = pickedContactsBatch,
+                    onPickedContactsBatchConsumed = { viewModel.consumePickedContactsBatch() },
+                    onOpenContactPicker = {
+                        viewModel.loadAllContactsForPicker()
+                        navController.navigate("contact_picker")
+                    },
                     onSearchChange = { query -> viewModel.searchContacts(query) },
                     onAddNumber = { address, displayName -> viewModel.addNumberToFilterGroup(groupId, address, displayName) },
                     onBack = { navController.popBackStack() }
@@ -900,9 +863,12 @@ fun AppNavigation(
                 if (privateUnlocked) {
                     AddPrivateNumberScreen(
                         contacts = contacts,
-                        pickedContact = pickedContact,
-                        onPickedContactConsumed = { viewModel.consumePickedContact() },
-                        onPickFromContactsClick = onPickContactClick,
+                        pickedContactsBatch = pickedContactsBatch,
+                        onPickedContactsBatchConsumed = { viewModel.consumePickedContactsBatch() },
+                        onOpenContactPicker = {
+                            viewModel.loadAllContactsForPicker()
+                            navController.navigate("contact_picker")
+                        },
                         onSearchChange = { query -> viewModel.searchContacts(query) },
                         onMakePrivate = { address, displayName -> viewModel.makePrivateNumber(address, displayName) },
                         onBack = { navController.popBackStack() }

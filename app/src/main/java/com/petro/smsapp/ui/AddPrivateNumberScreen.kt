@@ -21,26 +21,29 @@ import com.petro.smsapp.util.autoDirection
 
 /**
  * صفحه‌ی «افزودن شماره‌ی خصوصی» - عیناً هم‌خانواده‌ی AddBlockedNumberScreen: جستجو تو
- * مخاطبین گوشی + دکمه‌ی انتخاب از لیست مخاطبین + امکان وارد کردن دستی یه شماره که
- * اصلاً تو مخاطبین نیست. با انتخاب (چه از مخاطبین چه دستی)، بلافاصله همون شماره
- * خصوصی میشه و برمی‌گرده عقب.
+ * مخاطبینِ داخلِ اپ + دکمه‌ی «انتخابِ چندتاییِ مخاطبین» (همون کامپوننتی که تویِ صفحه‌ی
+ * «پیامِ جدید» استفاده میشه، نه اپِ مخاطبینِ گوشی) + امکان وارد کردن دستی یه شماره
+ * که اصلاً تو مخاطبین نیست. با انتخاب (چه از لیست چه دستی چه از پیکرِ چندتایی)،
+ * بلافاصله همون شماره(ها) خصوصی میشن.
  */
 @Composable
 fun AddPrivateNumberScreen(
     contacts: List<ContactInfo>,
-    pickedContact: ContactInfo?,
-    onPickedContactConsumed: () -> Unit,
-    onPickFromContactsClick: () -> Unit,
+    pickedContactsBatch: List<ContactInfo>?,
+    onPickedContactsBatchConsumed: () -> Unit,
+    onOpenContactPicker: () -> Unit,
     onSearchChange: (String) -> Unit,
     onMakePrivate: (address: String, displayName: String) -> Unit,
     onBack: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    LaunchedEffect(pickedContact) {
-        if (pickedContact != null) {
-            onMakePrivate(pickedContact.phoneNumber, pickedContact.name)
-            onPickedContactConsumed()
+    // برگشت از صفحه‌ی «انتخابِ چندتاییِ مخاطبین» - همه‌ی مخاطب‌های تیک‌خورده یه‌جا خصوصی میشن
+    LaunchedEffect(pickedContactsBatch) {
+        val batch = pickedContactsBatch
+        if (batch != null) {
+            batch.forEach { onMakePrivate(it.phoneNumber, it.name) }
+            onPickedContactsBatchConsumed()
             onBack()
         }
     }
@@ -72,8 +75,8 @@ fun AddPrivateNumberScreen(
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
                 leadingIcon = {
-                    IconButton(onClick = onPickFromContactsClick) {
-                        Icon(Icons.Filled.Person, contentDescription = "انتخاب از مخاطبین گوشی")
+                    IconButton(onClick = onOpenContactPicker) {
+                        Icon(Icons.Filled.Person, contentDescription = "انتخابِ چندتاییِ مخاطبین")
                     }
                 }
             )
