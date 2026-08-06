@@ -12,6 +12,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 
 
 @Composable
@@ -108,36 +111,55 @@ fun <T> SettingsDropdown(
             expanded = expanded,
             onDismissRequest = {
                 expanded = false
-            }
+            },
+            modifier = Modifier
+                .width(220.dp)
+                .padding(4.dp)
         ) {
-
 
             items.forEach { item ->
 
+                val selected = item.first == current
 
                 DropdownMenuItem(
 
-                    text = {
-                        Text(item.second)
-                    },
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .then(
+                            if (selected) {
+                                Modifier.background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    RoundedCornerShape(12.dp)
+                                )
+                            } else {
+                                Modifier
+                            }
+                        ),
 
+                    text = {
+                        Text(
+                            text = item.second,
+                            fontWeight = if (selected)
+                                FontWeight.Bold
+                            else
+                                FontWeight.Normal
+                        )
+                    },
 
                     leadingIcon = {
 
-                        if (item.first == current) {
+                        if (selected) {
 
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = null
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     },
 
-
                     onClick = {
-
                         onChange(item.first)
-
                         expanded = false
                     }
                 )

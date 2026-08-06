@@ -42,6 +42,7 @@ import com.petro.smsapp.data.backup.BackupCategory
 import com.petro.smsapp.data.backup.BackupModule
 import kotlinx.coroutines.launch
 import com.petro.smsapp.util.SettingsDropdown
+import androidx.compose.ui.draw.scale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -285,6 +286,7 @@ fun SettingsScreen(
                     checked = settings.showContactNumberInListEnabled,
                     onChecked = { AppSettings.setShowContactNumberInListEnabled(context, it) },
                     onInfo = { infoDialogText = it }
+
                 )
                 SwitchRow(
                     title = "نوار حروف الفبا",
@@ -603,7 +605,11 @@ private fun SwitchRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(checked = checked, onCheckedChange = onChecked)
+                Switch(
+                    checked = checked,
+                    onCheckedChange = onChecked,
+                    modifier = Modifier.scale(0.65f)
+                )
             }
         },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
