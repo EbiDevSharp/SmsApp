@@ -19,27 +19,53 @@ private val BlueDark = Color(0xFF0B5CFF)
 private val AppLightColors = lightColorScheme(
     primary = Blue,
     onPrimary = Color.White,
+
     secondary = BlueDark,
+    onSecondary = Color.White,
+
     background = Color(0xFFF7F8FA),
-    surface = Color.White,
     onBackground = Color.Black,
-    onSurface = Color.Black
+
+    surface = Color.White,
+    onSurface = Color.Black,
+
+    surfaceVariant = Color(0xFFEDEFF2),
+    onSurfaceVariant = Color(0xFF424242),
+
+    primaryContainer = Color(0xFFD9E7FF),
+    onPrimaryContainer = Color.Black,
+
+    secondaryContainer = Color(0xFFDCE8FF),
+    onSecondaryContainer = Color.Black,
+
+    error = Color(0xFFB3261E),
+    onError = Color.White
 )
 
 private val AppDarkColors = darkColorScheme(
     primary = Blue,
     onPrimary = Color.White,
+
     secondary = BlueDark,
+    onSecondary = Color.White,
+
     background = Color(0xFF121212),
-    surface = Color(0xFF1E1E1E),
     onBackground = Color.White,
+
+    surface = Color(0xFF1E1E1E),
     onSurface = Color.White,
-    // حبابِ پیام‌های واردهِ حالتِ دارک از همینا رنگ می‌گیره - قبلاً ست نشده بودن
-    // و متریال۳ به‌صورتِ پیش‌فرض یه خاکستریِ متمایل‌به‌بنفش با نوشته‌ی خاکستری‌روشن
-    // می‌ذاشت. الان پس‌زمینه از background/surface روشن‌تره (سیاهیِ کمتر) و نوشته
-    // کاملاً سفیده.
+
     surfaceVariant = Color(0xFF2A2A2C),
-    onSurfaceVariant = Color.White
+    onSurfaceVariant = Color.White,
+
+    primaryContainer = Color(0xFF1D3F73),
+    onPrimaryContainer = Color.White,
+
+    secondaryContainer = Color(0xFF1E3A5F),
+    onSecondaryContainer = Color.White,
+
+    error = Color(0xFFFFB4AB),
+    onError = Color.Black
 )
 
 @Composable
