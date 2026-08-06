@@ -393,10 +393,6 @@ fun AppNavigation(
                     onToggleTheme = {
                         val newMode = if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK
                         AppSettings.setThemeMode(context, newMode)
-                        // چون رزولوشنِ resourceهای values-night تویِ attachBaseContext
-                        // فقط موقعِ ساختِ اکتیویتی اجرا میشه، بعدِ تغییرِ تم باید یه بار
-                        // دوباره بسازیمش تا کانفیگِ جدید واقعاً اعمال بشه
-                        (context as? android.app.Activity)?.recreate()
                     },
                     selectedFilterIds = selectedFilterIds,
                     onToggleFilter = { filterType ->

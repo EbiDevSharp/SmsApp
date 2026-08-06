@@ -52,10 +52,6 @@ object AppSettings {
     // جدید: وقتی کاربر نوتیفِ پیامکِ تازه‌رسیده رو با دست (سوایپ) بیرون بندازه، اون پیام خودکار خوانده‌شده علامت بخوره
     private const val KEY_MARK_READ_ON_NOTIFICATION_DISMISS_NAME = "mark_read_on_notification_dismiss_enabled"
 
-    // اسمِ SharedPreferences جدا برای خواندنِ سینکرونِ themeMode - نگاه کن به getThemeModeSync پایین
-    private const val QUICK_PREFS_NAME = "quick_theme_prefs"
-    private const val QUICK_KEY_THEME_MODE = "theme_mode_sync"
-
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
     private val KEY_CLOCK_FORMAT = stringPreferencesKey(KEY_CLOCK_FORMAT_NAME)
@@ -175,36 +171,19 @@ object AppSettings {
     fun setClockFormat(context: Context, format: ClockFormat) = write(context) { it[KEY_CLOCK_FORMAT] = format.name }
 
     fun getThemeMode(context: Context): ThemeMode = _state.value.themeMode
-    fun setThemeMode(context: Context, mode: ThemeMode) {
-        setThemeModeSync(context, mode)
-        write(context) { it[KEY_THEME_MODE] = mode.name }
-    }
 
     /**
-     * خواندنِ فوری و همزمانِ آخرین themeMode ذخیره‌شده - برخلافِ state بالا (که رویِ
-     * DataStore غیرهمزمانه و ممکنه هنوز لود نشده باشه)، این از یه SharedPreferences
-     * سبک و سینکرون می‌خونه. تنها مصرف‌کننده‌ش attachBaseContext تویِ اکتیویتی‌هاست:
-     * قبل از اینکه Compose/DataStore بالا بیان، باید همون لحظه‌ی اول بدونیم اکتیویتی
-     * باید تویِ کانفیگوریشنِ روشن/تاریک/سیستم باز بشه (وگرنه یه فریم با کانفیگِ غلط
-     * رندر میشه و resourceهای values-night اشتباه انتخاب میشن).
+     * تغییرِ تم - چون SmsAppTheme مستقیماً از این state با collectAsState() می‌خونه،
+     * همین‌جا فوری آپدیتش می‌کنیم تا رنگ‌ها بی‌درنگ عوض بشن؛ دیگه لازم نیست منتظرِ
+     * رفت‌وبرگشتِ DataStore (که رویِ Dispatchers.IO و async هست) بمونیم. write() هم
+     * برای persist شدنِ مقدار روی دیسک صدا زده می‌شه، ولی UI دیگه به اون گره نخورده.
+     * توجه: بعدِ صدا زدنِ این تابع دیگه لازم نیست Activity.recreate() صدا زده بشه -
+     * هیچ‌جای این پروژه attachBaseContext override نشده که به رفرش نیاز داشته باشه،
+     * و recreate() فقط باعثِ ری‌لودِ کاملِ اکتیویتی (و ریسکِ کرش وسط کلیک) می‌شه.
      */
-    fun getThemeModeSync(context: Context): ThemeMode {
-        val raw = context.applicationContext
-            .getSharedPreferences(QUICK_PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(QUICK_KEY_THEME_MODE, null)
-        return when (raw) {
-            ThemeMode.LIGHT.name -> ThemeMode.LIGHT
-            ThemeMode.DARK.name -> ThemeMode.DARK
-            else -> ThemeMode.SYSTEM
-        }
-    }
-
-    private fun setThemeModeSync(context: Context, mode: ThemeMode) {
-        context.applicationContext
-            .getSharedPreferences(QUICK_PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(QUICK_KEY_THEME_MODE, mode.name)
-            .apply()
+    fun setThemeMode(context: Context, mode: ThemeMode) {
+        _state.value = _state.value.copy(themeMode = mode)
+        write(context) { it[KEY_THEME_MODE] = mode.name }
     }
 
     fun isDeliveryNotificationsEnabled(context: Context): Boolean = _state.value.deliveryNotificationsEnabled

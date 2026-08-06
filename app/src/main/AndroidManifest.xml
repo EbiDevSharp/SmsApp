@@ -26,6 +26,8 @@
          بیاد - PopupOverlayService. این پرمیشن جزوِ پرمیشن‌های «دسترسیِ ویژه»ست و
          کاربر باید دستی از تنظیماتِ گوشی بدتش (لینکش توی خودِ اپ، صفحه‌ی تنظیمات هست) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- برای ویبره‌ی پیامکِ تازه‌رسیده وقتی پاپ‌آپِ Overlay فعاله (PopupOverlayService) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-feature
         android:name="android.hardware.telephony"
         android:required="true" />

@@ -236,7 +236,6 @@ fun SettingsScreen(
 
                     onChange = {
                         AppSettings.setThemeMode(context, it)
-                        (context as? android.app.Activity)?.recreate()
                     }
                 )
                 ThinDivider()

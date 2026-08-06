@@ -1,12 +1,17 @@
 package com.petro.smsapp.service
 
 import android.app.Service
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.media.AudioManager
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Box
@@ -160,7 +165,48 @@ class PopupOverlayService :
      * پیامِ تازه‌رسیده رو یا به Sessionِ موجودِ همون مخاطب اضافه می‌کنه (پنجره دست‌نخورده)
      * یا (اگه مخاطب تازه‌ست) یه Session جدید به ته صف اضافه می‌کنه.
      */
+    /**
+     * صدا/ویبره‌ی پیامکِ تازه‌رسیده رو دستی پخش می‌کنه - چون این Service (برخلافِ
+     * SmsDeliverReceiver.showNotification/showFullScreenPopupNotification) هیچ‌وقت
+     * notify() صدا نمی‌زنه، پس صدا/ویبرهٔ خودِ notification channel هم هیچ‌وقت
+     * خودکار پخش نمیشه. سعیمون اینه که همون تنظیماتِ "sms_channel" (صدا/ویبره‌ای که
+     * کاربر از تنظیماتِ سیستم براش انتخاب کرده) رو رعایت کنیم، نه یه صدای ثابت.
+     */
+    private fun playIncomingMessageAlert() {
+        try {
+            val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getSystemService(NotificationManager::class.java)?.getNotificationChannel(SMS_CHANNEL_ID)
+            } else null
+
+            val soundUri: Uri? = channel?.sound
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val audioManager = getSystemService(AUDIO_SERVICE) as? AudioManager
+            if (soundUri != null && audioManager?.ringerMode == AudioManager.RINGER_MODE_NORMAL) {
+                RingtoneManager.getRingtone(this, soundUri)?.play()
+            }
+
+            val shouldVibrate = channel?.shouldVibrate() ?: true
+            if (shouldVibrate) {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager)?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                }
+                vibrator?.vibrate(VibrationEffect.createOneShot(250, VibrationEffect.DEFAULT_AMPLITUDE))
+            }
+        } catch (e: Exception) {
+            // پخشِ صدا/ویبره روی این دستگاه با مشکل مواجه شد - نباید مانعِ نمایشِ خودِ پاپ‌آپ بشه
+        }
+    }
+
     private fun handleIncomingMessage(threadId: Long, messageId: Long, address: String, body: String, date: Long) {
+        // نکته‌ی مهم (رفعِ باگ): این مسیر (Overlay) برخلافِ نوتیفِ معمولی، هیچ‌وقت
+        // NotificationManagerCompat.notify() رو صدا نمی‌زنه - پس اگه اینجا صدا/ویبره
+        // رو دستی پخش نکنیم، پیامکِ تازه‌رسیده کاملاً بی‌صدا میاد (برخلافِ حالتِ
+        // نوتیفِ معمولی که صدا/ویبره‌ی خودِ channel رو داره)
+        playIncomingMessageAlert()
+
         val existing = sessions.firstOrNull { it.address == address || (threadId != -1L && it.threadId == threadId) }
 
         if (existing != null) {
@@ -493,6 +539,10 @@ class PopupOverlayService :
         // تعدادِ پیامِ قبلیِ همین گفتگو که موقعِ باز شدنِ پاپ‌آپ به‌عنوانِ سیاق‌وسباق
         // (context) جلوی پیامِ تازه نشون داده میشه - زیاد نه، چون پاپ‌آپ جای محدودیه
         private const val HISTORY_LIMIT = 5
+
+        // همون channel id که SmsApplication می‌سازدش و SmsDeliverReceiver برای نوتیفِ
+        // معمولی ازش استفاده می‌کنه - اینجا فقط برای خوندنِ صدا/ویبره‌ی انتخابیِ کاربر لازمه
+        private const val SMS_CHANNEL_ID = "sms_channel"
 
         fun show(
             context: Context,
