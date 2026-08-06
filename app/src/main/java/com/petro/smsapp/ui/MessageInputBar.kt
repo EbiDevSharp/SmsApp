@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
@@ -28,11 +27,11 @@ import com.petro.smsapp.util.DateFormatter
  * نوار ارسال پیام مشترک بین «پیام جدید» و صفحه‌ی چت.
  *
  * دکمه‌ی «+» چون آخرین آیتمِ Row هست، توی چیدمانِ راست‌به‌چپِ برنامه سمتِ چپِ کادر متن
- * می‌شینه (دقیقاً همونجایی که خواسته شده بود) و با زدنش یه منوی پایین‌صفحه باز میشه؛
- * فعلاً فقط «زمان‌بندی ارسال» توش هست، آیتم‌های بعدی (پیوست عکس/فایل و ...) همینجا
- * اضافه میشن. هرکدوم به‌صورتِ یه چیپِ مربعیِ کوچیک - فعلاً فقط آیکن، بدونِ متن - نشون
- * داده میشن؛ اگه بعداً لازم شد، یه برچسبِ کوچیک زیرِ هرکدوم اضافه میشه. دکمه‌ی ارسال
- * هم یه دایره‌ی پر با آیکنِ پیکان (Send) شبیه Google Messages ئه.
+ * می‌شینه (دقیقاً همونجایی که خواسته شده بود) و با زدنش منوی AttachMenuSheet
+ * (تعریف‌شده تو AttachMenu.kt، به‌صورتِ یه کامپوننتِ کاملاً جدا و قابلِ‌توسعه) باز
+ * میشه؛ فعلاً فقط «زمان‌بندی ارسال» توش هست، آیتم‌های بعدی (پیوست عکس/فایل و ...)
+ * فقط با اضافه‌کردن به لیستِ items همینجا اضافه میشن. دکمه‌ی ارسال هم یه دایره‌ی پر
+ * با آیکنِ پیکان (Send) شبیه Google Messages ئه.
  *
  * چیپِ زمان‌بندی: قبلاً یه ردیفِ جدا بالای کادرِ متن بود (بیرونِ خودِ باکس). الان
  * به‌عنوانِ leadingIcon خودِ OutlinedTextField تعریف شده - یعنی کاملاً داخلِ خودِ
@@ -60,6 +59,7 @@ import com.petro.smsapp.util.DateFormatter
  * تأخیر ارسال: اگه sendDelaySeconds > 0، با زدنِ ارسال اول PendingMessageBubble نشون
  * داده میشه و بعد از اون ثانیه واقعاً onSendClick صدا زده میشه؛ کنسل متن رو برمی‌گردونه.
  */
+@ExperimentalFoundationApi
 @Composable
 fun MessageInputBar(
     value: String,
@@ -81,11 +81,19 @@ fun MessageInputBar(
 
     if (showAttachMenu) {
         AttachMenuSheet(
-            onDismiss = { showAttachMenu = false },
-            onScheduleClick = {
-                showAttachMenu = false
-                showTimePicker = true
-            }
+            pages = listOf(
+                emptyList(), // صفحه‌ی راست - برای آیتم‌های بعدی، فعلاً خالی
+                listOf( // صفحه‌ی وسط - همونی که منو باهاش باز میشه
+                    AttachMenuItem(
+                        icon = Icons.Filled.Schedule,
+                        label = "زمان‌بندی",
+                        onClick = { showTimePicker = true }
+                    )
+                    // بقیه‌ی آیتم‌های همین صفحه (تا ۶تا در مجموع) همینجا اضافه میشن
+                ),
+                emptyList() // صفحه‌ی چپ - برای آیتم‌های بعدی، فعلاً خالی
+            ),
+            onDismiss = { showAttachMenu = false }
         )
     }
 
@@ -304,61 +312,6 @@ private fun SimQuickSelectChip(
                     }
                 )
             }
-        }
-    }
-}
-
-/**
- * منوی «+» - آیتم‌هاش (فعلاً فقط «زمان‌بندی ارسال») به‌صورتِ چیپ‌های مربعیِ کوچیک
- * کنارِ هم (FlowRow) نشون داده میشن، فعلاً فقط با آیکن و بدونِ متن. اگه بعداً لازم
- * شد، یه برچسبِ کوچیک زیرِ هر چیپ اضافه میشه. آیتم‌های بعدی (پیوست عکس/فایل و ...)
- * دقیقاً با همین الگو به AttachMenuChip های بیشتر تبدیل میشن.
- */
-@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun AttachMenuSheet(onDismiss: () -> Unit, onScheduleClick: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        FlowRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            AttachMenuChip(
-                icon = Icons.Filled.Schedule,
-                contentDescription = "زمان‌بندی ارسال",
-                onClick = {
-                    onDismiss()
-                    onScheduleClick()
-                }
-            )
-            // آیتم‌های بعدیِ منوی «+» (پیوست عکس/فایل و ...) همینجا اضافه میشن
-        }
-    }
-}
-
-@Composable
-private fun AttachMenuChip(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier
-            .size(56.dp)
-            .clickable(onClick = onClick)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(24.dp)
-            )
         }
     }
 }
