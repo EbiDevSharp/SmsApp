@@ -452,8 +452,9 @@ class PopupOverlayService :
             }
         }
 
-        val enabledActionSettings = AppSettings.getNotificationActionSettings(this@PopupOverlayService)
+        val enabledActionSettings = AppSettings.getPopupActionSettings(this@PopupOverlayService)
             .filter { it.enabled }
+        val actionDisplayMode = AppSettings.getPopupActionDisplayMode(this@PopupOverlayService)
 
         // اسم گروه هدف «افزودن سریع» - دقیقاً مثل نوتیف معمولی فقط اسم گروه روی دکمه
         var quickAddTargetGroupName by remember { mutableStateOf<String?>(null) }
@@ -526,7 +527,8 @@ class PopupOverlayService :
             onClose = { closeEverything() },
             sims = sims,
             selectedSubscriptionId = selectedSubscriptionId,
-            onSimSelect = { selectedSubscriptionId = it }
+            onSimSelect = { selectedSubscriptionId = it },
+            actionDisplayMode = actionDisplayMode
         )
 
         // به‌روزرسانی تیک ارسال/دلیوری از Telephony (گزارش دلیوری توسط SmsStatusReceiver)

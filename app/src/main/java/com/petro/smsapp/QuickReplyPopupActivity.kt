@@ -338,7 +338,10 @@ class QuickReplyPopupActivity : ComponentActivity() {
         }
 
         val enabledActionSettings = remember {
-            AppSettings.getNotificationActionSettings(this@QuickReplyPopupActivity).filter { it.enabled }
+            AppSettings.getPopupActionSettings(this@QuickReplyPopupActivity).filter { it.enabled }
+        }
+        val actionDisplayMode = remember {
+            AppSettings.getPopupActionDisplayMode(this@QuickReplyPopupActivity)
         }
 
         // اسم گروه هدف «افزودن سریع» - فقط اسم گروه روی دکمه (مثل نوتیف معمولی)
@@ -427,7 +430,8 @@ class QuickReplyPopupActivity : ComponentActivity() {
             onClose = { closeEverything() },
             sims = sims,
             selectedSubscriptionId = selectedSubscriptionId,
-            onSimSelect = { selectedSubscriptionId = it }
+            onSimSelect = { selectedSubscriptionId = it },
+            actionDisplayMode = actionDisplayMode
         )
 
         // به‌روزرسانی تیک ارسال/دلیوری از Telephony

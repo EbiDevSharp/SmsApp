@@ -38,6 +38,8 @@ object AppSettings {
     private const val KEY_THEME_MODE_NAME = "theme_mode"
     private const val KEY_DELIVERY_NOTIFICATIONS_NAME = "delivery_notifications_enabled"
     private const val KEY_NOTIFICATION_ACTIONS_NAME = "notification_action_settings"
+    private const val KEY_POPUP_ACTIONS_NAME = "popup_action_settings"
+    private const val KEY_POPUP_ACTION_DISPLAY_MODE_NAME = "popup_action_display_mode"
     private const val KEY_MAX_PINNED_CONVERSATIONS_NAME = "max_pinned_conversations"
     private const val KEY_GROUP_MESSAGING_ENABLED_NAME = "group_messaging_enabled"
     private const val KEY_SHOW_CONTACT_NUMBER_IN_LIST_NAME = "show_contact_number_in_list"
@@ -58,6 +60,8 @@ object AppSettings {
     private val KEY_THEME_MODE = stringPreferencesKey(KEY_THEME_MODE_NAME)
     private val KEY_DELIVERY_NOTIFICATIONS = booleanPreferencesKey(KEY_DELIVERY_NOTIFICATIONS_NAME)
     private val KEY_NOTIFICATION_ACTIONS = stringPreferencesKey(KEY_NOTIFICATION_ACTIONS_NAME)
+    private val KEY_POPUP_ACTIONS = stringPreferencesKey(KEY_POPUP_ACTIONS_NAME)
+    private val KEY_POPUP_ACTION_DISPLAY_MODE = stringPreferencesKey(KEY_POPUP_ACTION_DISPLAY_MODE_NAME)
     private val KEY_MAX_PINNED_CONVERSATIONS = intPreferencesKey(KEY_MAX_PINNED_CONVERSATIONS_NAME)
     private val KEY_GROUP_MESSAGING_ENABLED = booleanPreferencesKey(KEY_GROUP_MESSAGING_ENABLED_NAME)
     private val KEY_SHOW_CONTACT_NUMBER_IN_LIST = booleanPreferencesKey(KEY_SHOW_CONTACT_NUMBER_IN_LIST_NAME)
@@ -86,8 +90,25 @@ object AppSettings {
         NotificationActionSetting(NotificationActionType.CALL, false)
     )
 
+    /** پیش‌فرض دکمه‌های پاپ‌آپ - همان عملیات نوتیف، ولی لیست جدا و مستقل */
+    private fun defaultPopupActionSettings(): List<NotificationActionSetting> =
+        defaultNotificationActionSettings()
+
     private fun parseNotificationActionSettings(raw: String?): List<NotificationActionSetting> {
         if (raw == null) return defaultNotificationActionSettings()
+        val saved = raw.split(",").mapNotNull { entry ->
+            val parts = entry.split(":")
+            if (parts.size != 2) return@mapNotNull null
+            val type = NotificationActionType.fromId(parts[0]) ?: return@mapNotNull null
+            NotificationActionSetting(type, parts[1] == "1")
+        }
+        val missing = NotificationActionType.entries.filter { type -> saved.none { it.type == type } }
+            .map { NotificationActionSetting(it, false) }
+        return saved + missing
+    }
+
+    private fun parsePopupActionSettings(raw: String?): List<NotificationActionSetting> {
+        if (raw == null) return defaultPopupActionSettings()
         val saved = raw.split(",").mapNotNull { entry ->
             val parts = entry.split(":")
             if (parts.size != 2) return@mapNotNull null
@@ -106,6 +127,8 @@ object AppSettings {
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
         val deliveryNotificationsEnabled: Boolean = false,
         val notificationActions: List<NotificationActionSetting> = defaultNotificationActionSettings(),
+        val popupActions: List<NotificationActionSetting> = defaultPopupActionSettings(),
+        val popupActionDisplayMode: PopupActionDisplayMode = PopupActionDisplayMode.ICON_AND_LABEL,
         val maxPinnedConversations: Int = DEFAULT_MAX_PINNED_CONVERSATIONS,
         val groupMessagingEnabled: Boolean = false,
         val showContactNumberInListEnabled: Boolean = false,
@@ -144,6 +167,8 @@ object AppSettings {
                         },
                         deliveryNotificationsEnabled = prefs[KEY_DELIVERY_NOTIFICATIONS] ?: false,
                         notificationActions = parseNotificationActionSettings(prefs[KEY_NOTIFICATION_ACTIONS]),
+                        popupActions = parsePopupActionSettings(prefs[KEY_POPUP_ACTIONS]),
+                        popupActionDisplayMode = PopupActionDisplayMode.fromId(prefs[KEY_POPUP_ACTION_DISPLAY_MODE]),
                         maxPinnedConversations = prefs[KEY_MAX_PINNED_CONVERSATIONS] ?: DEFAULT_MAX_PINNED_CONVERSATIONS,
                         groupMessagingEnabled = prefs[KEY_GROUP_MESSAGING_ENABLED] ?: false,
                         showContactNumberInListEnabled = prefs[KEY_SHOW_CONTACT_NUMBER_IN_LIST] ?: false,
@@ -197,6 +222,20 @@ object AppSettings {
         val raw = settings.joinToString(",") { "${it.type.id}:${if (it.enabled) "1" else "0"}" }
         write(context) { it[KEY_NOTIFICATION_ACTIONS] = raw }
     }
+
+    fun getPopupActionSettings(context: Context): List<NotificationActionSetting> =
+        _state.value.popupActions
+
+    fun setPopupActionSettings(context: Context, settings: List<NotificationActionSetting>) {
+        val raw = settings.joinToString(",") { "${it.type.id}:${if (it.enabled) "1" else "0"}" }
+        write(context) { it[KEY_POPUP_ACTIONS] = raw }
+    }
+
+    fun getPopupActionDisplayMode(context: Context): PopupActionDisplayMode =
+        _state.value.popupActionDisplayMode
+
+    fun setPopupActionDisplayMode(context: Context, mode: PopupActionDisplayMode) =
+        write(context) { it[KEY_POPUP_ACTION_DISPLAY_MODE] = mode.id }
 
     fun getMaxPinnedConversations(context: Context): Int = _state.value.maxPinnedConversations
     fun setMaxPinnedConversations(context: Context, count: Int) {

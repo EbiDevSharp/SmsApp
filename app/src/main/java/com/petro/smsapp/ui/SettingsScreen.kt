@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.scale
 @Composable
 fun SettingsScreen(
     onOpenNotificationActions: () -> Unit,
+    onOpenPopupActions: () -> Unit = {},
     onMenuClick: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -384,6 +385,11 @@ fun SettingsScreen(
                     title = "دکمه‌های نوتیفیکیشن",
                     subtitle = "انتخاب و ترتیب دکمه‌های روی نوتیف پیامک",
                     onClick = onOpenNotificationActions
+                )
+                SettingRow(
+                    title = "دکمه‌های پاپ‌آپ",
+                    subtitle = "عملیات، ترتیب و نمایش آیکن/متن روی پاپ‌آپ",
+                    onClick = onOpenPopupActions
                 )
                 SwitchRow(
                     title = "پاپ‌آپ پیامک روی صفحه",

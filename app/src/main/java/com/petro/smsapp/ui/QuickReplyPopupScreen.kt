@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.NotificationActionType
+import com.petro.smsapp.data.PopupActionDisplayMode
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.autoDirection
@@ -86,9 +87,9 @@ data class MessageEntry(
     val isDelivered: Boolean get() = isOutgoing && status == 0
     val isFailed: Boolean
         get() = isOutgoing && (
-                status == android.provider.Telephony.Sms.STATUS_FAILED ||
-                        type == android.provider.Telephony.Sms.MESSAGE_TYPE_FAILED
-                )
+            status == android.provider.Telephony.Sms.STATUS_FAILED ||
+                type == android.provider.Telephony.Sms.MESSAGE_TYPE_FAILED
+            )
     val isSending: Boolean
         get() = isOutgoing && type == android.provider.Telephony.Sms.MESSAGE_TYPE_OUTBOX
     val isQueued: Boolean
@@ -137,7 +138,9 @@ fun QuickReplyPopupScreen(
     // انتخاب سیم‌کارت - فقط وقتی حداقل ۲ سیم فعال باشه چیپ نشون داده میشه
     sims: List<SimInfo> = emptyList(),
     selectedSubscriptionId: Int? = null,
-    onSimSelect: (Int) -> Unit = {}
+    onSimSelect: (Int) -> Unit = {},
+    // نحوه نمایش دکمه‌های اکشن (آیکن+متن / فقط آیکن / فقط متن)
+    actionDisplayMode: PopupActionDisplayMode = PopupActionDisplayMode.ICON_AND_LABEL
 ) {
     var overflowExpanded by remember { mutableStateOf(false) }
     val replyFocusRequester = remember { FocusRequester() }
@@ -422,6 +425,7 @@ fun QuickReplyPopupScreen(
                                 PopupActionButton(
                                     label = action.label,
                                     icon = action.icon,
+                                    displayMode = actionDisplayMode,
                                     onClick = {
                                         if (isReplyAction) {
                                             replyFocusRequester.requestFocus()
@@ -463,11 +467,30 @@ fun QuickReplyPopupScreen(
 }
 
 @Composable
-private fun PopupActionButton(label: String, icon: ImageVector, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun PopupActionButton(
+    label: String,
+    icon: ImageVector,
+    displayMode: PopupActionDisplayMode,
+    onClick: () -> Unit
+) {
+    when (displayMode) {
+        PopupActionDisplayMode.ICON_ONLY -> {
+            IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+                Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
+            }
+        }
+        PopupActionDisplayMode.LABEL_ONLY -> {
+            TextButton(onClick = onClick) {
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        PopupActionDisplayMode.ICON_AND_LABEL -> {
+            TextButton(onClick = onClick) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 

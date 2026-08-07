@@ -137,6 +137,15 @@ object BackupModule {
                     })
                 }
             })
+            put("popupActions", JSONArray().apply {
+                s.popupActions.forEach { action ->
+                    put(JSONObject().apply {
+                        put("type", action.type.id)
+                        put("enabled", action.enabled)
+                    })
+                }
+            })
+            put("popupActionDisplayMode", s.popupActionDisplayMode.id)
         }
     }
 
@@ -459,6 +468,22 @@ object BackupModule {
                 list.add(NotificationActionSetting(type, obj.getBoolean("enabled")))
             }
             if (list.isNotEmpty()) AppSettings.setNotificationActionSettings(context, list)
+        }
+        if (data.has("popupActions")) {
+            val arr = data.getJSONArray("popupActions")
+            val list = mutableListOf<NotificationActionSetting>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val type = NotificationActionType.fromId(obj.getString("type")) ?: continue
+                list.add(NotificationActionSetting(type, obj.getBoolean("enabled")))
+            }
+            if (list.isNotEmpty()) AppSettings.setPopupActionSettings(context, list)
+        }
+        if (data.has("popupActionDisplayMode")) {
+            AppSettings.setPopupActionDisplayMode(
+                context,
+                com.petro.smsapp.data.PopupActionDisplayMode.fromId(data.getString("popupActionDisplayMode"))
+            )
         }
     }
 

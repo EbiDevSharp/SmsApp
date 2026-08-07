@@ -29,3 +29,20 @@ data class NotificationActionSetting(
     val type: NotificationActionType,
     val enabled: Boolean
 )
+
+/**
+ * نحوه نمایش دکمه‌های اکشن روی پاپ‌آپ پیامک (جدا از نوتیف معمولی).
+ * - ICON_AND_LABEL: آیکن + متن (پیش‌فرض فعلی)
+ * - ICON_ONLY: فقط آیکن
+ * - LABEL_ONLY: فقط متن
+ */
+enum class PopupActionDisplayMode(val id: String, val label: String) {
+    ICON_AND_LABEL("icon_and_label", "آیکن و متن"),
+    ICON_ONLY("icon_only", "فقط آیکن"),
+    LABEL_ONLY("label_only", "فقط متن");
+
+    companion object {
+        fun fromId(id: String?): PopupActionDisplayMode =
+            entries.find { it.id == id } ?: ICON_AND_LABEL
+    }
+}
