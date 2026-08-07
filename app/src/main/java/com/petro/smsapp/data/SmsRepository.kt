@@ -350,8 +350,12 @@ class SmsRepository(
         return messages
     }
 
-    fun sendSms(address: String, body: String, subscriptionId: Int? = null) {
-        if (!requireDefaultSmsApp("ارسال پیامک")) return
+    /**
+     * @return شناسه‌ی پیام ذخیره‌شده در Sent box (برای پیگیری تیک ارسال/دلیوری)، یا null
+     * اگر ذخیره/ارسال ممکن نبود.
+     */
+    fun sendSms(address: String, body: String, subscriptionId: Int? = null): Long? {
+        if (!requireDefaultSmsApp("ارسال پیامک")) return null
 
         val smsManager: SmsManager = if (subscriptionId != null && subscriptionId != -1) {
             SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
@@ -415,6 +419,7 @@ class SmsRepository(
         }
 
         smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, deliveryIntents)
+        return messageId
     }
 
     suspend fun updateDeliveryStatus(messageId: Long, delivered: Boolean, deliveredAtMillis: Long) {
@@ -433,6 +438,30 @@ class SmsRepository(
         }
         if (delivered) {
             deliveryRepository.setDeliveredAt(messageId, deliveredAtMillis)
+        }
+    }
+
+    /**
+     * خواندن type و status یک پیام از Telephony - برای به‌روزرسانی تیک‌های
+     * ارسال/دلیوری داخل پاپ‌آپ (بدون نیاز به لود کل ترد).
+     * @return Pair(type, status) یا null اگر پیام پیدا نشد
+     */
+    fun getMessageTypeAndStatus(messageId: Long): Pair<Int, Int>? {
+        if (messageId <= 0L) return null
+        return try {
+            context.contentResolver.query(
+                ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+                arrayOf(Telephony.Sms.TYPE, Telephony.Sms.STATUS),
+                null, null, null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return null
+                val type = cursor.getInt(0)
+                val status = cursor.getInt(1)
+                type to status
+            }
+        } catch (e: Exception) {
+            Log.w("SmsRepository", "خطا موقع خواندن type/status پیام $messageId", e)
+            null
         }
     }
 

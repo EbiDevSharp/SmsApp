@@ -23,13 +23,31 @@ class SmsApplication : Application() {
         // باید قبل از هر استفاده‌ی دیگه از AppSettings.state (مثلاً توی DateFormatter) صدا زده بشه
         AppSettings.init(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java)
+            // کانال نوتیف معمولی (با صدا/ویبره)
             val channel = NotificationChannel(
                 "sms_channel",
                 "پیامک‌ها",
                 NotificationManager.IMPORTANCE_HIGH
             )
-            val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
+
+            // کانال مخصوص پاپ‌آپِ صفحه‌قفل (fullScreenIntent):
+            // اهمیت بالا تا سیستم Activity را باز کند، ولی بدون صدا/ویبره تا
+            // دوبار صدا نیاید؛ صدا را خودِ اپ با SmsAlertSoundPlayer می‌زند.
+            // از setSilent روی نوتیف sms_channel استفاده نمی‌کنیم چون روی بعضی
+            // OEMها fullScreenIntent را قطع می‌کند.
+            val popupChannel = NotificationChannel(
+                "sms_popup_channel",
+                "پاپ‌آپ پیامک",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                setSound(null, null)
+                enableVibration(false)
+                vibrationPattern = longArrayOf(0)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(popupChannel)
         }
 
         ensureContactsObserverRegistered()

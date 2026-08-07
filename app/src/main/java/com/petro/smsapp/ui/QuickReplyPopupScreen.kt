@@ -15,10 +15,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,6 +45,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.NotificationActionType
+import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.util.DateFormatter
 import com.petro.smsapp.util.autoDirection
 import kotlin.math.roundToInt
@@ -64,15 +69,31 @@ data class QuickReplyPopupAction(
  * (isOutgoing=true). چون دیگه با فرستادنِ پاسخ پنجره بسته نمیشه، این لیست نگه‌داشته
  * میشه تا کاربر ببینه چی رفت و بیاد و لازم شد دوباره جواب بده.
  *
- * نکته: این کلاس دیگه private نیست چون PopupOverlayService حالا این لیست رو
- * به‌ازای هر مکالمه (Session) خودش نگه می‌داره و بین چند مکالمه‌ی هم‌زمان صف‌بندی
- * می‌کنه - پس باید از بیرونِ این فایل هم قابلِ ساختن باشه.
+ * status/type/messageId برای تیک‌های ارسال و دلیوری (هم‌قاعده‌ی حباب‌های ThreadScreen):
+ * - status == 0 → تحویل داده شد (DoneAll سبز)
+ * - STATUS_FAILED / MESSAGE_TYPE_FAILED → خطا
+ * - MESSAGE_TYPE_OUTBOX / QUEUED → در حال ارسال
+ * - در غیر این صورت برای outgoing → ارسال شد (Done خاکستری)
  */
 data class MessageEntry(
     val text: String,
     val isOutgoing: Boolean,
-    val timestampMillis: Long
-)
+    val timestampMillis: Long,
+    val messageId: Long = -1L,
+    val status: Int = -1,
+    val type: Int = -1
+) {
+    val isDelivered: Boolean get() = isOutgoing && status == 0
+    val isFailed: Boolean
+        get() = isOutgoing && (
+                status == android.provider.Telephony.Sms.STATUS_FAILED ||
+                        type == android.provider.Telephony.Sms.MESSAGE_TYPE_FAILED
+                )
+    val isSending: Boolean
+        get() = isOutgoing && type == android.provider.Telephony.Sms.MESSAGE_TYPE_OUTBOX
+    val isQueued: Boolean
+        get() = isOutgoing && type == android.provider.Telephony.Sms.MESSAGE_TYPE_QUEUED
+}
 
 /**
  * پاپ‌آپِ روی صفحه‌ی پیامکِ تازه‌رسیده - جایگزینِ نوتیفِ معمولی وقتی کاربر از تنظیمات
@@ -112,7 +133,11 @@ fun QuickReplyPopupScreen(
     onOpenThread: () -> Unit,
     onCallSender: () -> Unit,
     onSendReply: (text: String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    // انتخاب سیم‌کارت - فقط وقتی حداقل ۲ سیم فعال باشه چیپ نشون داده میشه
+    sims: List<SimInfo> = emptyList(),
+    selectedSubscriptionId: Int? = null,
+    onSimSelect: (Int) -> Unit = {}
 ) {
     var overflowExpanded by remember { mutableStateOf(false) }
     val replyFocusRequester = remember { FocusRequester() }
@@ -344,7 +369,8 @@ fun QuickReplyPopupScreen(
                     }
 
                     // ---- ردیفِ ورودیِ پاسخِ سریع - همیشه نمایش داده میشه (دیگه نیازی به
-                    // زدنِ دکمه‌ی «پاسخ» برای بازکردنش نیست) ----
+                    // زدنِ دکمه‌ی «پاسخ» برای بازکردنش نیست). انتخاب سیم مثل MessageInputBar
+                    // داخلِ خودِ کادر (trailingIcon) نشون داده میشه. ----
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = replyText,
@@ -359,7 +385,16 @@ fun QuickReplyPopupScreen(
                             shape = RoundedCornerShape(20.dp),
                             textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { sendCurrentReply() })
+                            keyboardActions = KeyboardActions(onSend = { sendCurrentReply() }),
+                            trailingIcon = {
+                                if (sims.size >= 2) {
+                                    PopupSimSelectChip(
+                                        sims = sims,
+                                        selectedSubscriptionId = selectedSubscriptionId,
+                                        onSelect = onSimSelect
+                                    )
+                                }
+                            }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         FilledIconButton(
@@ -457,10 +492,10 @@ private fun MessageBubbleRow(
             contentAlignment = if (entry.isOutgoing) Alignment.CenterEnd else Alignment.CenterStart
         ) {
             Surface(
-                color = if (entry.isOutgoing) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
+                color = when {
+                    entry.isFailed -> MaterialTheme.colorScheme.errorContainer
+                    entry.isOutgoing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant
                 },
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
@@ -474,14 +509,92 @@ private fun MessageBubbleRow(
                 )
             }
         }
-        // ---- تاریخ+ساعتِ همین پیام - زیرِ حباب، هم‌جهت با خودِ حباب (فرستاده‌شده
-        // سمتِ پایان، دریافتی سمتِ شروع) ----
-        Text(
-            text = DateFormatter.formatDateTimeShort(entry.timestampMillis),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.Gray,
+        // ---- تاریخ+ساعت + تیک ارسال/دلیوری (هم‌قاعده‌ی ThreadScreen) ----
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(start = 4.dp, top = 2.dp, end = 4.dp)
-        )
+        ) {
+            Text(
+                text = DateFormatter.formatDateTimeShort(entry.timestampMillis),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
+            if (entry.isOutgoing) {
+                Spacer(modifier = Modifier.width(4.dp))
+                when {
+                    entry.isFailed -> Icon(
+                        Icons.Filled.ErrorOutline,
+                        contentDescription = "ارسال نشد",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    entry.isSending || entry.isQueued -> Icon(
+                        Icons.Filled.Schedule,
+                        contentDescription = if (entry.isQueued) "در صف ارسال" else "در حال ارسال",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    entry.isDelivered -> Icon(
+                        Icons.Filled.DoneAll,
+                        contentDescription = "تحویل داده شد",
+                        tint = Color(0xFF34A853),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    else -> Icon(
+                        Icons.Filled.Done,
+                        contentDescription = "ارسال شد",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * چیپِ انتخاب سیم داخل پاپ‌آپ - هم‌شکلِ MessageInputBar.SimQuickSelectChip
+ * (فقط اینجا public/reusable برای خودِ پاپ‌آپ).
+ */
+@Composable
+private fun PopupSimSelectChip(
+    sims: List<SimInfo>,
+    selectedSubscriptionId: Int?,
+    onSelect: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedSim = sims.find { it.subscriptionId == selectedSubscriptionId } ?: sims.firstOrNull()
+    val label = selectedSim?.let { (it.slotIndex + 1).toString() } ?: "?"
+
+    Box {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            modifier = Modifier
+                .padding(end = 4.dp)
+                .size(width = 26.dp, height = 22.dp)
+                .clickable { expanded = true }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = label,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            sims.forEach { sim ->
+                DropdownMenuItem(
+                    text = { Text(sim.displayName) },
+                    onClick = {
+                        onSelect(sim.subscriptionId)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 

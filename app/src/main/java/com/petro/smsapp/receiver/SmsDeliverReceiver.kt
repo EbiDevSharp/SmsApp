@@ -194,7 +194,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         }
         try {
             context.startActivity(popupIntent)
-            SmsAlertSoundPlayer.play(context)
+            // صدای کانال (اگه کاربر از تنظیمات سیستم عوض کرده) تا با Overlay و نوتیف معمولی یکی باشه
+            val channelSound = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                (context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)
+                    ?.getNotificationChannel("sms_channel")?.sound
+            } else null
+            SmsAlertSoundPlayer.play(context, channelSound)
         } catch (e: Exception) {
             // اگه به هر دلیلی (محدودیتِ OEM و ...) نشد، مسیرِ notify()+fullScreenIntent
             // به‌عنوانِ بک‌آپ کافیه - حداقل یه نوتیف/پاپ‌آپِ اولیه نشون داده میشه
@@ -219,7 +224,10 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         messageId: Long,
         receivedAtMillis: Long
     ) {
-        val channelId = "sms_channel"
+        // کانال بی‌صدای مخصوص fullScreenIntent (ساخته‌شده در SmsApplication) تا
+        // سیستم خودش صدا نزند؛ صدای واقعی از sms_channel خوانده و دستی پخش می‌شود.
+        val popupChannelId = "sms_popup_channel"
+        val soundChannelId = "sms_channel"
         val notificationId = sender.hashCode()
 
         val popupIntent = Intent(context, QuickReplyPopupActivity::class.java).apply {
@@ -236,7 +244,14 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notificationBuilder = NotificationCompat.Builder(context, channelId)
+        // نکته‌ی مهم (صدا + fullScreenIntent روی قفل):
+        // - setSilent روی sms_channel → بعضی OEMها پاپ‌آپ را قطع می‌کنند.
+        // - فقط notify روی sms_channel بدون play دستی → اولین پیام اغلب بی‌صدا
+        //   (چون fullScreenIntent Activity را می‌گیرد و صدای نوتیف نمی‌آید).
+        // - play دستی + صدای کانال باهم → دو بار صدا.
+        // راه‌حل: نوتیف روی کانال جدا (sms_popup_channel، بدون صدا) برای fullScreenIntent،
+        // و یک‌بار SmsAlertSoundPlayer با صدای sms_channel.
+        val notificationBuilder = NotificationCompat.Builder(context, popupChannelId)
             .setSmallIcon(R.drawable.ic_message)
             .setContentTitle(displayName)
             .setContentText(body)
@@ -252,11 +267,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val notification = notificationBuilder.build()
 
-        // پخشِ صدای Popup در حالتِ صفحه‌قفل - از پخش‌کننده‌ی مرکزیِ سراسریِ اپ
-        // استفاده میشه (نه یه Ringtone مستقل)، تا اگه چند پیامک نزدیک به هم برسن
-        // (حتی یکی از این مسیر و یکی از مسیرِ PopupOverlayService)، صداها روی هم
-        // پخش نشن و چندصدایی پیش نیاد.
-        SmsAlertSoundPlayer.play(context)
+        // صدای اولین پیام روی قفل - هم‌منبع با Overlay و پیام‌های بعدی پاپ‌آپ باز
+        val channelSound = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)
+                ?.getNotificationChannel(soundChannelId)?.sound
+        } else null
+        SmsAlertSoundPlayer.play(context, channelSound)
 
         NotificationManagerCompat.from(context).apply {
             try {

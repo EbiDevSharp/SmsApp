@@ -21,9 +21,12 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -41,6 +44,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import android.provider.Telephony
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
 import com.petro.smsapp.PopupSessionQueue
@@ -49,6 +53,7 @@ import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
+import com.petro.smsapp.data.SimRepository
 import com.petro.smsapp.data.SmsRepository
 import com.petro.smsapp.ui.MessageEntry
 import com.petro.smsapp.ui.QuickReplyPopupAction
@@ -385,15 +390,43 @@ class PopupOverlayService :
             closeActiveSession()
         }
 
-        fun sendReply(text: String) {
+        // سیم‌کارت‌ها و سیم انتخابی برای این پاپ‌آپ (هم‌قاعده‌ی MessageInputBar)
+        val sims = remember { SimRepository(this@PopupOverlayService).getActiveSims() }
+        var selectedSubscriptionId by remember {
+            mutableStateOf(sims.firstOrNull()?.subscriptionId)
+        }
+
+        fun sendReply(text: String, subscriptionId: Int?) {
             val address = session.address
-            session.messages.add(MessageEntry(text = text, isOutgoing = true, timestampMillis = System.currentTimeMillis()))
+            val now = System.currentTimeMillis()
+            // اول با وضعیت «در حال ارسال» اضافه می‌شه؛ بعد از برگشت sendSms آپدیت می‌شه
+            session.messages.add(
+                MessageEntry(
+                    text = text,
+                    isOutgoing = true,
+                    timestampMillis = now,
+                    type = Telephony.Sms.MESSAGE_TYPE_OUTBOX,
+                    status = Telephony.Sms.STATUS_PENDING
+                )
+            )
+            val entryIndex = session.messages.lastIndex
             lifecycleScope.launch {
-                withContext(Dispatchers.IO) { repository.sendSms(address, text) }
+                val messageId = withContext(Dispatchers.IO) {
+                    repository.sendSms(address, text, subscriptionId)
+                }
+                if (entryIndex in session.messages.indices) {
+                    val prev = session.messages[entryIndex]
+                    session.messages[entryIndex] = prev.copy(
+                        messageId = messageId ?: -1L,
+                        type = if (messageId != null) Telephony.Sms.MESSAGE_TYPE_SENT
+                        else Telephony.Sms.MESSAGE_TYPE_FAILED,
+                        status = if (messageId != null) Telephony.Sms.STATUS_PENDING
+                        else Telephony.Sms.STATUS_FAILED
+                    )
+                }
                 DataChangeSignal.notifyChanged()
                 // دیگه بعدِ فرستادنِ پاسخ پنجره بسته نمیشه - شاید کاربر بخواد دوباره
-                // پیام بده؛ QuickReplyPopupScreen خودش تاریخچه‌ی رد و بدل‌شده‌ها رو نشون
-                // میده. بستن فقط با دکمه‌ی × یا بقیه‌ی اکشن‌ها (باز کردن/حذف/...) اتفاق می‌افته
+                // پیام بده؛ تیک ارسال/دلیوری روی خودِ حباب نشون داده میشه.
             }
         }
 
@@ -425,15 +458,21 @@ class PopupOverlayService :
         val enabledActionSettings = AppSettings.getNotificationActionSettings(this@PopupOverlayService)
             .filter { it.enabled }
 
+        // اسم گروه هدف «افزودن سریع» - دقیقاً مثل نوتیف معمولی فقط اسم گروه روی دکمه
+        var quickAddTargetGroupName by remember { mutableStateOf<String?>(null) }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            quickAddTargetGroupName = withContext(Dispatchers.IO) {
+                try {
+                    val repo = AppContainer.filterGroupRepository(this@PopupOverlayService)
+                    repo.getQuickAddTargetGroupId()?.let { repo.getGroup(it)?.name }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
         val allActions = buildList {
-            add(
-                QuickReplyPopupAction(
-                    type = null,
-                    label = "باز کردن",
-                    icon = Icons.Filled.OpenInNew,
-                    onClick = { openThread() }
-                )
-            )
+            // «باز کردن» حذف شد: با تپ روی خود پیام (onOpenThread) برنامه باز می‌شه
             enabledActionSettings.forEach { setting ->
                 add(
                     when (setting.type) {
@@ -450,7 +489,10 @@ class PopupOverlayService :
                             setting.type, "افزودن", Icons.Filled.Folder
                         ) { openThread() }
                         NotificationActionType.QUICK_ADD_GROUP -> QuickReplyPopupAction(
-                            setting.type, "افزودن سریع", Icons.Filled.GroupAdd
+                            setting.type,
+                            // فقط اسم گروه (مثل نوتیف معمولی)، fallback اگر گروهی انتخاب نشده
+                            quickAddTargetGroupName ?: "افزودن سریع به گروه",
+                            Icons.Filled.GroupAdd
                         ) { addToGroupTargetFast() }
                         NotificationActionType.CALL -> QuickReplyPopupAction(
                             setting.type, "تماس", Icons.Filled.Call
@@ -482,9 +524,39 @@ class PopupOverlayService :
             onLoadHistory = { loadHistoryForSession(session) },
             onOpenThread = { openThread() },
             onCallSender = { callSender() },
-            onSendReply = { text -> sendReply(text) },
-            onClose = { closeActiveSession() }
+            onSendReply = { text -> sendReply(text, selectedSubscriptionId) },
+            // دکمه × کل صف را می‌بندد (نه فقط سشن فعال)
+            onClose = { closeEverything() },
+            sims = sims,
+            selectedSubscriptionId = selectedSubscriptionId,
+            onSimSelect = { selectedSubscriptionId = it }
         )
+
+        // به‌روزرسانی تیک ارسال/دلیوری از Telephony (گزارش دلیوری توسط SmsStatusReceiver)
+        androidx.compose.runtime.LaunchedEffect(
+            session.messages.size,
+            session.messages.map { "${it.messageId}:${it.status}:${it.type}" }.joinToString()
+        ) {
+            while (true) {
+                val pending = session.messages.mapIndexedNotNull { index, entry ->
+                    if (entry.isOutgoing && entry.messageId > 0L && !entry.isDelivered && !entry.isFailed) {
+                        index to entry.messageId
+                    } else null
+                }
+                if (pending.isEmpty()) break
+                kotlinx.coroutines.delay(1500)
+                pending.forEach { (index, id) ->
+                    val pair = withContext(Dispatchers.IO) { repository.getMessageTypeAndStatus(id) }
+                    if (pair != null && index in session.messages.indices) {
+                        val (type, status) = pair
+                        val prev = session.messages[index]
+                        if (prev.type != type || prev.status != status) {
+                            session.messages[index] = prev.copy(type = type, status = status)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     companion object {
