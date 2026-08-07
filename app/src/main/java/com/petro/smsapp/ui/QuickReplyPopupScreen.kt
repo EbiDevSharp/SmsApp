@@ -421,16 +421,26 @@ fun QuickReplyPopupScreen(
                         }
                         val primaryActions = actions.take(visibleCount)
                         val overflowActions = actions.drop(visibleCount)
+                        val allFit = overflowActions.isEmpty()
+
+                        // فاصله پایه وقتی با ⋮ فشرده‌ایم؛ در فقط‌آیکن بزرگ‌تر
+                        val compactSpacing = when (actionDisplayMode) {
+                            PopupActionDisplayMode.ICON_ONLY -> 12.dp
+                            PopupActionDisplayMode.LABEL_ONLY -> 8.dp
+                            PopupActionDisplayMode.ICON_AND_LABEL -> 6.dp
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = if (allFit) {
+                                Arrangement.SpaceEvenly
+                            } else {
+                                Arrangement.SpaceBetween
+                            },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
+                            if (allFit) {
+                                // همه جا شدند → فاصله یکنواخت در عرض کامل (لمس اشتباه کمتر)
                                 primaryActions.forEach { action ->
                                     val isReplyAction = action.type == NotificationActionType.REPLY
                                     PopupActionButton(
@@ -446,9 +456,27 @@ fun QuickReplyPopupScreen(
                                         }
                                     )
                                 }
-                            }
-
-                            if (overflowActions.isNotEmpty()) {
+                            } else {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(compactSpacing)
+                                ) {
+                                    primaryActions.forEach { action ->
+                                        val isReplyAction = action.type == NotificationActionType.REPLY
+                                        PopupActionButton(
+                                            label = action.label,
+                                            icon = action.icon,
+                                            displayMode = actionDisplayMode,
+                                            onClick = {
+                                                if (isReplyAction) {
+                                                    replyFocusRequester.requestFocus()
+                                                } else {
+                                                    action.onClick()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
                                 Box {
                                     IconButton(onClick = { overflowExpanded = true }) {
                                         Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
@@ -489,13 +517,18 @@ private fun computeVisibleActionCount(
     labels: List<String>
 ): Int {
     if (total <= 0) return 0
-    val spacing = 4.dp
+    // فاصله‌ی راحت برای جلوگیری از لمس اشتباه (مخصوصاً فقط‌آیکن)
+    val spacing = when (displayMode) {
+        PopupActionDisplayMode.ICON_ONLY -> 12.dp
+        PopupActionDisplayMode.LABEL_ONLY -> 8.dp
+        PopupActionDisplayMode.ICON_AND_LABEL -> 6.dp
+    }
     val overflowSlot = 40.dp
 
     fun estimateButtonWidth(label: String): androidx.compose.ui.unit.Dp = when (displayMode) {
-        PopupActionDisplayMode.ICON_ONLY -> 40.dp
+        // ناحیه لمس بزرگ‌تر از خود آیکن
+        PopupActionDisplayMode.ICON_ONLY -> 48.dp
         PopupActionDisplayMode.LABEL_ONLY -> {
-            // تقریبی: padding افقی ~24 + حدود 7dp به‌ازای هر کاراکتر فارسی/لاتین
             (24 + label.length * 7).coerceIn(48, 140).dp
         }
         PopupActionDisplayMode.ICON_AND_LABEL -> {
@@ -537,8 +570,9 @@ private fun PopupActionButton(
 ) {
     when (displayMode) {
         PopupActionDisplayMode.ICON_ONLY -> {
-            IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
-                Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
+            // ناحیه لمس حداقل ~48dp تا دکمه‌ها به‌هم نچسبند و لمس اشتباه کم شود
+            IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+                Icon(icon, contentDescription = label, modifier = Modifier.size(24.dp))
             }
         }
         PopupActionDisplayMode.LABEL_ONLY -> {
