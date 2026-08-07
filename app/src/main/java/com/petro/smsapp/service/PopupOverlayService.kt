@@ -24,11 +24,6 @@ import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -48,6 +43,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.petro.smsapp.ActiveThreadTracker
 import com.petro.smsapp.MainActivity
+import com.petro.smsapp.PopupSessionQueue
 import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.ContactsCache
@@ -89,13 +85,17 @@ import kotlinx.coroutines.withContext
  * Composeای بود که نابود می‌شد، عملاً با هر پیامِ تازه از هر مخاطبی، پاپ‌آپ می‌بست و
  * از نو با همون پیامِ جدید ظاهر می‌شد.
  *
- * الان به‌جاش یه صفِ [sessions] (یکی به‌ازای هر مخاطب) نگه داشته میشه که خارج از
- * Composeای که نمایشش میده زندگی می‌کنه؛ خودِ پنجره فقط یه‌بار (وقتی صف از خالی به یه
- * آیتم می‌رسه) ساخته میشه:
+ * الان به‌جاش یه صف (یکی به‌ازای هر مخاطب) نگه داشته میشه که خارج از Composeای که
+ * نمایشش میده زندگی می‌کنه؛ خودِ پنجره فقط یه‌بار (وقتی صف از خالی به یه آیتم
+ * می‌رسه) ساخته میشه:
  * - پیامِ جدید از همون مخاطبی که پاپ‌آپش الان بازه → فقط به تاریخچه‌ی همون Session
  *   اضافه میشه، بدونِ اینکه پنجره یا پاسخِ درحالِ تایپ دست بخوره.
  * - پیامِ جدید از یه مخاطبِ دیگه → یه Session تازه به صف اضافه میشه ولی پاپ‌آپِ فعلی
  *   دست‌نخورده می‌مونه؛ کاربر با چیپِ «صف» بالای پاپ‌آپ می‌تونه بینشون سوییچ کنه.
+ *
+ * این صف دیگه مخصوصِ همین Service نیست - [PopupSessionQueue] یه صفِ مشترکه که
+ * [com.petro.smsapp.QuickReplyPopupActivity] (پاپ‌آپِ حالتِ قفل) هم دقیقاً از همون
+ * می‌خونه/می‌نویسه، پس اگه وضعیتِ قفل وسطِ صف عوض بشه، پیام‌ها گم/ناهماهنگ نمیشن.
  */
 class PopupOverlayService :
     Service(),
@@ -115,29 +115,12 @@ class PopupOverlayService :
     private var windowManager: WindowManager? = null
     private var overlayView: ComposeView? = null
 
-    /**
-     * یه گفتگوی درحالِ نمایش/انتظار توی پاپ‌آپ. همه‌ی فیلدهای قابلِ‌تغییرش state
-     * هستن تا Compose خودش با تغییرشون دوباره کامپوز بشه؛ چون Session بیرونِ خودِ
-     * Compose (توی خودِ Service) زندگی می‌کنه، عوض‌شدنِ محتوای این‌ها هرگز باعثِ
-     * ساخته‌شدنِ دوباره‌ی ComposeView نمیشه.
-     */
-    private class Session(
-        val threadId: Long,
-        val address: String,
-        var messageId: Long,
-        val displayName: String,
-        val photoUri: String?,
-        val isKnownContact: Boolean
-    ) {
-        val messages: SnapshotStateList<MessageEntry> = mutableStateListOf()
-        var replyText by mutableStateOf("")
-        var lastMessageAtMillis by mutableStateOf(0L)
-        var historyLoaded by mutableStateOf(false)
-    }
-
-    // صفِ مکالمه‌ها - اولیش همون چیزیه که الان روی پاپ‌آپ نشون داده میشه
-    private val sessions = mutableStateListOf<Session>()
-    private var activeIndex by mutableStateOf(0)
+    // خودِ داده و منطقِ صف دیگه اینجا نیست - همه‌چیز داخلِ PopupSessionQueueِ مشترک
+    // زندگی می‌کنه؛ این دو تا فقط برای کوتاه‌ترشدنِ ارجاع‌ها تو همین فایلن
+    private val sessions get() = PopupSessionQueue.sessions
+    private var activeIndex
+        get() = PopupSessionQueue.activeIndex
+        set(value) { PopupSessionQueue.activeIndex = value }
 
     override fun onCreate() {
         super.onCreate()
@@ -161,10 +144,6 @@ class PopupOverlayService :
         return START_NOT_STICKY
     }
 
-    /**
-     * پیامِ تازه‌رسیده رو یا به Sessionِ موجودِ همون مخاطب اضافه می‌کنه (پنجره دست‌نخورده)
-     * یا (اگه مخاطب تازه‌ست) یه Session جدید به ته صف اضافه می‌کنه.
-     */
     /**
      * صدا/ویبره‌ی پیامکِ تازه‌رسیده رو دستی پخش می‌کنه - چون این Service (برخلافِ
      * SmsDeliverReceiver.showNotification/showFullScreenPopupNotification) هیچ‌وقت
@@ -206,40 +185,30 @@ class PopupOverlayService :
         // نوتیفِ معمولی که صدا/ویبره‌ی خودِ channel رو داره)
         playIncomingMessageAlert()
 
-        val existing = sessions.firstOrNull { it.address == address || (threadId != -1L && it.threadId == threadId) }
-
-        if (existing != null) {
-            existing.messages.add(MessageEntry(text = body, isOutgoing = false, timestampMillis = date))
-            existing.messageId = messageId
-            existing.lastMessageAtMillis = date
-            // اگه این Session همون چیزیه که الان نشون داده میشه، Compose خودش با
-            // تغییرِ messages/lastMessageAtMillis بازسازی میشه. اگه Session دیگه‌ای
-            // فعاله، این یکی توی صف به‌روز می‌مونه تا کاربر بعداً سراغش بره.
-            return
-        }
-
-        val newSession = Session(
+        val isFirstSession = PopupSessionQueue.addIncomingMessage(
             threadId = threadId,
-            address = address,
             messageId = messageId,
+            address = address,
+            body = body,
+            date = date,
             displayName = ContactsCache.getName(this, address) ?: address,
             photoUri = ContactsCache.getPhotoUri(this, address),
             isKnownContact = ContactsCache.getName(this, address) != null
-        ).apply {
-            messages.add(MessageEntry(text = body, isOutgoing = false, timestampMillis = date))
-            lastMessageAtMillis = date
-        }
+        )
 
-        val wasEmpty = sessions.isEmpty()
-        sessions.add(newSession)
-
-        if (wasEmpty) {
-            // اولین مکالمه‌ست - تازه اینجاست که واقعاً باید پنجره ساخته بشه
-            activeIndex = 0
+        if (isFirstSession) {
+            // اولین مکالمه‌ی صف بود - تازه اینجاست که واقعاً باید پنجره ساخته بشه.
             createOverlayWindow()
+        } else if (overlayView == null) {
+            // صف از قبل خالی نبود ولی این نمونه‌ی Service پنجره‌ای نساخته - یعنی
+            // مالکِ فعلیِ صف یه چیزِ دیگه‌ست (مثلاً QuickReplyPopupActivityِ حالتِ
+            // قفل که همین الان بازه). کارِ ما فقط اضافه‌کردنِ پیام به همون صفِ
+            // مشترک بود؛ چیزی برای نگه‌داشتنِ این Service زنده نیست.
+            stopSelf()
         }
-        // اگه از قبل یه پاپ‌آپ باز بود، همونجوری که هست می‌مونه؛ کاربر با فلش‌های
-        // ناوبریِ بالای پاپ‌آپ (اگه بخواد) می‌تونه بره سراغِ همین Session تازه
+        // اگه از قبل خودِ همین Service یه پاپ‌آپ باز داشته، همونجوری که هست
+        // می‌مونه؛ کاربر با فلش‌های ناوبریِ بالای پاپ‌آپ (اگه بخواد) می‌تونه بره
+        // سراغِ همین Session تازه
     }
 
     /**
@@ -250,7 +219,7 @@ class PopupOverlayService :
      * قبلی» تو خودِ QuickReplyPopupScreen. اینجوری پاپ‌آپ همیشه فوری (بدونِ منتظر
      * موندن برایِ یه کوئریِ IO) ظاهر میشه، و کوئری فقط وقتی واقعاً لازمه اجرا میشه.
      */
-    private fun loadHistoryForSession(session: Session) {
+    private fun loadHistoryForSession(session: PopupSessionQueue.Session) {
         if (session.historyLoaded) return
         session.historyLoaded = true
 
@@ -344,32 +313,22 @@ class PopupOverlayService :
 
     /** فقط Sessionِ فعال رو از صف برمی‌داره؛ اگه صف خالی شد، کلِ پنجره هم بسته میشه. */
     private fun closeActiveSession() {
-        if (activeIndex !in sessions.indices) return
-        sessions.removeAt(activeIndex)
-        if (sessions.isEmpty()) {
+        if (PopupSessionQueue.closeActiveSession()) {
             removeOverlayView()
             stopSelf()
-        } else if (activeIndex >= sessions.size) {
-            activeIndex = sessions.size - 1
         }
     }
 
     /** کلِ پاپ‌آپ (همه‌ی صف) رو می‌بنده - برای وقتی کاربر داره میره داخلِ خودِ اپ. */
     private fun closeEverything() {
-        sessions.clear()
+        PopupSessionQueue.clear()
         removeOverlayView()
         stopSelf()
     }
 
-    private fun switchToNextSession() {
-        if (sessions.size <= 1) return
-        activeIndex = (activeIndex + 1) % sessions.size
-    }
+    private fun switchToNextSession() = PopupSessionQueue.switchToNext()
 
-    private fun switchToPreviousSession() {
-        if (sessions.size <= 1) return
-        activeIndex = (activeIndex - 1 + sessions.size) % sessions.size
-    }
+    private fun switchToPreviousSession() = PopupSessionQueue.switchToPrevious()
 
     override fun onDestroy() {
         removeOverlayView()

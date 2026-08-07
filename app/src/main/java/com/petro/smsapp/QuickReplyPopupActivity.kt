@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -58,13 +57,25 @@ import kotlinx.coroutines.flow.first
  * بالا می‌موند.
  *
  * الان دقیقاً هم‌الگوی PopupOverlayService (که همین مشکل رو برای حالتِ Overlay
- * از قبل درست کرده بود): یه صفِ [PopupQueue.sessions] بیرونِ خودِ Compose نگه
- * داشته میشه. با launchMode="singleTop" (تو AndroidManifest) + پیاده‌سازیِ
- * onNewIntent، وقتی این پاپ‌آپ از قبل روی صفحه بازه، پیامِ تازه دیگه Activity
- * جدید نمی‌سازه - همون نمونه‌ی زنده onNewIntent می‌گیره و پیام رو به صف اضافه
- * می‌کنه (یا اگه از همون فرستنده‌ست، به تاریخچه‌ی همون Session، یا اگه فرستنده‌ی
- * تازه‌ست، یه Session جدید به تهِ صف که کاربر با فلش‌های ناوبریِ بالای پاپ‌آپ
- * می‌تونه بینشون سوییچ کنه).
+ * از قبل درست کرده بود): یه صفِ [PopupSessionQueue] بیرونِ خودِ Compose نگه داشته
+ * میشه - و این صف دیگه مخصوصِ همین اکتیویتی هم نیست؛ دقیقاً همون صفیه که
+ * PopupOverlayService (حالتِ باز) هم ازش استفاده می‌کنه، پس اگه وضعیتِ قفل
+ * درست وسطِ کار عوض بشه، پیام‌ها بینِ این دو تا گم/ناهماهنگ نمیشن. با
+ * launchMode="singleTop" (تو AndroidManifest) + پیاده‌سازیِ onNewIntent، وقتی این
+ * پاپ‌آپ از قبل روی صفحه بازه، پیامِ تازه دیگه Activity جدید نمی‌سازه - همون
+ * نمونه‌ی زنده onNewIntent می‌گیره و پیام رو به صف اضافه می‌کنه (یا اگه از همون
+ * فرستنده‌ست، به تاریخچه‌ی همون Session، یا اگه فرستنده‌ی تازه‌ست، یه Session
+ * جدید به تهِ صف که کاربر با فلش‌های ناوبریِ بالای پاپ‌آپ می‌تونه بینشون سوییچ کنه).
+ *
+ * نکته‌ی مهم (رفعِ باگِ دوم): notify()+fullScreenIntent فقط دفعه‌ی اولِ پستِ یه
+ * نوتیف واقعاً یه Activity رو باز می‌کنه؛ notify()های بعدی (چه آپدیتِ همون ID چه
+ * یه ID تازه) وقتی این اکتیویتی از قبل روی صفحه/فورگراند باشه دیگه هیچ‌وقت
+ * startActivity/onNewIntent رو صدا نمی‌زنن - نتیجه دقیقاً همون چیزی بود که کاربر
+ * می‌دید: پیامِ دوم فقط یه نوتیفِ ساکت می‌موند. برای همین SmsDeliverReceiver الان
+ * وقتی این اکتیویتی از قبل زنده‌ست ([isActive])، به‌جای notify()، مستقیم
+ * startActivity صدا می‌زنه - چون اپ همون لحظه یه پنجره‌ی قابل‌مشاهده داره، این
+ * کار از محدودیتِ استارتِ اکتیویتی از پس‌زمینه مستثناست و دقیقاً onNewIntent رو
+ * تریگر می‌کنه.
  */
 class QuickReplyPopupActivity : ComponentActivity() {
 
@@ -72,6 +83,7 @@ class QuickReplyPopupActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activeInstance = this
         setShowOnLockScreenFlags()
         handleIntent(intent)
 
@@ -98,12 +110,12 @@ class QuickReplyPopupActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (activeInstance === this) activeInstance = null
         // فقط وقتی واقعاً داره بسته میشه (نه موقعِ چرخشِ صفحه یا بازسازیِ سیستمی)
         // صف رو خالی کن؛ وگرنه دفعه‌ی بعد که پاپ‌آپ باز میشه پیام‌های قدیمی رو
         // دوباره نشون میده
         if (isFinishing) {
-            PopupQueue.sessions.clear()
-            PopupQueue.activeIndex = 0
+            PopupSessionQueue.clear()
         }
     }
 
@@ -124,32 +136,16 @@ class QuickReplyPopupActivity : ComponentActivity() {
             NotificationManagerCompat.from(this).cancel(notificationId)
         }
 
-        val existing = PopupQueue.sessions.firstOrNull {
-            it.address == address || (threadId != -1L && it.threadId == threadId)
-        }
-        if (existing != null) {
-            existing.messages.add(MessageEntry(text = body, isOutgoing = false, timestampMillis = date))
-            existing.messageId = messageId
-            existing.lastMessageAtMillis = date
-            return
-        }
-
-        val session = PopupQueue.Session(
+        PopupSessionQueue.addIncomingMessage(
             threadId = threadId,
-            address = address,
             messageId = messageId,
+            address = address,
+            body = body,
+            date = date,
             displayName = ContactsCache.getName(this, address) ?: address,
             photoUri = ContactsCache.getPhotoUri(this, address),
             isKnownContact = ContactsCache.getName(this, address) != null
-        ).apply {
-            messages.add(MessageEntry(text = body, isOutgoing = false, timestampMillis = date))
-            lastMessageAtMillis = date
-        }
-
-        PopupQueue.sessions.add(session)
-        if (PopupQueue.sessions.size == 1) {
-            PopupQueue.activeIndex = 0
-        }
+        )
         // اگه از قبل یه پاپ‌آپ باز بود، همونجوری که هست می‌مونه؛ کاربر با فلش‌های
         // ناوبریِ بالای پاپ‌آپ (اگه بخواد) می‌تونه بره سراغِ همین Session تازه
     }
@@ -172,7 +168,7 @@ class QuickReplyPopupActivity : ComponentActivity() {
         }
     }
 
-    private fun loadHistoryForSession(session: PopupQueue.Session) {
+    private fun loadHistoryForSession(session: PopupSessionQueue.Session) {
         if (session.historyLoaded) return
         session.historyLoaded = true
         lifecycleScope.launch {
@@ -183,7 +179,7 @@ class QuickReplyPopupActivity : ComponentActivity() {
                 .map { MessageEntry(text = it.body, isOutgoing = it.isOutgoing, timestampMillis = it.date) }
             // اگه کاربر تا اون موقع همین Session رو بسته باشه، دیگه چیزی برای
             // اضافه‌کردن نیست
-            if (historyEntries.isNotEmpty() && PopupQueue.sessions.contains(session)) {
+            if (historyEntries.isNotEmpty() && PopupSessionQueue.sessions.contains(session)) {
                 session.messages.addAll(0, historyEntries)
             }
         }
@@ -191,29 +187,18 @@ class QuickReplyPopupActivity : ComponentActivity() {
 
     /** فقط Sessionِ فعال رو از صف برمی‌داره؛ اگه صف خالی شد، کلِ اکتیویتی بسته میشه. */
     private fun closeActiveSession() {
-        val index = PopupQueue.activeIndex
-        if (index !in PopupQueue.sessions.indices) return
-        PopupQueue.sessions.removeAt(index)
-        if (PopupQueue.sessions.isEmpty()) {
+        if (PopupSessionQueue.closeActiveSession()) {
             finish()
-        } else if (PopupQueue.activeIndex >= PopupQueue.sessions.size) {
-            PopupQueue.activeIndex = PopupQueue.sessions.size - 1
         }
     }
 
-    private fun switchToNextSession() {
-        if (PopupQueue.sessions.size <= 1) return
-        PopupQueue.activeIndex = (PopupQueue.activeIndex + 1) % PopupQueue.sessions.size
-    }
+    private fun switchToNextSession() = PopupSessionQueue.switchToNext()
 
-    private fun switchToPreviousSession() {
-        if (PopupQueue.sessions.size <= 1) return
-        PopupQueue.activeIndex = (PopupQueue.activeIndex - 1 + PopupQueue.sessions.size) % PopupQueue.sessions.size
-    }
+    private fun switchToPreviousSession() = PopupSessionQueue.switchToPrevious()
 
     @Composable
     private fun PopupHost() {
-        val session = PopupQueue.sessions.getOrNull(PopupQueue.activeIndex)
+        val session = PopupSessionQueue.sessions.getOrNull(PopupSessionQueue.activeIndex)
         if (session == null) {
             // حالتِ گذرا: صف خالیه (مثلاً همه‌ی سشن‌ها همین الان بسته شدن) -
             // چیزی نشون نده و فوراً ببند
@@ -234,7 +219,7 @@ class QuickReplyPopupActivity : ComponentActivity() {
             // بازکردنِ ترد یعنی کاربر داره میره داخلِ خودِ اپ - کلِ صف (نه فقط
             // Sessionِ فعال) بسته میشه، عیناً هم‌رفتارِ closeEverything تو
             // PopupOverlayService
-            PopupQueue.sessions.clear()
+            PopupSessionQueue.clear()
             finish()
         }
 
@@ -393,8 +378,8 @@ class QuickReplyPopupActivity : ComponentActivity() {
             overflowActions = overflow,
             // ناوبریِ صف - وقتی همزمان چند مکالمه تو صفِ پاپ‌آپ منتظرن؛
             // totalSessions<=۱ یعنی صف خالیه و کلِ ناوبری مخفی میشه
-            totalSessions = PopupQueue.sessions.size,
-            currentSessionPosition = PopupQueue.activeIndex + 1,
+            totalSessions = PopupSessionQueue.sessions.size,
+            currentSessionPosition = PopupSessionQueue.activeIndex + 1,
             onSwitchToPrevious = { switchToPreviousSession() },
             onSwitchToNext = { switchToNextSession() },
             showHistoryButton = !session.historyLoaded,
@@ -406,31 +391,6 @@ class QuickReplyPopupActivity : ComponentActivity() {
         )
     }
 
-    /**
-     * صفِ سراسریِ سشن‌های پاپ‌آپِ حالتِ قفل - بیرونِ خودِ Compose زندگی می‌کنه تا
-     * onNewIntent (که هیچ ربطی به هیچ Composableای نداره) بتونه مستقیم بهش پیام
-     * اضافه کنه و Compose خودش reactive بازسازی بشه. دقیقاً هم‌الگوی
-     * PopupOverlayService.sessions/activeIndex.
-     */
-    private object PopupQueue {
-        val sessions: SnapshotStateList<Session> = mutableStateListOf()
-        var activeIndex by mutableStateOf(0)
-
-        class Session(
-            val threadId: Long,
-            val address: String,
-            var messageId: Long,
-            val displayName: String,
-            val photoUri: String?,
-            val isKnownContact: Boolean
-        ) {
-            val messages: SnapshotStateList<MessageEntry> = mutableStateListOf()
-            var replyText by mutableStateOf("")
-            var lastMessageAtMillis by mutableStateOf(0L)
-            var historyLoaded by mutableStateOf(false)
-        }
-    }
-
     companion object {
         const val EXTRA_THREAD_ID = "extra_thread_id"
         const val EXTRA_MESSAGE_ID = "extra_message_id"
@@ -438,5 +398,15 @@ class QuickReplyPopupActivity : ComponentActivity() {
         const val EXTRA_BODY = "extra_body"
         const val EXTRA_DATE = "extra_date"
         const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
+
+        // نمونه‌ی زنده‌ی فعلی (اگه وجود داشته باشه) - SmsDeliverReceiver با
+        // چک‌کردنِ [isActive] تشخیص میده که آیا این پاپ‌آپ همین الان روی صفحه‌ست
+        // یا نه، تا تصمیم بگیره پیامِ تازه رو مستقیم startActivity کنه (onNewIntent
+        // رو تریگر می‌کنه) یا از مسیرِ notify()+fullScreenIntent (که برای بازکردنِ
+        // اولیه لازمه) بره.
+        @Volatile
+        private var activeInstance: QuickReplyPopupActivity? = null
+
+        val isActive: Boolean get() = activeInstance != null
     }
 }

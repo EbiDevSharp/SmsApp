@@ -139,6 +139,20 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             val isLocked = keyguardManager?.isKeyguardLocked ?: false
 
             when {
+                // نکته‌ی مهم (رفعِ باگ): notify()+fullScreenIntent فقط دفعه‌ی اولِ
+                // پستِ یه نوتیف واقعاً یه Activity باز می‌کنه؛ notify()های بعدی
+                // (چه پیامِ دومِ همون فرستنده - آپدیتِ همون notificationId - چه
+                // فرستنده‌ی تازه با notificationId جدید) وقتی QuickReplyPopupActivity
+                // از قبل روی صفحه/فورگراند باشه دیگه startActivity/onNewIntent رو
+                // صدا نمی‌زنن - نتیجه: پیامِ بعدی یا فقط یه نوتیفِ ساکت می‌مونه، یا
+                // کاربر باید دستی پاپ‌آپِ فعلی رو ببنده تا بعدی دیده بشه. برای همین
+                // وقتی این اکتیویتی از قبل زنده‌ست، به‌جای notify()، مستقیم
+                // startActivity صدا زده میشه؛ چون اپ همون لحظه یه پنجره‌ی
+                // قابل‌مشاهده داره، این کار از محدودیتِ استارتِ اکتیویتی از
+                // پس‌زمینه مستثناست و دقیقاً onNewIntent رو تریگر می‌کنه، پس پیام
+                // مستقیم وارد همون صفِ مشترکِ PopupSessionQueue میشه.
+                isLocked && QuickReplyPopupActivity.isActive ->
+                    launchLockedPopupDirectly(context, sender, threadId, messageId, fullBody, receivedTimestamp)
                 isLocked -> showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = receivedTimestamp)
                 Settings.canDrawOverlays(context) -> PopupOverlayService.show(
                     context = context,
@@ -152,6 +166,40 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             }
         } else {
             showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
+        }
+    }
+
+    /**
+     * وقتی پاپ‌آپِ حالتِ قفل از قبل زنده‌ست، پیامِ تازه مستقیم بهش تحویل داده
+     * میشه (نه از مسیرِ notify()) - نگاهِ [QuickReplyPopupActivity] بالای همین
+     * فایل رو برای توضیحِ کاملِ چرایی‌اش ببین. صدا/ویبره هم دستی پخش میشه، چون
+     * این مسیر برخلافِ showFullScreenPopupNotification هیچ‌وقت notify() صدا
+     * نمی‌زنه.
+     */
+    private fun launchLockedPopupDirectly(
+        context: Context,
+        sender: String,
+        threadId: Long,
+        messageId: Long,
+        body: String,
+        date: Long
+    ) {
+        val popupIntent = Intent(context, QuickReplyPopupActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(QuickReplyPopupActivity.EXTRA_THREAD_ID, threadId)
+            putExtra(QuickReplyPopupActivity.EXTRA_MESSAGE_ID, messageId)
+            putExtra(QuickReplyPopupActivity.EXTRA_ADDRESS, sender)
+            putExtra(QuickReplyPopupActivity.EXTRA_BODY, body)
+            putExtra(QuickReplyPopupActivity.EXTRA_DATE, date)
+        }
+        try {
+            context.startActivity(popupIntent)
+            SmsAlertSoundPlayer.play(context)
+        } catch (e: Exception) {
+            // اگه به هر دلیلی (محدودیتِ OEM و ...) نشد، مسیرِ notify()+fullScreenIntent
+            // به‌عنوانِ بک‌آپ کافیه - حداقل یه نوتیف/پاپ‌آپِ اولیه نشون داده میشه
+            val displayName = ContactsCache.getName(context, sender) ?: sender
+            showFullScreenPopupNotification(context, sender, displayName, body, threadId, messageId, receivedAtMillis = date)
         }
     }
 
