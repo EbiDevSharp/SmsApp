@@ -137,32 +137,30 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         if (AppSettings.isPopupInsteadOfNotificationEnabled(context)) {
             val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
             val isLocked = keyguardManager?.isKeyguardLocked ?: false
+            val popupOnLock = AppSettings.isPopupOnLockEnabled(context)
+            val popupWhenUnlocked = AppSettings.isPopupWhenUnlockedEnabled(context)
 
             when {
-                // نکته‌ی مهم (رفعِ باگ): notify()+fullScreenIntent فقط دفعه‌ی اولِ
-                // پستِ یه نوتیف واقعاً یه Activity باز می‌کنه؛ notify()های بعدی
-                // (چه پیامِ دومِ همون فرستنده - آپدیتِ همون notificationId - چه
-                // فرستنده‌ی تازه با notificationId جدید) وقتی QuickReplyPopupActivity
-                // از قبل روی صفحه/فورگراند باشه دیگه startActivity/onNewIntent رو
-                // صدا نمی‌زنن - نتیجه: پیامِ بعدی یا فقط یه نوتیفِ ساکت می‌مونه، یا
-                // کاربر باید دستی پاپ‌آپِ فعلی رو ببنده تا بعدی دیده بشه. برای همین
-                // وقتی این اکتیویتی از قبل زنده‌ست، به‌جای notify()، مستقیم
-                // startActivity صدا زده میشه؛ چون اپ همون لحظه یه پنجره‌ی
-                // قابل‌مشاهده داره، این کار از محدودیتِ استارتِ اکتیویتی از
-                // پس‌زمینه مستثناست و دقیقاً onNewIntent رو تریگر می‌کنه، پس پیام
-                // مستقیم وارد همون صفِ مشترکِ PopupSessionQueue میشه.
-                isLocked && QuickReplyPopupActivity.isActive ->
+                // قفل + پاپ‌آپ قفل فعال + پاپ‌آپ از قبل باز
+                isLocked && popupOnLock && QuickReplyPopupActivity.isActive ->
                     launchLockedPopupDirectly(context, sender, threadId, messageId, fullBody, receivedTimestamp)
-                isLocked -> showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = receivedTimestamp)
-                Settings.canDrawOverlays(context) -> PopupOverlayService.show(
-                    context = context,
-                    threadId = threadId,
-                    messageId = messageId,
-                    address = sender,
-                    body = fullBody,
-                    date = receivedTimestamp
-                )
-                else -> showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
+                // قفل + پاپ‌آپ قفل فعال
+                isLocked && popupOnLock ->
+                    showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = receivedTimestamp)
+                // صفحه باز + پاپ‌آپ unlocked فعال + overlay
+                !isLocked && popupWhenUnlocked && Settings.canDrawOverlays(context) ->
+                    PopupOverlayService.show(
+                        context = context,
+                        threadId = threadId,
+                        messageId = messageId,
+                        address = sender,
+                        body = fullBody,
+                        date = receivedTimestamp
+                    )
+                // در بقیه حالت‌ها (قفل با پاپ‌آپ خاموش، یا unlocked با پاپ‌آپ خاموش،
+                // یا unlocked بدون پرمیشن overlay) → نوتیف معمولی
+                else ->
+                    showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
             }
         } else {
             showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)

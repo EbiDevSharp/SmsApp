@@ -49,6 +49,8 @@ object AppSettings {
     private const val KEY_ALPHABET_INDEX_BAR_ENABLED_NAME = "alphabet_index_bar_enabled"
     // جدید: نمایشِ پاپ‌آپِ روی صفحه به‌جای نوتیفِ معمولی برای پیامکِ تازه‌رسیده
     private const val KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME = "popup_instead_of_notification_enabled"
+    private const val KEY_POPUP_ON_LOCK_ENABLED_NAME = "popup_on_lock_enabled"
+    private const val KEY_POPUP_WHEN_UNLOCKED_ENABLED_NAME = "popup_when_unlocked_enabled"
     // تأخیر ارسال پیام (ثانیه) - ۰ = فوری، ۱ تا ۱۵
     private const val KEY_SEND_DELAY_SECONDS_NAME = "send_delay_seconds"
     // جدید: وقتی کاربر نوتیفِ پیامکِ تازه‌رسیده رو با دست (سوایپ) بیرون بندازه، اون پیام خودکار خوانده‌شده علامت بخوره
@@ -70,6 +72,8 @@ object AppSettings {
     private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
     private val KEY_ALPHABET_INDEX_BAR_ENABLED = booleanPreferencesKey(KEY_ALPHABET_INDEX_BAR_ENABLED_NAME)
     private val KEY_POPUP_INSTEAD_OF_NOTIFICATION = booleanPreferencesKey(KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME)
+    private val KEY_POPUP_ON_LOCK_ENABLED = booleanPreferencesKey(KEY_POPUP_ON_LOCK_ENABLED_NAME)
+    private val KEY_POPUP_WHEN_UNLOCKED_ENABLED = booleanPreferencesKey(KEY_POPUP_WHEN_UNLOCKED_ENABLED_NAME)
     private val KEY_SEND_DELAY_SECONDS = intPreferencesKey(KEY_SEND_DELAY_SECONDS_NAME)
     private val KEY_MARK_READ_ON_NOTIFICATION_DISMISS = booleanPreferencesKey(KEY_MARK_READ_ON_NOTIFICATION_DISMISS_NAME)
 
@@ -138,6 +142,10 @@ object AppSettings {
         val alphabetIndexBarEnabled: Boolean = true,
         // جدید: به‌جای نوتیفِ معمولی، پیامکِ تازه‌رسیده با یه پاپ‌آپِ روی صفحه نشون داده بشه
         val popupInsteadOfNotificationEnabled: Boolean = false,
+        // پاپ‌آپ روی صفحه‌قفل (فقط وقتی master روشن است)
+        val popupOnLockEnabled: Boolean = true,
+        // پاپ‌آپ وقتی صفحه باز است / برنامه‌ها بازند
+        val popupWhenUnlockedEnabled: Boolean = true,
         // تأخیر ارسال (ثانیه) - ۰ = فوری
         val sendDelaySeconds: Int = DEFAULT_SEND_DELAY_SECONDS,
         // جدید: با سوایپ‌کردنِ (بیرون‌انداختنِ) نوتیفِ پیامک، همون پیام خوانده‌شده علامت بخوره
@@ -177,6 +185,8 @@ object AppSettings {
                         swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true,
                         alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true,
                         popupInsteadOfNotificationEnabled = prefs[KEY_POPUP_INSTEAD_OF_NOTIFICATION] ?: false,
+                        popupOnLockEnabled = prefs[KEY_POPUP_ON_LOCK_ENABLED] ?: true,
+                        popupWhenUnlockedEnabled = prefs[KEY_POPUP_WHEN_UNLOCKED_ENABLED] ?: true,
                         sendDelaySeconds = (prefs[KEY_SEND_DELAY_SECONDS] ?: DEFAULT_SEND_DELAY_SECONDS)
                             .coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS),
                         markReadOnNotificationDismissEnabled = prefs[KEY_MARK_READ_ON_NOTIFICATION_DISMISS] ?: false
@@ -271,6 +281,16 @@ object AppSettings {
     fun isPopupInsteadOfNotificationEnabled(context: Context): Boolean = _state.value.popupInsteadOfNotificationEnabled
     fun setPopupInsteadOfNotificationEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_POPUP_INSTEAD_OF_NOTIFICATION] = enabled }
+
+    /** پاپ‌آپ روی صفحه‌قفل؛ اگر خاموش باشد روی قفل نوتیف معمولی می‌آید */
+    fun isPopupOnLockEnabled(context: Context): Boolean = _state.value.popupOnLockEnabled
+    fun setPopupOnLockEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_POPUP_ON_LOCK_ENABLED] = enabled }
+
+    /** پاپ‌آپ وقتی صفحه باز است (اپ پیامک یا برنامه‌های دیگر)؛ اگر خاموش باشد نوتیف معمولی */
+    fun isPopupWhenUnlockedEnabled(context: Context): Boolean = _state.value.popupWhenUnlockedEnabled
+    fun setPopupWhenUnlockedEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_POPUP_WHEN_UNLOCKED_ENABLED] = enabled }
 
     /** تأخیر ارسال پیام به ثانیه (۰ = فوری، ۱ تا ۱۵) */
     fun getSendDelaySeconds(context: Context): Int = _state.value.sendDelaySeconds

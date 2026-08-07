@@ -47,25 +47,13 @@ import androidx.compose.ui.draw.scale
 @Composable
 fun SettingsScreen(
     onOpenNotificationActions: () -> Unit,
-    onOpenPopupActions: () -> Unit = {},
+    onOpenPopupSettings: () -> Unit = {},
     onMenuClick: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val settings by AppSettings.state.collectAsState()
     val scope = rememberCoroutineScope()
-
-    var overlayPermissionGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                overlayPermissionGranted = Settings.canDrawOverlays(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 
     var showSwipeRightToLeftDialog by remember { mutableStateOf(false) }
     var showSwipeLeftToRightDialog by remember { mutableStateOf(false) }
@@ -387,16 +375,9 @@ fun SettingsScreen(
                     onClick = onOpenNotificationActions
                 )
                 SettingRow(
-                    title = "دکمه‌های پاپ‌آپ",
-                    subtitle = "عملیات، ترتیب و نمایش آیکن/متن روی پاپ‌آپ",
-                    onClick = onOpenPopupActions
-                )
-                SwitchRow(
-                    title = "پاپ‌آپ پیامک روی صفحه",
-                    info = "به‌جای نوتیف معمولی، پیامک تازه‌رسیده پاپ‌آپ روی صفحه (حتی صفحه‌قفل) نشون بده",
-                    checked = settings.popupInsteadOfNotificationEnabled,
-                    onChecked = { AppSettings.setPopupInsteadOfNotificationEnabled(context, it) },
-                    onInfo = { infoDialogText = it }
+                    title = "پاپ‌آپ پیامک",
+                    subtitle = if (settings.popupInsteadOfNotificationEnabled) "فعال" else "غیرفعال — تنظیمات پاپ‌آپ",
+                    onClick = onOpenPopupSettings
                 )
                 SwitchRow(
                     title = "خوانده‌شدن با بیرون‌انداختنِ نوتیف",
@@ -405,35 +386,8 @@ fun SettingsScreen(
                     onChecked = { AppSettings.setMarkReadOnNotificationDismissEnabled(context, it) },
                     onInfo = { infoDialogText = it }
                 )
-                if (settings.popupInsteadOfNotificationEnabled && !overlayPermissionGranted) {
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                "پرمیشن «نمایش روی برنامه‌های دیگر» لازمه",
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        supportingContent = {
-                            Text("بدون این پرمیشن پاپ‌آپ فقط روی صفحه‌قفل میاد. برای نمایش همیشه این پرمیشن رو بده.")
-                        },
-                        trailingContent = {
-                            Button(
-                                onClick = {
-                                    context.startActivity(
-                                        Intent(
-                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                            Uri.parse("package:${context.packageName}")
-                                        )
-                                    )
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                            ) { Text("اعطا") }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
-                    )
                 }
-            }
+
 
             // عمومی
             AccordionSection(

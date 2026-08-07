@@ -128,6 +128,8 @@ object BackupModule {
         return JSONObject().apply {
             put("deliveryNotificationsEnabled", s.deliveryNotificationsEnabled)
             put("popupInsteadOfNotificationEnabled", s.popupInsteadOfNotificationEnabled)
+            put("popupOnLockEnabled", s.popupOnLockEnabled)
+            put("popupWhenUnlockedEnabled", s.popupWhenUnlockedEnabled)
             put("markReadOnNotificationDismissEnabled", s.markReadOnNotificationDismissEnabled)
             put("notificationActions", JSONArray().apply {
                 s.notificationActions.forEach { action ->
@@ -457,6 +459,10 @@ object BackupModule {
             AppSettings.setDeliveryNotificationsEnabled(context, data.getBoolean("deliveryNotificationsEnabled"))
         if (data.has("popupInsteadOfNotificationEnabled"))
             AppSettings.setPopupInsteadOfNotificationEnabled(context, data.getBoolean("popupInsteadOfNotificationEnabled"))
+        if (data.has("popupOnLockEnabled"))
+            AppSettings.setPopupOnLockEnabled(context, data.getBoolean("popupOnLockEnabled"))
+        if (data.has("popupWhenUnlockedEnabled"))
+            AppSettings.setPopupWhenUnlockedEnabled(context, data.getBoolean("popupWhenUnlockedEnabled"))
         if (data.has("markReadOnNotificationDismissEnabled"))
             AppSettings.setMarkReadOnNotificationDismissEnabled(context, data.getBoolean("markReadOnNotificationDismissEnabled"))
         if (data.has("notificationActions")) {

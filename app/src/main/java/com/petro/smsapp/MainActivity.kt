@@ -574,7 +574,7 @@ fun AppNavigation(
             composable("settings") {
                 SettingsScreen(
                     onOpenNotificationActions = { navController.navigate("notification_actions") },
-                    onOpenPopupActions = { navController.navigate("popup_actions") },
+                    onOpenPopupSettings = { navController.navigate("popup_settings") },
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onBack = { navController.popBackStack() }
                 )
@@ -584,6 +584,12 @@ fun AppNavigation(
                 NotificationActionsSettingsScreen(
                     actions = settingsState.notificationActions,
                     onSave = { updated -> AppSettings.setNotificationActionSettings(context, updated) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("popup_settings") {
+                com.petro.smsapp.ui.PopupSettingsScreen(
+                    onOpenPopupActions = { navController.navigate("popup_actions") },
                     onBack = { navController.popBackStack() }
                 )
             }
