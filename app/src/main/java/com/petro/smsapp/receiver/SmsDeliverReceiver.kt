@@ -118,16 +118,28 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         // اگه کاربر از تنظیمات «پاپ‌آپِ پیامک روی صفحه» رو فعال کرده باشه:
         //
-        // - اگه پرمیشنِ «نمایش روی برنامه‌های دیگر» (SYSTEM_ALERT_WINDOW) رو هم داده
-        //   باشه، فقط پاپ‌آپِ overlay نشون داده میشه (بدونِ هیچ نوتیفِ اضافه‌ای) - این
-        //   تنها راهیه که تضمین می‌کنه پاپ‌آپ همیشه، صرفِ‌نظر از قفل/باز بودنِ صفحه یا
-        //   باز/بسته بودنِ اپ، وسطِ صفحه بیاد (fullScreenIntent از اندروید ۱۰ به بعد
-        //   فقط روی صفحه‌قفل خودکار اجرا میشه).
-        // - اگه پرمیشنِ overlay داده نشده، دقیقاً رفتارِ قبلی (نوتیفِ حداقلی +
-        //   fullScreenIntent) ادامه پیدا می‌کنه که فقط روی صفحه‌قفل تضمین‌شده کار می‌کنه.
+        // نکته‌ی مهم (رفعِ باگ): قبلاً اینجا صرفاً پرمیشنِ overlay چک می‌شد و اگه
+        // داده شده بود، همیشه Overlay انتخاب می‌شد - ولی تست‌ها نشون دادن که پنجره‌ی
+        // TYPE_APPLICATION_OVERLAY اصلاً روی صفحه‌قفلِ واقعی نمایش داده نمیشه (دقیقاً
+        // مثلِ مشکلِ شناخته‌شده‌ی اپ‌هایی مثل Truecaller که رو صفحه‌ی باز کار می‌کنن ولی
+        // رو قفل غیب میشن) - پس دقیقاً تو حالتی که مهم‌تر بود (صفحه قفله) داشتیم راهی
+        // رو انتخاب می‌کردیم که اصلاً کار نمی‌کرد.
+        //
+        // الان تصمیم بر اساسِ وضعیتِ واقعیِ قفل گرفته میشه:
+        // - صفحه قفله → همیشه QuickReplyPopupActivity (fullScreenIntent) - تنها راهی
+        //   که واقعاً رو صفحه‌قفل نمایش داده میشه (با تمِ غیرترنسلوسنتِ Popup)
+        // - صفحه بازه + پرمیشنِ overlay داده شده → Overlay، چون fullScreenIntent از
+        //   اندروید ۱۰ به بعد وقتی صفحه باز و اپ پس‌زمینه‌ست خودکار اجرا نمیشه
+        // - صفحه بازه + پرمیشنِ overlay داده نشده → دیگه معنی نداره از نوتیفِ حداقلیِ
+        //   fullScreenIntent استفاده کنیم (که تو این حالت خودکار اجرا نمیشه و فقط یه
+        //   نوتیفِ بی‌دکمه می‌مونه) - همون نوتیفِ کاملِ معمولی (با دکمه‌ها) بهتره
         if (AppSettings.isPopupInsteadOfNotificationEnabled(context)) {
-            if (Settings.canDrawOverlays(context)) {
-                PopupOverlayService.show(
+            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+            val isLocked = keyguardManager?.isKeyguardLocked ?: false
+
+            when {
+                isLocked -> showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = receivedTimestamp)
+                Settings.canDrawOverlays(context) -> PopupOverlayService.show(
                     context = context,
                     threadId = threadId,
                     messageId = messageId,
@@ -135,8 +147,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                     body = fullBody,
                     date = receivedTimestamp
                 )
-            } else {
-                showFullScreenPopupNotification(context, sender, displayName, fullBody, threadId, messageId, receivedAtMillis = receivedTimestamp)
+                else -> showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
             }
         } else {
             showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)

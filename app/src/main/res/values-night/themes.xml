@@ -9,16 +9,23 @@
     -->
     <style name="Theme.SmsApp" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FF121212</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 
-    <!-- پاپ‌آپِ پاسخِ سریع همیشه شفافه و به تمِ روشن/تیره‌ی سیستم وابسته نیست -->
+    <!--
+        پاپ‌آپِ پاسخِ سریع - دیگه ترنسلوسنت نیست، دقیقاً هم‌قاعده‌ی values/themes.xml
+        (نگاه کن به کامنتِ اونجا برای دلیل: اکتیویتیِ ترنسلوسنت با showWhenLocked
+        رو صفحه‌قفل نمایش داده نمیشه). این کپیِ اینجا قبلاً موقعِ فیکسِ اولیه از قلم
+        افتاده بود - وقتی گوشی تو حالتِ دارک/Force Dark بود، اندروید همین نسخه (نه
+        نسخه‌ی روشنِ فیکس‌شده) رو انتخاب می‌کرد و باگِ صفحه‌قفل دوباره برمی‌گشت.
+    -->
     <style name="Theme.SmsApp.Popup" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowBackground">#B3000000</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
-        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>

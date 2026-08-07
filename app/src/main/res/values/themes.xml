@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!--
         قبلاً این تم همیشه android:Theme.Material.Light بود، حتی وقتی گوشی رو
         دارک بود و تنظیمِ تمِ اپ رو System - windowBackground بومیِ اکتیویتی (که
@@ -9,20 +9,36 @@
     -->
     <style name="Theme.SmsApp" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">#FFF7F8FA</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 
     <!--
-        تمِ اختصاصیِ QuickReplyPopupActivity - پس‌زمینه کاملاً شفافه تا صفحه‌ی واقعی
-        (یا صفحه‌قفل) پشتِ کارتِ پاپ‌آپِ Compose دیده بشه، دقیقاً هم‌قاعده‌ی الگوی
-        نوتیفِ تماسِ ورودی. خودِ چیدمان/گردیِ کارت از داخلِ QuickReplyPopupScreen میاد.
+        تمِ اختصاصیِ QuickReplyPopupActivity.
+
+        نکته‌ی مهم (رفعِ باگ): قبلاً این تم windowIsTranslucent=true بود تا صفحه‌ی
+        واقعی (یا صفحه‌قفل) پشتِ کارتِ پاپ‌آپ واقعاً دیده بشه. این باعث می‌شد پاپ‌آپ
+        - چه رو خودِ گوشی (MIUI) چه رو یه امولاتورِ کاملاً خالص - وقتی صفحه قفل بود
+        اصلاً نمایش داده نشه: اکتیویتی ساخته می‌شد (setShowWhenLocked/turnScreenOn هم
+        صدا زده می‌شدن) ولی سیستم صفحه رو یه لحظه روشن می‌کرد و دوباره برمی‌گشت رو
+        قفل - این یه محدودیتِ خودِ پلتفرمِ اندرویده: اکتیویتیِ ترنسلوسنت با
+        showWhenLocked معمولاً بالای Keyguard نمایش داده نمی‌شه، صرف‌نظر از پرمیشن‌ها.
+        (این محدودیت فقط مالِ Activityهاست - همین چیزی که PopupOverlayService رو
+        هم داریم که یه پنجره‌ی Overlay خامه، نه Activity، و این مشکل رو نداره.)
+
+        پس این تم دیگه ترنسلوسنت نیست - یه پس‌زمینه‌ی تیره‌ی ثابت داره (به‌جای دیدنِ
+        واقعیِ صفحه‌ی پشت) که هم‌قاعده‌ی ظاهرِ قبلی (backgroundDimEnabled) به نظر
+        می‌رسه، ولی چون دیگه واقعاً ترنسلوسنت نیست، رو صفحه‌قفل هم قابلِ‌اعتماد کار
+        می‌کنه. این تم فقط وقتی استفاده می‌شه که کاربر پرمیشنِ overlay رو نداده باشه
+        (SmsDeliverReceiver.showFullScreenPopupNotification) - وقتی داده باشه،
+        PopupOverlayService با ترنسلوسنسیِ واقعی و بدونِ این محدودیت اجرا می‌شه.
     -->
     <style name="Theme.SmsApp.Popup" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowBackground">#B3000000</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
-        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>

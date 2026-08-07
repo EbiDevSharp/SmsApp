@@ -50,8 +50,9 @@ import kotlinx.coroutines.flow.first
  * نوتیفِ تماسِ ورودی. خودش fullScreenIntentِ یه نوتیفِ حداقلیه (SmsDeliverReceiver
  * می‌سازدش)، نه یه Activity معمولی.
  *
- * تمِ این اکتیویتی (Theme.SmsApp.Popup در themes.xml) شفافه تا پس‌زمینه‌ی واقعیِ
- * صفحه (یا صفحه‌قفل) پشتِ کارتِ پاپ‌آپ دیده بشه.
+ * تمِ این اکتیویتی (Theme.SmsApp.Popup در themes.xml) یه پس‌زمینه‌ی تیره‌ی ثابت
+ * داره، نه ترنسلوسنتِ واقعی - چون اکتیویتیِ ترنسلوسنت با showWhenLocked رو
+ * صفحه‌قفل نمایش داده نمی‌شه (نگاه کن به کامنتِ خودِ تم برای جزئیات).
  */
 class QuickReplyPopupActivity : ComponentActivity() {
 
