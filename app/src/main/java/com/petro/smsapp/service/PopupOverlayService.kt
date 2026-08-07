@@ -162,11 +162,8 @@ class PopupOverlayService :
                 getSystemService(NotificationManager::class.java)?.getNotificationChannel(SMS_CHANNEL_ID)
             } else null
 
-            // به‌جای ساختنِ یه Ringtoneِ مستقل، از پخش‌کننده‌ی مرکزیِ سراسریِ اپ
-            // استفاده میشه - همون چیزی که SmsDeliverReceiver هم برای پاپ‌آپِ
-            // صفحه‌قفل ازش استفاده می‌کنه. اینجوری اگه یه پیام از مسیرِ Overlay و
-            // یکی از مسیرِ صفحه‌قفل نزدیک به هم برسه، صداها روی هم پخش نمیشن.
-            SmsAlertSoundPlayer.play(this, channel?.sound)
+            // فقط از پخش‌کننده مرکزی (با debounce داخلی) — یک‌بار صدا
+            SmsAlertSoundPlayer.playFromSmsChannel(this)
 
             val shouldVibrate = channel?.shouldVibrate() ?: true
             if (shouldVibrate) {

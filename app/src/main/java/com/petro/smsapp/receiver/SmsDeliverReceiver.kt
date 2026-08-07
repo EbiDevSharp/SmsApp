@@ -194,12 +194,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         }
         try {
             context.startActivity(popupIntent)
-            // صدای کانال (اگه کاربر از تنظیمات سیستم عوض کرده) تا با Overlay و نوتیف معمولی یکی باشه
-            val channelSound = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                (context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)
-                    ?.getNotificationChannel("sms_channel")?.sound
-            } else null
-            SmsAlertSoundPlayer.play(context, channelSound)
+            SmsAlertSoundPlayer.playFromSmsChannel(context)
         } catch (e: Exception) {
             // اگه به هر دلیلی (محدودیتِ OEM و ...) نشد، مسیرِ notify()+fullScreenIntent
             // به‌عنوانِ بک‌آپ کافیه - حداقل یه نوتیف/پاپ‌آپِ اولیه نشون داده میشه
@@ -227,7 +222,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         // کانال بی‌صدای مخصوص fullScreenIntent (ساخته‌شده در SmsApplication) تا
         // سیستم خودش صدا نزند؛ صدای واقعی از sms_channel خوانده و دستی پخش می‌شود.
         val popupChannelId = "sms_popup_channel"
-        val soundChannelId = "sms_channel"
         val notificationId = sender.hashCode()
 
         val popupIntent = Intent(context, QuickReplyPopupActivity::class.java).apply {
@@ -267,12 +261,8 @@ class SmsDeliverReceiver : BroadcastReceiver() {
 
         val notification = notificationBuilder.build()
 
-        // صدای اولین پیام روی قفل - هم‌منبع با Overlay و پیام‌های بعدی پاپ‌آپ باز
-        val channelSound = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            (context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)
-                ?.getNotificationChannel(soundChannelId)?.sound
-        } else null
-        SmsAlertSoundPlayer.play(context, channelSound)
+        // فقط یک‌بار صدا از پخش‌کننده مرکزی (کانال نوتیف بی‌صداست)
+        SmsAlertSoundPlayer.playFromSmsChannel(context)
 
         NotificationManagerCompat.from(context).apply {
             try {

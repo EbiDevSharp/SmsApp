@@ -32,20 +32,27 @@ class SmsApplication : Application() {
             )
             manager.createNotificationChannel(channel)
 
-            // کانال مخصوص پاپ‌آپِ صفحه‌قفل (fullScreenIntent):
-            // اهمیت بالا تا سیستم Activity را باز کند، ولی بدون صدا/ویبره تا
-            // دوبار صدا نیاید؛ صدا را خودِ اپ با SmsAlertSoundPlayer می‌زند.
-            // از setSilent روی نوتیف sms_channel استفاده نمی‌کنیم چون روی بعضی
-            // OEMها fullScreenIntent را قطع می‌کند.
+            // کانال مخصوص پاپ‌آپ صفحه‌قفل (fullScreenIntent):
+            // اهمیت بالا تا سیستم Activity را باز کند، ولی کاملاً بی‌صدا/بدون ویبره.
+            // صدا را فقط SmsAlertSoundPlayer یک‌بار می‌زند.
+            // کانال را delete+create می‌کنیم تا اگر قبلاً با تنظیمات صدا ساخته شده
+            // بود، روی OEMهایی که create دوباره را نادیده می‌گیرند، واقعاً بی‌صدا شود.
+            try {
+                manager.deleteNotificationChannel("sms_popup_channel")
+            } catch (_: Exception) {
+            }
             val popupChannel = NotificationChannel(
                 "sms_popup_channel",
                 "پاپ‌آپ پیامک",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
+                description = "فقط برای باز کردن پاپ‌آپ روی قفل - بدون صدا"
                 setSound(null, null)
                 enableVibration(false)
                 vibrationPattern = longArrayOf(0)
+                enableLights(false)
                 setShowBadge(false)
+                setBypassDnd(false)
             }
             manager.createNotificationChannel(popupChannel)
         }
