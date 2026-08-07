@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
  *    یه چیپِ کوچیک داخلِ همون کادرِ جستجو (کنارِ هم، قبل از متنِ تایپ‌شده) نشون داده
  *    میشه - بدونِ اینکه لیستِ جستجو خالی بشه یا مجبور باشی برای مخاطبِ بعدی از اول
  *    جستجو کنی. تپِ دوباره روی یه مخاطبِ انتخاب‌شده هم از انتخاب درش میاره.
+ *    بعد از انتخاب، متنِ جستجو پاک می‌شه تا تکراری/گیج‌کننده نباشه.
  *
  * ۳) دکمه‌ی «انتخاب از مخاطبین گوشی» یه صفحه‌ی داخلیِ اپ (ContactPickerScreen) با
  *    چک‌باکس و بدونِ محدودیتِ تعداد باز می‌کنه.
@@ -69,10 +70,13 @@ import kotlinx.coroutines.launch
  *
  * ۷) انتخابِ سیم‌کارت داخلِ خودِ MessageInputBar ئه.
  *
- * ۸) وقتی کاربر دستی یه شماره تایپ می‌کنه و روی «ارسال به شماره: ...» می‌زنه، بعد از
- *    اضافه‌شدنش به لیستِ انتخاب‌شده‌ها (چیپ)، خودِ متنِ تایپ‌شده از باکسِ جستجو پاک
- *    میشه - قبلاً بعد از این کلیک، هم چیپِ مخاطب اضافه می‌شد هم متنِ خام همچنان تو
- *    باکس می‌موند که تکراری/گیج‌کننده بود.
+ * ۸) وقتی کاربر دستی یه شماره تایپ می‌کنه، داخلِ همون کادرِ جستجو یه آیکنِ تیک (✓)
+ *    ظاهر می‌شه؛ با زدنِ تیک، شماره به لیستِ انتخاب‌شده‌ها (چیپ) اضافه و متنِ تایپ‌شده
+ *    از باکس پاک می‌شه. دیگه دکمه‌ی جداگانه‌ی «ارسال به شماره: ...» زیر کادر نیست.
+ *
+ * ۹) نوارِ ورودیِ پیام (MessageInputBar) از لحظه‌ی باز شدنِ صفحه «پیام جدید» نمایش
+ *    داده می‌شه تا ظاهرِ صفحه مثل یه پیامِ جدید واقعی باشه (ارسال تا وقتی گیرنده‌ای
+ *    انتخاب نشده غیرفعال می‌مونه).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -118,12 +122,24 @@ fun NewMessageScreen(
         }
     }
 
-    /** toggle واقعی - برای تپ روی یه ردیفِ لیستِ جستجو: اگه بود حذفش کن، نبود اضافه‌ش کن */
+    /** بعد از افزودن/تایید یه مخاطب یا شماره‌ی دستی، باکسِ جستجو (و نتیجه‌ی کوئریِ ViewModel) پاک بشه */
+    fun clearSearch() {
+        searchQuery = ""
+        onSearchChange("")
+    }
+
+    /** toggle واقعی - برای تپ روی یه ردیفِ لیستِ جستجو: اگه بود حذفش کن، نبود اضافه‌ش کن.
+     * بعد از انتخاب (اضافه شدن)، متنِ جستجو پاک می‌شه تا تکراری داخل باکس نمونه. */
     fun toggleContact(contact: ContactInfo) {
-        selectedContacts = if (selectedContacts.any { it.phoneNumber == contact.phoneNumber }) {
+        val already = selectedContacts.any { it.phoneNumber == contact.phoneNumber }
+        selectedContacts = if (already) {
             selectedContacts.filter { it.phoneNumber != contact.phoneNumber }
         } else {
             selectedContacts + contact
+        }
+        // فقط وقتی اضافه می‌کنیم پاک کن (حذف دوباره نیازی به پاک کردن نداره)
+        if (!already) {
+            clearSearch()
         }
     }
 
@@ -131,10 +147,13 @@ fun NewMessageScreen(
         selectedContacts = selectedContacts.filter { it.phoneNumber != contact.phoneNumber }
     }
 
-    /** بعد از افزودن/تایید یه شماره‌ی دستی، باکسِ جستجو (و نتیجه‌ی کوئریِ ViewModel) پاک بشه */
-    fun clearSearch() {
-        searchQuery = ""
-        onSearchChange("")
+    /** افزودن شماره‌ی دستی از داخل کادر جستجو (با تیک) و پاک کردن متن */
+    fun confirmManualNumber() {
+        val q = searchQuery.trim()
+        if (q.isBlank() || !q.any { it.isDigit() }) return
+        val manualEntry = ContactInfo(contactId = -1, name = q, phoneNumber = q)
+        addContactIfAbsent(manualEntry)
+        clearSearch()
     }
 
     // ذخیره‌ی پیش‌نویس فقط وقتی معنی داره که دقیقاً یک گیرنده انتخاب شده باشه -
@@ -283,25 +302,25 @@ fun NewMessageScreen(
             )
         },
         bottomBar = {
-            if (selectedContacts.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .imePadding()
-                ) {
-                    MessageInputBar(
-                        value = messageBody,
-                        onValueChange = { messageBody = it },
-                        onSendClick = { performSend() },
-                        scheduledAt = scheduledAt,
-                        onScheduledAtChange = { scheduledAt = it },
-                        placeholder = "متن پیام",
-                        sims = sims,
-                        selectedSubscriptionId = selectedSimId,
-                        onSimSelect = { selectedSimId = it },
-                        sendDelaySeconds = settings.sendDelaySeconds
-                    )
-                }
+            // همیشه نوار ورودی پیام نشون داده می‌شه تا صفحه از اول شبیه پیام جدید باشه.
+            // performSend خودش اگه گیرنده‌ای نباشه هیچی نمی‌فرسته.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+            ) {
+                MessageInputBar(
+                    value = messageBody,
+                    onValueChange = { messageBody = it },
+                    onSendClick = { performSend() },
+                    scheduledAt = scheduledAt,
+                    onScheduledAtChange = { scheduledAt = it },
+                    placeholder = "متن پیام",
+                    sims = sims,
+                    selectedSubscriptionId = selectedSimId,
+                    onSimSelect = { selectedSimId = it },
+                    sendDelaySeconds = settings.sendDelaySeconds
+                )
             }
         }
     ) { padding ->
@@ -312,6 +331,7 @@ fun NewMessageScreen(
         ) {
             // چیپ‌های مخاطبینِ انتخاب‌شده دیگه ردیفِ جدا نیستن - داخلِ همین کادرِ
             // جستجو، کنارِ متنِ تایپ‌شده نشون داده میشن (ContactChipsSearchField پایین‌تر).
+            // اگر متن شبیه شماره باشه، آیکن تیک داخل کادر ظاهر می‌شه برای تأیید.
             ContactChipsSearchField(
                 selectedContacts = selectedContacts,
                 searchQuery = searchQuery,
@@ -321,6 +341,7 @@ fun NewMessageScreen(
                 },
                 onRemoveContact = { contact -> removeContact(contact) },
                 onOpenContactPicker = onOpenContactPicker,
+                onConfirmManualNumber = { confirmManualNumber() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -339,21 +360,8 @@ fun NewMessageScreen(
                 Divider()
             }
 
-            if (searchQuery.isNotBlank() && searchQuery.any { it.isDigit() }) {
-                val manualEntry = ContactInfo(contactId = -1, name = searchQuery, phoneNumber = searchQuery)
-                val alreadyAdded = selectedContacts.any { it.phoneNumber == manualEntry.phoneNumber }
-                TextButton(
-                    onClick = {
-                        toggleContact(manualEntry)
-                        // بعد از تایید/برداشتنِ شماره‌ی دستی، دیگه لازم نیست متنِ تایپ‌شده
-                        // تو باکسِ جستجو بمونه - چیپش از قبل تو لیستِ انتخاب‌شده‌ها معلومه
-                        clearSearch()
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                ) {
-                    Text(if (alreadyAdded) "✓ اضافه شد: $searchQuery" else "ارسال به شماره: $searchQuery")
-                }
-            }
+            // دکمه‌ی جداگانه‌ی «ارسال به شماره» حذف شد؛
+            // حالا تیک تأیید داخل خودِ کادر جستجو (ContactChipsSearchField) هست.
 
             if (contacts.isEmpty()) {
                 Box(
@@ -454,6 +462,10 @@ private fun SaveGroupDialog(
 /**
  * کادرِ جستجو + چیپ‌های مخاطبینِ انتخاب‌شده، همه داخلِ یه کادرِ واحد (شبیهِ فیلدهای
  * "To" تو اپ‌های ایمیل).
+ *
+ * اگر متن تایپ‌شده شبیه شماره باشه (حداقل یک رقم داشته باشه)، یه آیکن تیک (✓)
+ * سمتِ راستِ کادر ظاهر می‌شه؛ با زدنِ تیک، شماره تأیید و به چیپ‌ها اضافه می‌شه
+ * و متن از باکس پاک می‌شه.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -463,10 +475,12 @@ private fun ContactChipsSearchField(
     onQueryChange: (String) -> Unit,
     onRemoveContact: (ContactInfo) -> Unit,
     onOpenContactPicker: () -> Unit,
+    onConfirmManualNumber: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(18.dp)
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val showConfirmTick = searchQuery.isNotBlank() && searchQuery.any { it.isDigit() }
 
     Row(
         modifier = modifier
@@ -516,6 +530,20 @@ private fun ContactChipsSearchField(
                         }
                         innerTextField()
                     }
+                )
+            }
+        }
+
+        // تیک تأیید شماره دستی — داخل همون کادر، کنار متن
+        if (showConfirmTick) {
+            IconButton(
+                onClick = onConfirmManualNumber,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = "تأیید شماره و افزودن",
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
