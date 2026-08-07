@@ -23,6 +23,7 @@ import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
 import com.petro.smsapp.service.PopupOverlayService
+import com.petro.smsapp.util.SmsAlertSoundPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -202,6 +203,12 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         }
 
         val notification = notificationBuilder.build()
+
+        // پخشِ صدای Popup در حالتِ صفحه‌قفل - از پخش‌کننده‌ی مرکزیِ سراسریِ اپ
+        // استفاده میشه (نه یه Ringtone مستقل)، تا اگه چند پیامک نزدیک به هم برسن
+        // (حتی یکی از این مسیر و یکی از مسیرِ PopupOverlayService)، صداها روی هم
+        // پخش نشن و چندصدایی پیش نیاد.
+        SmsAlertSoundPlayer.play(context)
 
         NotificationManagerCompat.from(context).apply {
             try {

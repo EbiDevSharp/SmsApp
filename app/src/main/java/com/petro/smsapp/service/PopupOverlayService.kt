@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.media.AudioManager
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -59,6 +58,7 @@ import com.petro.smsapp.ui.MessageEntry
 import com.petro.smsapp.ui.QuickReplyPopupAction
 import com.petro.smsapp.ui.QuickReplyPopupScreen
 import com.petro.smsapp.ui.SmsAppTheme
+import com.petro.smsapp.util.SmsAlertSoundPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -178,12 +178,11 @@ class PopupOverlayService :
                 getSystemService(NotificationManager::class.java)?.getNotificationChannel(SMS_CHANNEL_ID)
             } else null
 
-            val soundUri: Uri? = channel?.sound
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val audioManager = getSystemService(AUDIO_SERVICE) as? AudioManager
-            if (soundUri != null && audioManager?.ringerMode == AudioManager.RINGER_MODE_NORMAL) {
-                RingtoneManager.getRingtone(this, soundUri)?.play()
-            }
+            // به‌جای ساختنِ یه Ringtoneِ مستقل، از پخش‌کننده‌ی مرکزیِ سراسریِ اپ
+            // استفاده میشه - همون چیزی که SmsDeliverReceiver هم برای پاپ‌آپِ
+            // صفحه‌قفل ازش استفاده می‌کنه. اینجوری اگه یه پیام از مسیرِ Overlay و
+            // یکی از مسیرِ صفحه‌قفل نزدیک به هم برسه، صداها روی هم پخش نمیشن.
+            SmsAlertSoundPlayer.play(this, channel?.sound)
 
             val shouldVibrate = channel?.shouldVibrate() ?: true
             if (shouldVibrate) {
