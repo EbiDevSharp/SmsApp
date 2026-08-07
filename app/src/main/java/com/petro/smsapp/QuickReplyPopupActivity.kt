@@ -400,10 +400,6 @@ class QuickReplyPopupActivity : ComponentActivity() {
             }
         }
 
-        // دقیقاً هم‌قاعده‌ی سقفِ ۳ دکمه‌ی نوتیفِ معمولی (SmsDeliverReceiver)
-        val primary = allActions.take(3)
-        val overflow = allActions.drop(3)
-
         QuickReplyPopupScreen(
             senderDisplayName = session.displayName,
             senderAddress = session.address,
@@ -413,8 +409,7 @@ class QuickReplyPopupActivity : ComponentActivity() {
             replyText = session.replyText,
             onReplyTextChange = { session.replyText = it },
             receivedAtMillis = session.lastMessageAtMillis,
-            primaryActions = primary,
-            overflowActions = overflow,
+            actions = allActions,
             // ناوبریِ صف - وقتی همزمان چند مکالمه تو صفِ پاپ‌آپ منتظرن؛
             // totalSessions<=۱ یعنی صف خالیه و کلِ ناوبری مخفی میشه
             totalSessions = PopupSessionQueue.sessions.size,

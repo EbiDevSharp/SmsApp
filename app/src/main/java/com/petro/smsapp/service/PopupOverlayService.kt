@@ -500,9 +500,6 @@ class PopupOverlayService :
             }
         }
 
-        val primary = allActions.take(3)
-        val overflow = allActions.drop(3)
-
         QuickReplyPopupScreen(
             senderDisplayName = session.displayName,
             senderAddress = session.address,
@@ -512,8 +509,7 @@ class PopupOverlayService :
             replyText = session.replyText,
             onReplyTextChange = { session.replyText = it },
             receivedAtMillis = session.lastMessageAtMillis,
-            primaryActions = primary,
-            overflowActions = overflow,
+            actions = allActions,
             totalSessions = sessions.size,
             currentSessionPosition = activeIndex + 1,
             onSwitchToPrevious = { switchToPreviousSession() },

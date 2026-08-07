@@ -69,7 +69,7 @@ fun PopupActionsSettingsScreen(
                 .padding(padding)
         ) {
             Text(
-                text = "حداکثر ۳ دکمه فعال اول روی پاپ‌آپ پیامک نمایش داده می‌شوند. بقیه پشت منوی ⋮ می‌روند.",
+                text = "دکمه‌های فعال به‌ترتیب تا جایی که جا باشد روی پاپ‌آپ می‌آیند؛ اگر جا کم باشد بقیه پشت منوی ⋮ می‌روند. در حالت «فقط آیکن» معمولاً دکمه‌های بیشتری دیده می‌شوند.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)

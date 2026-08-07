@@ -87,9 +87,9 @@ data class MessageEntry(
     val isDelivered: Boolean get() = isOutgoing && status == 0
     val isFailed: Boolean
         get() = isOutgoing && (
-            status == android.provider.Telephony.Sms.STATUS_FAILED ||
-                type == android.provider.Telephony.Sms.MESSAGE_TYPE_FAILED
-            )
+                status == android.provider.Telephony.Sms.STATUS_FAILED ||
+                        type == android.provider.Telephony.Sms.MESSAGE_TYPE_FAILED
+                )
     val isSending: Boolean
         get() = isOutgoing && type == android.provider.Telephony.Sms.MESSAGE_TYPE_OUTBOX
     val isQueued: Boolean
@@ -100,9 +100,8 @@ data class MessageEntry(
  * پاپ‌آپِ روی صفحه‌ی پیامکِ تازه‌رسیده - جایگزینِ نوتیفِ معمولی وقتی کاربر از تنظیمات
  * فعالش کرده باشه. کاملاً مستقل از Activity/Context میزبانه؛ فقط دیتا و کال‌بک می‌گیره.
  *
- * دکمه‌های اصلی (حداکثر ۳ تا، طبقِ همون ترتیب/فعال‌بودنِ تنظیماتِ دکمه‌های نوتیف)
- * مستقیم کنارِ هم نشون داده میشن؛ بقیه پشتِ دکمه‌ی سه‌نقطه (⋮) میرن، دقیقاً هم‌قاعده‌ی
- * منطقِ فعلیِ SmsDeliverReceiver.showNotification (enabledActions.take(3)).
+ * دکمه‌های اکشن به‌اندازه‌ی عرضِ موجود چیده می‌شوند (بسته به حالت آیکن/متن)؛
+ * فقط آن‌هایی که جا نمی‌شوند پشت ⋮ می‌روند — دیگر سقف ثابت ۳ تا نیست.
  *
  * زدنِ «پاسخ» به‌جای بازکردنِ RemoteInput سیستمی، همینجا یه فیلدِ متنیِ inline باز
  * می‌کنه (چون خودمون UI کامل داریم و نیازی به RemoteInput نیست).
@@ -118,8 +117,8 @@ fun QuickReplyPopupScreen(
     replyText: String,
     onReplyTextChange: (String) -> Unit,
     receivedAtMillis: Long,
-    primaryActions: List<QuickReplyPopupAction>,
-    overflowActions: List<QuickReplyPopupAction>,
+    /** همه اکشن‌های فعال به‌ترتیب تنظیمات؛ خود اسکرین بر اساس جا primary/overflow می‌کند */
+    actions: List<QuickReplyPopupAction>,
     // ناوبریِ صف - وقتی همزمان چند مکالمه تو صفِ پاپ‌آپ منتظرن. totalSessions<=۱
     // یعنی صف خالیه و کلِ ناوبری مخفی میشه.
     totalSessions: Int = 1,
@@ -410,51 +409,64 @@ fun QuickReplyPopupScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // ---- ردیفِ دکمه‌های اکشن ----
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            primaryActions.forEach { action ->
-                                val isReplyAction = action.type == NotificationActionType.REPLY
-                                PopupActionButton(
-                                    label = action.label,
-                                    icon = action.icon,
-                                    displayMode = actionDisplayMode,
-                                    onClick = {
-                                        if (isReplyAction) {
-                                            replyFocusRequester.requestFocus()
-                                        } else {
-                                            action.onClick()
-                                        }
-                                    }
-                                )
-                            }
+                    // ---- ردیفِ دکمه‌های اکشن: تا جایی که جا باشد؛ بقیه پشت ⋮ ----
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val visibleCount = remember(maxWidth, actions.size, actionDisplayMode, actions.map { it.label }) {
+                            computeVisibleActionCount(
+                                maxWidth = maxWidth,
+                                total = actions.size,
+                                displayMode = actionDisplayMode,
+                                labels = actions.map { it.label }
+                            )
                         }
+                        val primaryActions = actions.take(visibleCount)
+                        val overflowActions = actions.drop(visibleCount)
 
-                        if (overflowActions.isNotEmpty()) {
-                            Box {
-                                IconButton(onClick = { overflowExpanded = true }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
-                                }
-                                DropdownMenu(
-                                    expanded = overflowExpanded,
-                                    onDismissRequest = { overflowExpanded = false }
-                                ) {
-                                    overflowActions.forEach { action ->
-                                        DropdownMenuItem(
-                                            text = { Text(action.label) },
-                                            leadingIcon = { Icon(action.icon, contentDescription = null) },
-                                            onClick = {
-                                                overflowExpanded = false
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                primaryActions.forEach { action ->
+                                    val isReplyAction = action.type == NotificationActionType.REPLY
+                                    PopupActionButton(
+                                        label = action.label,
+                                        icon = action.icon,
+                                        displayMode = actionDisplayMode,
+                                        onClick = {
+                                            if (isReplyAction) {
+                                                replyFocusRequester.requestFocus()
+                                            } else {
                                                 action.onClick()
                                             }
-                                        )
+                                        }
+                                    )
+                                }
+                            }
+
+                            if (overflowActions.isNotEmpty()) {
+                                Box {
+                                    IconButton(onClick = { overflowExpanded = true }) {
+                                        Icon(Icons.Filled.MoreVert, contentDescription = "عملیات بیشتر")
+                                    }
+                                    DropdownMenu(
+                                        expanded = overflowExpanded,
+                                        onDismissRequest = { overflowExpanded = false }
+                                    ) {
+                                        overflowActions.forEach { action ->
+                                            DropdownMenuItem(
+                                                text = { Text(action.label) },
+                                                leadingIcon = { Icon(action.icon, contentDescription = null) },
+                                                onClick = {
+                                                    overflowExpanded = false
+                                                    action.onClick()
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -464,6 +476,56 @@ fun QuickReplyPopupScreen(
             }
         }
     }
+}
+
+/**
+ * چند دکمه در عرض [maxWidth] جا می‌شود؟
+ * اگر همه جا شوند → ⋮ لازم نیست؛ وگرنه جا برای ⋮ (~40dp) رزرو و بقیه overflow.
+ */
+private fun computeVisibleActionCount(
+    maxWidth: androidx.compose.ui.unit.Dp,
+    total: Int,
+    displayMode: PopupActionDisplayMode,
+    labels: List<String>
+): Int {
+    if (total <= 0) return 0
+    val spacing = 4.dp
+    val overflowSlot = 40.dp
+
+    fun estimateButtonWidth(label: String): androidx.compose.ui.unit.Dp = when (displayMode) {
+        PopupActionDisplayMode.ICON_ONLY -> 40.dp
+        PopupActionDisplayMode.LABEL_ONLY -> {
+            // تقریبی: padding افقی ~24 + حدود 7dp به‌ازای هر کاراکتر فارسی/لاتین
+            (24 + label.length * 7).coerceIn(48, 140).dp
+        }
+        PopupActionDisplayMode.ICON_AND_LABEL -> {
+            (36 + label.length * 7).coerceIn(64, 160).dp
+        }
+    }
+
+    fun widthFor(count: Int, withOverflow: Boolean): androidx.compose.ui.unit.Dp {
+        if (count <= 0) return 0.dp
+        var w = 0.dp
+        for (i in 0 until count) {
+            if (i > 0) w += spacing
+            w += estimateButtonWidth(labels.getOrElse(i) { "" })
+        }
+        if (withOverflow) w += spacing + overflowSlot
+        return w
+    }
+
+    // همه بدون ⋮؟
+    if (widthFor(total, withOverflow = false) <= maxWidth) return total
+
+    // با ⋮، حداکثر ممکن
+    var best = 1.coerceAtMost(total - 1)
+    for (count in total - 1 downTo 1) {
+        if (widthFor(count, withOverflow = true) <= maxWidth) {
+            best = count
+            break
+        }
+    }
+    return best.coerceIn(1, total - 1)
 }
 
 @Composable
