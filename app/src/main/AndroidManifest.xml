@@ -1,151 +1,93 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <!-- پرمیشن‌های لازم برای اپ پیامک -->
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.WRITE_SMS" />
-    <uses-permission android:name="android.permission.RECEIVE_MMS" />
-    <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- برای ارسال دقیقاً سرِ همون ثانیه‌ای که کاربر برای پیام زمان‌بندی‌شده انتخاب کرده -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <!-- بعد از ریستارت گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار دوباره ثبت بشن -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- برای اینکه پاپ‌آپِ پیامکِ تازه‌رسیده (QuickReplyPopupActivity) بتونه با
-         fullScreenIntent مستقیم روی صفحه/صفحه‌قفل باز بشه (وقتی کاربر از تنظیمات
-         فعالش کرده باشه) -->
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- برای اینکه پاپ‌آپِ پیامک بتونه به‌صورتِ یه پنجره‌ی شناور (Overlay) نشون داده
-         بشه و همیشه (چه صفحه قفل باشه چه باز، چه اپ باز باشه چه بسته) وسطِ صفحه
-         بیاد - PopupOverlayService. این پرمیشن جزوِ پرمیشن‌های «دسترسیِ ویژه»ست و
-         کاربر باید دستی از تنظیماتِ گوشی بدتش (لینکش توی خودِ اپ، صفحه‌ی تنظیمات هست) -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- برای ویبره‌ی پیامکِ تازه‌رسیده وقتی پاپ‌آپِ Overlay فعاله (PopupOverlayService) -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-feature
-        android:name="android.hardware.telephony"
-        android:required="true" />
-    <application
-        android:name=".SmsApplication"
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.SmsApp">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.SmsApp">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!--  پرمیشن‌های لازم برای اپ پیامک  -->
+    <uses-permission android:name="android.permission.SEND_SMS"/>
+    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.WRITE_SMS"/>
+    <uses-permission android:name="android.permission.RECEIVE_MMS"/>
+    <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!--  برای ارسال دقیقاً سرِ همون ثانیه‌ای که کاربر برای پیام زمان‌بندی‌شده انتخاب کرده  -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!--  بعد از ریستارت گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار دوباره ثبت بشن  -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!--  برای اینکه پاپ‌آپِ پیامکِ تازه‌رسیده (QuickReplyPopupActivity) بتونه با
+             fullScreenIntent مستقیم روی صفحه/صفحه‌قفل باز بشه (وقتی کاربر از تنظیمات
+             فعالش کرده باشه)  -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!--  برای اینکه پاپ‌آپِ پیامک بتونه به‌صورتِ یه پنجره‌ی شناور (Overlay) نشون داده
+             بشه و همیشه (چه صفحه قفل باشه چه باز، چه اپ باز باشه چه بسته) وسطِ صفحه
+             بیاد - PopupOverlayService. این پرمیشن جزوِ پرمیشن‌های «دسترسیِ ویژه»ست و
+             کاربر باید دستی از تنظیماتِ گوشی بدتش (لینکش توی خودِ اپ، صفحه‌ی تنظیمات هست)  -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <!--  برای ویبره‌ی پیامکِ تازه‌رسیده وقتی پاپ‌آپِ Overlay فعاله (PopupOverlayService)  -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-feature android:name="android.hardware.telephony" android:required="true"/>
+    <application android:name=".SmsApplication" android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:supportsRtl="true" android:theme="@style/Theme.SmsApp">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.SmsApp">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-
-            <!-- برای هندل کردن ارسال پیامک از اپ‌های دیگه (share/sendto) -->
+            <!--  برای هندل کردن ارسال پیامک از اپ‌های دیگه (share/sendto)  -->
             <intent-filter>
-                <action android:name="android.intent.action.SENDTO" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="sms" />
-                <data android:scheme="smsto" />
+                <action android:name="android.intent.action.SENDTO"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="sms"/>
+                <data android:scheme="smsto"/>
             </intent-filter>
             <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
-
-        <!-- پاپ‌آپِ پیامکِ تازه‌رسیده روی صفحه/صفحه‌قفل - فقط از داخلِ خودِ اپ
-             (fullScreenIntentِ SmsDeliverReceiver) باز میشه، نه از بیرون -->
-        <activity
-            android:name=".QuickReplyPopupActivity"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:excludeFromRecents="true"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.SmsApp.Popup" />
-
-        <!-- سرویسِ نمایشِ پاپ‌آپِ پیامک به‌صورتِ پنجره‌ی شناور (Overlay) - فقط از داخلِ
-             خودِ اپ (SmsDeliverReceiver) استارت میشه، وقتی هم سوییچِ پاپ‌آپ فعال باشه
-             هم پرمیشنِ SYSTEM_ALERT_WINDOW داده شده باشه -->
-        <service
-            android:name=".service.PopupOverlayService"
-            android:exported="false" />
-
-        <!-- دریافت پیامک‌های ورودی - اجباری برای اپ پیش‌فرض -->
-        <receiver
-            android:name=".receiver.SmsDeliverReceiver"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
+        <!--  پاپ‌آپِ پیامکِ تازه‌رسیده روی صفحه/صفحه‌قفل - فقط از داخلِ خودِ اپ
+                     (fullScreenIntentِ SmsDeliverReceiver) باز میشه، نه از بیرون  -->
+        <activity android:name=".QuickReplyPopupActivity" android:exported="false" android:launchMode="singleTop" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.SmsApp.Popup"/>
+        <!--  سرویسِ نمایشِ پاپ‌آپِ پیامک به‌صورتِ پنجره‌ی شناور (Overlay) - فقط از داخلِ
+                     خودِ اپ (SmsDeliverReceiver) استارت میشه، وقتی هم سوییچِ پاپ‌آپ فعال باشه
+                     هم پرمیشنِ SYSTEM_ALERT_WINDOW داده شده باشه  -->
+        <service android:name=".service.PopupOverlayService" android:exported="false"/>
+        <!--  دریافت پیامک‌های ورودی - اجباری برای اپ پیش‌فرض  -->
+        <receiver android:name=".receiver.SmsDeliverReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>
-                <action android:name="android.provider.Telephony.SMS_DELIVER" />
+                <action android:name="android.provider.Telephony.SMS_DELIVER"/>
             </intent-filter>
         </receiver>
-
-        <!-- دریافت MMS - اجباری برای اپ پیش‌فرض -->
-        <receiver
-            android:name=".receiver.MmsReceiver"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_WAP_PUSH">
+        <!--  دریافت MMS - اجباری برای اپ پیش‌فرض  -->
+        <receiver android:name=".receiver.MmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_WAP_PUSH">
             <intent-filter>
-                <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER" />
-                <data android:mimeType="application/vnd.wap.mms-message" />
+                <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/>
+                <data android:mimeType="application/vnd.wap.mms-message"/>
             </intent-filter>
         </receiver>
-
-        <!-- اکشن‌های دکمه‌های نوتیفیکیشن (خوانده شد / حذف) - فقط داخلی، نیازی به exported نیست -->
-        <receiver
-            android:name=".receiver.NotificationActionReceiver"
-            android:exported="false" />
-
-        <!-- گزارش دلیوری پیامک‌های ارسالی (deliveryIntent) - فقط داخلی، نیازی به exported نیست -->
-        <receiver
-            android:name=".receiver.SmsStatusReceiver"
-            android:exported="false" />
-
-        <!-- فرارسیدن زمانِ یه پیام زمان‌بندی‌شده (از طریق AlarmManager) - فقط داخلی -->
-        <receiver
-            android:name=".receiver.ScheduledSmsReceiver"
-            android:exported="false" />
-
-        <!-- یادآوری پیام‌های خوانده‌نشده (AlarmManager) -->
-        <receiver
-            android:name=".receiver.UnreadReminderReceiver"
-            android:exported="false" />
-
-        <!-- بعد از روشن شدن گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار رو دوباره تو AlarmManager ثبت می‌کنه -->
-        <receiver
-            android:name=".receiver.BootReceiver"
-            android:exported="true"
-            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+        <!--  اکشن‌های دکمه‌های نوتیفیکیشن (خوانده شد / حذف) - فقط داخلی، نیازی به exported نیست  -->
+        <receiver android:name=".receiver.NotificationActionReceiver" android:exported="false"/>
+        <!--  گزارش دلیوری پیامک‌های ارسالی (deliveryIntent) - فقط داخلی، نیازی به exported نیست  -->
+        <receiver android:name=".receiver.SmsStatusReceiver" android:exported="false"/>
+        <!--  فرارسیدن زمانِ یه پیام زمان‌بندی‌شده (از طریق AlarmManager) - فقط داخلی  -->
+        <receiver android:name=".receiver.ScheduledSmsReceiver" android:exported="false"/>
+        <!--  یادآوری پیام‌های خوانده‌نشده (AlarmManager)  -->
+        <receiver android:name=".receiver.UnreadReminderReceiver" android:exported="false"/>
+        <!--  بعد از روشن شدن گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار رو دوباره تو AlarmManager ثبت می‌کنه  -->
+        <receiver android:name=".receiver.BootReceiver" android:exported="true" android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
-
-        <!-- پاسخ سریع بدون باز کردن اپ (Respond via Message) - اجباری -->
-        <service
-            android:name=".service.HeadlessSmsSendService"
-            android:exported="true"
-            android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
+        <!--  پاسخ سریع بدون باز کردن اپ (Respond via Message) - اجباری  -->
+        <service android:name=".service.HeadlessSmsSendService" android:exported="true" android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
             <intent-filter>
-                <action android:name="android.intent.action.RESPOND_VIA_MESSAGE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="sms" />
-                <data android:scheme="smsto" />
+                <action android:name="android.intent.action.RESPOND_VIA_MESSAGE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="sms"/>
+                <data android:scheme="smsto"/>
             </intent-filter>
         </service>
-
     </application>
 </manifest>
