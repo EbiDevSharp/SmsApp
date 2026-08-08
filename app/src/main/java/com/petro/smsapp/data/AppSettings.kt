@@ -58,6 +58,10 @@ object AppSettings {
     private const val KEY_SEND_DELAY_SECONDS_NAME = "send_delay_seconds"
     // جدید: وقتی کاربر نوتیفِ پیامکِ تازه‌رسیده رو با دست (سوایپ) بیرون بندازه، اون پیام خودکار خوانده‌شده علامت بخوره
     private const val KEY_MARK_READ_ON_NOTIFICATION_DISMISS_NAME = "mark_read_on_notification_dismiss_enabled"
+    // یادآوری پیام‌های خوانده‌نشده
+    private const val KEY_UNREAD_REMINDER_ENABLED_NAME = "unread_reminder_enabled"
+    private const val KEY_UNREAD_REMINDER_COUNT_NAME = "unread_reminder_count"
+    private const val KEY_UNREAD_REMINDER_INTERVAL_MINUTES_NAME = "unread_reminder_interval_minutes"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -82,11 +86,20 @@ object AppSettings {
     private val KEY_POPUP_WHEN_UNLOCKED_ENABLED = booleanPreferencesKey(KEY_POPUP_WHEN_UNLOCKED_ENABLED_NAME)
     private val KEY_SEND_DELAY_SECONDS = intPreferencesKey(KEY_SEND_DELAY_SECONDS_NAME)
     private val KEY_MARK_READ_ON_NOTIFICATION_DISMISS = booleanPreferencesKey(KEY_MARK_READ_ON_NOTIFICATION_DISMISS_NAME)
+    private val KEY_UNREAD_REMINDER_ENABLED = booleanPreferencesKey(KEY_UNREAD_REMINDER_ENABLED_NAME)
+    private val KEY_UNREAD_REMINDER_COUNT = intPreferencesKey(KEY_UNREAD_REMINDER_COUNT_NAME)
+    private val KEY_UNREAD_REMINDER_INTERVAL_MINUTES = intPreferencesKey(KEY_UNREAD_REMINDER_INTERVAL_MINUTES_NAME)
 
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
     const val DEFAULT_SEND_DELAY_SECONDS = 0
     const val MIN_SEND_DELAY_SECONDS = 0
     const val MAX_SEND_DELAY_SECONDS = 15
+
+    const val DEFAULT_UNREAD_REMINDER_COUNT = 1
+    const val MIN_UNREAD_REMINDER_COUNT = 1
+    const val MAX_UNREAD_REMINDER_COUNT = 3
+    const val DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES = 5
+    val UNREAD_REMINDER_INTERVAL_OPTIONS = listOf(5, 10, 30)
 
     /** اندازه بادکنک حرف جاری (dp) */
     const val DEFAULT_ALPHABET_BUBBLE_SIZE_DP = 64
@@ -173,7 +186,11 @@ object AppSettings {
         // تأخیر ارسال (ثانیه) - ۰ = فوری
         val sendDelaySeconds: Int = DEFAULT_SEND_DELAY_SECONDS,
         // جدید: با سوایپ‌کردنِ (بیرون‌انداختنِ) نوتیفِ پیامک، همون پیام خوانده‌شده علامت بخوره
-        val markReadOnNotificationDismissEnabled: Boolean = false
+        val markReadOnNotificationDismissEnabled: Boolean = false,
+        // یادآوری پیام‌های خوانده‌نشده
+        val unreadReminderEnabled: Boolean = false,
+        val unreadReminderCount: Int = DEFAULT_UNREAD_REMINDER_COUNT,
+        val unreadReminderIntervalMinutes: Int = DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
     )
 
     private val _state = MutableStateFlow(State())
@@ -219,7 +236,14 @@ object AppSettings {
                         popupWhenUnlockedEnabled = prefs[KEY_POPUP_WHEN_UNLOCKED_ENABLED] ?: true,
                         sendDelaySeconds = (prefs[KEY_SEND_DELAY_SECONDS] ?: DEFAULT_SEND_DELAY_SECONDS)
                             .coerceIn(MIN_SEND_DELAY_SECONDS, MAX_SEND_DELAY_SECONDS),
-                        markReadOnNotificationDismissEnabled = prefs[KEY_MARK_READ_ON_NOTIFICATION_DISMISS] ?: false
+                        markReadOnNotificationDismissEnabled = prefs[KEY_MARK_READ_ON_NOTIFICATION_DISMISS] ?: false,
+                        unreadReminderEnabled = prefs[KEY_UNREAD_REMINDER_ENABLED] ?: false,
+                        unreadReminderCount = (prefs[KEY_UNREAD_REMINDER_COUNT] ?: DEFAULT_UNREAD_REMINDER_COUNT)
+                            .coerceIn(MIN_UNREAD_REMINDER_COUNT, MAX_UNREAD_REMINDER_COUNT),
+                        unreadReminderIntervalMinutes = (prefs[KEY_UNREAD_REMINDER_INTERVAL_MINUTES]
+                            ?: DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES).let { v ->
+                            if (v in UNREAD_REMINDER_INTERVAL_OPTIONS) v else DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
+                        }
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -348,6 +372,23 @@ object AppSettings {
     fun isMarkReadOnNotificationDismissEnabled(context: Context): Boolean = _state.value.markReadOnNotificationDismissEnabled
     fun setMarkReadOnNotificationDismissEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_MARK_READ_ON_NOTIFICATION_DISMISS] = enabled }
+
+    /** یادآوری دوره‌ای برای پیام‌های خوانده‌نشده */
+    fun isUnreadReminderEnabled(context: Context): Boolean = _state.value.unreadReminderEnabled
+    fun setUnreadReminderEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_UNREAD_REMINDER_ENABLED] = enabled }
+
+    fun getUnreadReminderCount(context: Context): Int = _state.value.unreadReminderCount
+    fun setUnreadReminderCount(context: Context, count: Int) {
+        val clamped = count.coerceIn(MIN_UNREAD_REMINDER_COUNT, MAX_UNREAD_REMINDER_COUNT)
+        write(context) { it[KEY_UNREAD_REMINDER_COUNT] = clamped }
+    }
+
+    fun getUnreadReminderIntervalMinutes(context: Context): Int = _state.value.unreadReminderIntervalMinutes
+    fun setUnreadReminderIntervalMinutes(context: Context, minutes: Int) {
+        val value = if (minutes in UNREAD_REMINDER_INTERVAL_OPTIONS) minutes else DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
+        write(context) { it[KEY_UNREAD_REMINDER_INTERVAL_MINUTES] = value }
+    }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

@@ -1,7 +1,9 @@
 package com.petro.smsapp.util
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -11,11 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
-
+import androidx.compose.ui.unit.dp
 
 @Composable
 fun <T> SettingsDropdown(
@@ -24,105 +23,75 @@ fun <T> SettingsDropdown(
     items: List<Pair<T, String>>,
     onChange: (T) -> Unit,
     info: String? = null,
-    onInfo: ((String) -> Unit)? = null
+    onInfo: ((String) -> Unit)? = null,
+    enabled: Boolean = true
 ) {
+    var expanded by remember { mutableStateOf(false) }
 
-    var expanded by remember {
-        mutableStateOf(false)
+    val currentText = items.firstOrNull { it.first == current }?.second ?: ""
+    val titleColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
     }
+    val valueColor = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.38f)
+    val iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.38f)
 
-    val currentText =
-        items.firstOrNull { it.first == current }?.second ?: ""
-
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-    ) {
-
+    Box(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {
-                    expanded = true
-                }
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 12.dp
-                ),
-
+                .then(
+                    if (enabled) Modifier.clickable { expanded = true }
+                    else Modifier
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Column {
-
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = titleColor
                     )
-
-
                     Text(
                         text = currentText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = valueColor
                     )
                 }
-
-
                 if (info != null) {
-
                     IconButton(
-                        onClick = {
-                            onInfo?.invoke(info)
-                        }
+                        onClick = { onInfo?.invoke(info) },
+                        enabled = enabled
                     ) {
-
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = "توضیحات",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = iconTint
                         )
                     }
                 }
             }
-
-
             Icon(
-                imageVector = if (expanded) {
-                    Icons.Default.KeyboardArrowUp
-                } else {
-                    Icons.Default.KeyboardArrowDown
-                },
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = iconTint
             )
         }
 
-
-
         DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-            },
+            expanded = expanded && enabled,
+            onDismissRequest = { expanded = false },
             modifier = Modifier
                 .width(220.dp)
                 .padding(4.dp)
         ) {
-
             items.forEach { item ->
-
                 val selected = item.first == current
-
                 DropdownMenuItem(
-
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
                         .then(
@@ -135,21 +104,14 @@ fun <T> SettingsDropdown(
                                 Modifier
                             }
                         ),
-
                     text = {
                         Text(
                             text = item.second,
-                            fontWeight = if (selected)
-                                FontWeight.Bold
-                            else
-                                FontWeight.Normal
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                         )
                     },
-
                     leadingIcon = {
-
                         if (selected) {
-
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
@@ -157,7 +119,6 @@ fun <T> SettingsDropdown(
                             )
                         }
                     },
-
                     onClick = {
                         onChange(item.first)
                         expanded = false

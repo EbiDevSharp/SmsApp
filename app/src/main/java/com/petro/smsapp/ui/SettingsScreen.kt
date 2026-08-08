@@ -385,6 +385,37 @@ fun SettingsScreen(
                     onChecked = { AppSettings.setMarkReadOnNotificationDismissEnabled(context, it) },
                     onInfo = { infoDialogText = it }
                 )
+                ThinDivider()
+                SwitchRow(
+                    title = "یادآوری پیام‌های خوانده‌نشده",
+                    info = "اگر پیامک خوانده‌نشده داشته باشی، بعد از فاصله‌ی مشخص دوباره نوتیف یادآوری نشون داده می‌شه (تا تعداد دفعات تنظیم‌شده)",
+                    checked = settings.unreadReminderEnabled,
+                    onChecked = { AppSettings.setUnreadReminderEnabled(context, it) },
+                    onInfo = { infoDialogText = it }
+                )
+                val reminderOn = settings.unreadReminderEnabled
+                SettingsDropdown(
+                    title = "تعداد یادآوری",
+                    current = settings.unreadReminderCount,
+                    items = listOf(
+                        1 to "۱ بار",
+                        2 to "۲ بار",
+                        3 to "۳ بار"
+                    ),
+                    onChange = { AppSettings.setUnreadReminderCount(context, it) },
+                    enabled = reminderOn
+                )
+                SettingsDropdown(
+                    title = "فاصله بین یادآوری‌ها",
+                    current = settings.unreadReminderIntervalMinutes,
+                    items = listOf(
+                        5 to "۵ دقیقه",
+                        10 to "۱۰ دقیقه",
+                        30 to "۳۰ دقیقه"
+                    ),
+                    onChange = { AppSettings.setUnreadReminderIntervalMinutes(context, it) },
+                    enabled = reminderOn
+                )
                 }
 
 

@@ -135,6 +135,9 @@ object BackupModule {
             put("popupOnLockEnabled", s.popupOnLockEnabled)
             put("popupWhenUnlockedEnabled", s.popupWhenUnlockedEnabled)
             put("markReadOnNotificationDismissEnabled", s.markReadOnNotificationDismissEnabled)
+            put("unreadReminderEnabled", s.unreadReminderEnabled)
+            put("unreadReminderCount", s.unreadReminderCount)
+            put("unreadReminderIntervalMinutes", s.unreadReminderIntervalMinutes)
             put("notificationActions", JSONArray().apply {
                 s.notificationActions.forEach { action ->
                     put(JSONObject().apply {
@@ -490,6 +493,12 @@ object BackupModule {
             AppSettings.setPopupWhenUnlockedEnabled(context, data.getBoolean("popupWhenUnlockedEnabled"))
         if (data.has("markReadOnNotificationDismissEnabled"))
             AppSettings.setMarkReadOnNotificationDismissEnabled(context, data.getBoolean("markReadOnNotificationDismissEnabled"))
+        if (data.has("unreadReminderEnabled"))
+            AppSettings.setUnreadReminderEnabled(context, data.getBoolean("unreadReminderEnabled"))
+        if (data.has("unreadReminderCount"))
+            AppSettings.setUnreadReminderCount(context, data.getInt("unreadReminderCount"))
+        if (data.has("unreadReminderIntervalMinutes"))
+            AppSettings.setUnreadReminderIntervalMinutes(context, data.getInt("unreadReminderIntervalMinutes"))
         if (data.has("notificationActions")) {
             val arr = data.getJSONArray("notificationActions")
             val list = mutableListOf<NotificationActionSetting>()
