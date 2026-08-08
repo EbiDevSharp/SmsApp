@@ -35,18 +35,26 @@ import com.petro.smsapp.util.autoDirection
 /**
  * صفحه‌ی جستجو - از طریق آیکنِ جستجو توی هدرِ صفحه‌ی اصلی باز میشه.
  *
- * دو راهِ فیلتر کردن داره که با هم AND میشن: متنِ جستجو (رو اسم/شماره/متنِ آخرین
- * پیامِ هر مکالمه) و چیپ‌های فیلتر که دقیقاً همون ConversationFilterType ای هستن که
- * توی آکاردئونِ درآور استفاده می‌شن (پس منطقِ OR بینِ چندتا چیپِ انتخاب‌شده هم دقیقاً
- * همون applyConversationFilters موجوده). اگه نه متنی تایپ شده نه چیپی انتخاب شده،
- * لیست خالی می‌مونه و یه پیامِ راهنما نشون داده میشه - نه کلِ لیستِ مکالمات.
+ * متن جستجو + چیپ‌های فیلتر. اگر چیپ ارسالی/دریافتی همراه متن باشد، متن داخل
+ * body همان نوع پیام جستجو می‌شود (نه فقط snippet مکالمه). بقیه‌ی فیلترها مثل
+ * آکاردئون روی مکالمه اعمال می‌شوند. بدون معیار، لیست خالی و پیام راهنماست.
  */
 @Composable
 fun SearchScreen(
     conversations: List<Conversation>,
     pinnedMessageThreadIds: Set<Long> = emptySet(),
     favoriteThreadIds: Set<Long> = emptySet(),
+    sim1ThreadIds: Set<Long> = emptySet(),
+    sim2ThreadIds: Set<Long> = emptySet(),
+    outgoingThreadIds: Set<Long> = emptySet(),
+    incomingThreadIds: Set<Long> = emptySet(),
+    sims: List<com.petro.smsapp.data.SimInfo> = emptyList(),
     showContactNumberEnabled: Boolean = false,
+    /**
+     * جستجوی متن داخل body پیام‌ها.
+     * outgoingOnly=true → فقط ارسالی؛ incomingOnly=true → فقط دریافتی.
+     */
+    searchMessageThreads: suspend (query: String, outgoingOnly: Boolean, incomingOnly: Boolean) -> Set<Long> = { _, _, _ -> emptySet() },
     onBack: () -> Unit,
     onConversationClick: (Conversation) -> Unit
 ) {
@@ -61,18 +69,76 @@ fun SearchScreen(
     val trimmedQuery = query.trim()
     val hasAnyCriteria = trimmedQuery.isNotEmpty() || selectedFilters.isNotEmpty()
 
-    val results = remember(conversations, trimmedQuery, selectedFilters, pinnedMessageThreadIds, favoriteThreadIds) {
+    val filterContext = remember(
+        pinnedMessageThreadIds, favoriteThreadIds,
+        sim1ThreadIds, sim2ThreadIds, outgoingThreadIds, incomingThreadIds
+    ) {
+        ConversationFilterContext(
+            pinnedMessageThreadIds = pinnedMessageThreadIds,
+            favoriteThreadIds = favoriteThreadIds,
+            sim1ThreadIds = sim1ThreadIds,
+            sim2ThreadIds = sim2ThreadIds,
+            outgoingThreadIds = outgoingThreadIds,
+            incomingThreadIds = incomingThreadIds
+        )
+    }
+
+    // وقتی ارسالی/دریافتی انتخاب شده و متن هم هست، باید داخل body همان نوع پیام جستجو شود
+    val hasSentFilter = selectedFilters.contains(ConversationFilterType.SENT)
+    val hasReceivedFilter = selectedFilters.contains(ConversationFilterType.RECEIVED)
+    val directionScopedSearch = trimmedQuery.isNotEmpty() && (hasSentFilter || hasReceivedFilter)
+
+    var messageMatchThreadIds by remember { mutableStateOf<Set<Long>?>(null) }
+    var messageSearchRunning by remember { mutableStateOf(false) }
+
+    LaunchedEffect(trimmedQuery, hasSentFilter, hasReceivedFilter, directionScopedSearch) {
+        if (!directionScopedSearch) {
+            messageMatchThreadIds = null
+            messageSearchRunning = false
+            return@LaunchedEffect
+        }
+        messageSearchRunning = true
+        // اگر فقط یکی از ارسالی/دریافتی روشن باشد همان را محدود می‌کنیم؛
+        // اگر هر دو روشن باشند، متن در هر دو نوع جستجو می‌شود.
+        val outgoingOnly = hasSentFilter && !hasReceivedFilter
+        val incomingOnly = hasReceivedFilter && !hasSentFilter
+        val matches = searchMessageThreads(trimmedQuery, outgoingOnly, incomingOnly)
+        messageMatchThreadIds = matches
+        messageSearchRunning = false
+    }
+
+    val results = remember(
+        conversations, trimmedQuery, selectedFilters, filterContext,
+        directionScopedSearch, messageMatchThreadIds
+    ) {
         if (trimmedQuery.isEmpty() && selectedFilters.isEmpty()) {
             emptyList()
-        } else {
+        } else if (directionScopedSearch) {
+            // منتظر نتیجهٔ جستجوی پیام؛ تا آماده نشود لیست خالی (یا loading در UI)
+            val matchedIds = messageMatchThreadIds ?: return@remember emptyList()
+            val otherFilters = selectedFilters.filter {
+                it != ConversationFilterType.SENT && it != ConversationFilterType.RECEIVED
+            }.toSet()
             conversations
-                .applyConversationFilters(
-                    selectedFilters,
-                    ConversationFilterContext(
-                        pinnedMessageThreadIds = pinnedMessageThreadIds,
-                        favoriteThreadIds = favoriteThreadIds
-                    )
-                )
+                .filter { it.threadId in matchedIds }
+                .let { list ->
+                    if (otherFilters.isEmpty()) list
+                    else list.applyConversationFilters(otherFilters, filterContext)
+                }
+        } else {
+            // بدون اسکوپ ارسالی/دریافتی: فیلتر مکالمه + متن روی اسم/شماره/snippet
+            val filtersWithoutDirection = selectedFilters.filter {
+                it != ConversationFilterType.SENT && it != ConversationFilterType.RECEIVED
+            }.toSet()
+            // اگر فقط ارسالی/دریافتی بدون متن انتخاب شده، از همان فیلتر «آخرین پیام» استفاده کن
+            val filtersToApply = when {
+                selectedFilters.isEmpty() -> emptySet()
+                trimmedQuery.isEmpty() -> selectedFilters
+                filtersWithoutDirection.isNotEmpty() -> filtersWithoutDirection
+                else -> emptySet()
+            }
+            conversations
+                .applyConversationFilters(filtersToApply, filterContext)
                 .filter { conversation ->
                     trimmedQuery.isEmpty() ||
                             conversation.displayName.contains(trimmedQuery, ignoreCase = true) ||
@@ -113,7 +179,8 @@ fun SearchScreen(
                     } else {
                         selectedFilters + filter
                     }
-                }
+                },
+                sims = sims
             )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -125,6 +192,11 @@ fun SearchScreen(
                             "برای جستجو تایپ کن یا یه فیلتر انتخاب کن",
                             color = Color.Gray
                         )
+                    }
+                }
+                messageSearchRunning -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
                     }
                 }
                 results.isEmpty() -> {
@@ -210,7 +282,8 @@ private fun SearchField(
 @Composable
 private fun FilterChipsRow(
     selectedFilters: Set<ConversationFilterType>,
-    onToggle: (ConversationFilterType) -> Unit
+    onToggle: (ConversationFilterType) -> Unit,
+    sims: List<com.petro.smsapp.data.SimInfo> = emptyList()
 ) {
     FlowRow(
         modifier = Modifier
@@ -225,7 +298,7 @@ private fun FilterChipsRow(
             // DrawerFilterAccordion.kt) - برای یکسان بودنِ ظاهرِ چیپ‌ها تو کل اپ
             IconFilterChip(
                 icon = iconForFilter(filter),
-                contentDescription = filter.label,
+                contentDescription = filter.displayLabel(sims),
                 selected = selected,
                 onClick = { onToggle(filter) }
             )

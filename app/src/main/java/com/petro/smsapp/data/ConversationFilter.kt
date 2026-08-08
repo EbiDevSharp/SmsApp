@@ -9,6 +9,9 @@ package com.petro.smsapp.data
  * دیگه‌ای (UI آکاردئون، فیلترِ لیست) نیازی به تغییر نداره. id هر آیتم ثابت می‌مونه
  * (دقیقاً هم‌قاعده‌ی NotificationActionType) چون بعداً ممکنه انتخاب‌های کاربر توی
  * DataStore با همین id ذخیره بشن.
+ *
+ * برای SIM1/SIM2 لیبلِ پیش‌فرض «سیم ۱/۲» است؛ UI می‌تونه با displayLabel(sims)
+ * اسم اپراتور (از SimInfo.displayName) رو جایگزین کنه اگه موجود باشه.
  */
 enum class ConversationFilterType(val id: String, val label: String) {
     UNREAD("unread", "خوانده‌نشده"),
@@ -25,13 +28,21 @@ enum class ConversationFilterType(val id: String, val label: String) {
     // چت‌هایی که یه پیش‌نویسِ ذخیره‌شده دارن (Conversation.isDraft)
     DRAFT("draft", "پیش‌نویس"),
     // چت‌هایی که حداقل یه پیامشون تویِ یکی از گروه‌های فیلتر افتاده (Conversation.isGrouped)
-    GROUPED("grouped", "گروه");
+    GROUPED("grouped", "گروه"),
+    // مکالماتی که حداقل یه پیامشون روی سیم‌کارتِ اسلات ۰ (سیم ۱) رد و بدل شده
+    SIM_1("sim_1", "سیم ۱"),
+    // مکالماتی که حداقل یه پیامشون روی سیم‌کارتِ اسلات ۱ (سیم ۲) رد و بدل شده
+    SIM_2("sim_2", "سیم ۲"),
+    // مکالماتی که *آخرین* پیامشون ارسالی (outgoing) است
+    SENT("sent", "ارسالی"),
+    // مکالماتی که *آخرین* پیامشون دریافتی (inbox) است
+    RECEIVED("received", "دریافتی");
 
     /**
      * این مکالمه با این فیلتر مچ میشه یا نه. فیلترهایی که فقط به فیلدهای خودِ Conversation
      * نیاز دارن (UNREAD/PINNED/NON_CONTACT) context رو استفاده نمی‌کنن؛ فیلترهایی که به
-     * دیتای سطحِ پیام نیاز دارن (HAS_PINNED_MESSAGE/HAS_FAVORITE_MESSAGE) از context می‌خونن،
-     * چون Conversation خودش این اطلاعات رو نگه نمی‌داره (تا مدلِ دامنه ساده بمونه).
+     * دیتای سطحِ پیام نیاز دارن (HAS_PINNED_MESSAGE/HAS_FAVORITE_MESSAGE/SIM/SENT/RECEIVED)
+     * از context می‌خونن، چون Conversation خودش این اطلاعات رو نگه نمی‌داره (تا مدلِ دامنه ساده بمونه).
      */
     fun matches(conversation: Conversation, context: ConversationFilterContext = ConversationFilterContext()): Boolean =
         when (this) {
@@ -42,7 +53,21 @@ enum class ConversationFilterType(val id: String, val label: String) {
             HAS_FAVORITE_MESSAGE -> context.favoriteThreadIds.contains(conversation.threadId)
             DRAFT -> conversation.isDraft
             GROUPED -> conversation.isGrouped
+            SIM_1 -> context.sim1ThreadIds.contains(conversation.threadId)
+            SIM_2 -> context.sim2ThreadIds.contains(conversation.threadId)
+            SENT -> context.outgoingThreadIds.contains(conversation.threadId)
+            RECEIVED -> context.incomingThreadIds.contains(conversation.threadId)
         }
+
+    /**
+     * لیبلِ نمایشی برای چیپ فیلتر. برای SIM1/SIM2 اگر لیست سیم‌ها اسم اپراتور داشته باشه
+     * همون رو برمی‌گردونه، وگرنه همون label ثابت enum.
+     */
+    fun displayLabel(sims: List<SimInfo> = emptyList()): String = when (this) {
+        SIM_1 -> sims.find { it.slotIndex == 0 }?.displayName?.trim()?.takeIf { it.isNotEmpty() } ?: label
+        SIM_2 -> sims.find { it.slotIndex == 1 }?.displayName?.trim()?.takeIf { it.isNotEmpty() } ?: label
+        else -> label
+    }
 
     companion object {
         fun fromId(id: String): ConversationFilterType? = entries.find { it.id == id }
@@ -51,12 +76,17 @@ enum class ConversationFilterType(val id: String, val label: String) {
 
 /**
  * دیتای کمکیِ سطحِ پیام که برای بعضی فیلترها لازمه ولی خودِ Conversation نداردش -
- * threadId هایی که حداقل یه پیامِ پین‌شده یا فیوریت‌شده دارن. جدا از Conversation نگه
- * داشته شده تا مدلِ دامنه‌ی Conversation ساده و مستقل از این جزئیات بمونه.
+ * threadId هایی که حداقل یه پیامِ پین‌شده یا فیوریت‌شده دارن، یا پیام روی سیم خاص /
+ * ارسالی / دریافتی. جدا از Conversation نگه داشته شده تا مدلِ دامنه‌ی Conversation
+ * ساده و مستقل از این جزئیات بمونه.
  */
 data class ConversationFilterContext(
     val pinnedMessageThreadIds: Set<Long> = emptySet(),
-    val favoriteThreadIds: Set<Long> = emptySet()
+    val favoriteThreadIds: Set<Long> = emptySet(),
+    val sim1ThreadIds: Set<Long> = emptySet(),
+    val sim2ThreadIds: Set<Long> = emptySet(),
+    val outgoingThreadIds: Set<Long> = emptySet(),
+    val incomingThreadIds: Set<Long> = emptySet()
 )
 
 /**

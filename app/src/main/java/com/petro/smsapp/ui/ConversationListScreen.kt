@@ -91,6 +91,7 @@ fun ConversationListScreen(
     onFilterTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
     filterSortType: ConversationSortType? = null,
     onFilterSortTypeChange: (ConversationSortType?) -> Unit = {},
+    sims: List<com.petro.smsapp.data.SimInfo> = emptyList(),
     onDeleteConversations: (Set<Long>) -> Unit,
     onAddToGroupClick: (List<Conversation>) -> Unit,
     onMakeConversationsPrivate: (List<Conversation>) -> Unit,
@@ -100,6 +101,9 @@ fun ConversationListScreen(
     swipeDeleteRequiresConfirmation: Boolean = true,
     showContactNumberEnabled: Boolean = false,
     alphabetIndexBarEnabled: Boolean = true,
+    alphabetBubbleSizeDp: Int = 64,
+    alphabetOffsetXDp: Int = 6,
+    alphabetOffsetYDp: Int = 8,
     onMarkThreadRead: (threadId: Long) -> Unit = {},
     onMarkThreadUnread: (threadId: Long) -> Unit = {}
 ) {
@@ -184,6 +188,7 @@ fun ConversationListScreen(
                 onTimeSelectionChange = onFilterTimeSelectionChange,
                 sortType = filterSortType,
                 onSortTypeChange = onFilterSortTypeChange,
+                sims = sims,
                 modifier = Modifier
                     .navigationBarsPadding()
                     .padding(bottom = 24.dp)
@@ -348,7 +353,16 @@ fun ConversationListScreen(
                     Text("هنوز مکالمه‌ای نداری", color = Color.Gray)
                 }
             } else {
-                LazyColumn(state = listState) {
+                // فاصله شروع لیست تا نوار الفبا نچسبد؛ عرض تقریبی حروف ~۲۰dp + offsetX
+                val listStartPad = if (alphabetIndexBarEnabled && sortedIndexLetters.isNotEmpty() && !selectionMode) {
+                    (20 + alphabetOffsetXDp).dp
+                } else {
+                    0.dp
+                }
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(start = listStartPad)
+                ) {
                     items(conversations, key = { it.threadId }) { conversation ->
                         SwipeableConversationRow(
                             conversation = conversation,
@@ -407,6 +421,9 @@ fun ConversationListScreen(
                             }
                         },
                         onDragEnd = {},
+                        bubbleSizeDp = alphabetBubbleSizeDp,
+                        offsetXDp = alphabetOffsetXDp,
+                        offsetYDp = alphabetOffsetYDp,
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .fillMaxHeight()

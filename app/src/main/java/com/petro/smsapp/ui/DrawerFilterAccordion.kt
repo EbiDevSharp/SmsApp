@@ -54,6 +54,7 @@ fun DrawerFilterAccordion(
     onTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
     sortType: ConversationSortType? = null,
     onSortTypeChange: (ConversationSortType?) -> Unit = {},
+    sims: List<com.petro.smsapp.data.SimInfo> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -123,6 +124,7 @@ fun DrawerFilterAccordion(
                     onTimeSelectionChange = onTimeSelectionChange,
                     sortType = sortType,
                     onSortTypeChange = onSortTypeChange,
+                    sims = sims,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
@@ -148,6 +150,7 @@ fun FilterFieldsContent(
     onTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
     sortType: ConversationSortType? = null,
     onSortTypeChange: (ConversationSortType?) -> Unit = {},
+    sims: List<com.petro.smsapp.data.SimInfo> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var rangePickerStage by remember { mutableStateOf<RangePickerStage?>(null) }
@@ -205,7 +208,7 @@ fun FilterFieldsContent(
             items.forEach { item ->
                 IconFilterChip(
                     icon = iconForFilter(item),
-                    contentDescription = item.label,
+                    contentDescription = item.displayLabel(sims),
                     selected = selectedIds.contains(item.id),
                     onClick = { onToggle(item) }
                 )
@@ -399,6 +402,10 @@ internal fun iconForFilter(type: ConversationFilterType): ImageVector = when (ty
     ConversationFilterType.HAS_FAVORITE_MESSAGE -> Icons.Filled.Star
     ConversationFilterType.DRAFT -> Icons.Filled.Edit
     ConversationFilterType.GROUPED -> Icons.Filled.Folder
+    ConversationFilterType.SIM_1 -> Icons.Filled.SimCard
+    ConversationFilterType.SIM_2 -> Icons.Filled.SimCard
+    ConversationFilterType.SENT -> Icons.Filled.Outbox
+    ConversationFilterType.RECEIVED -> Icons.Filled.MoveToInbox
 }
 
 private fun iconForTimePreset(preset: TimeRangePreset): ImageVector = when (preset.ordinal) {

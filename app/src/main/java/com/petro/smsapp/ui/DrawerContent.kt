@@ -11,7 +11,10 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,9 +30,6 @@ import com.petro.smsapp.data.ConversationFilterType
 import com.petro.smsapp.data.ConversationSortType
 import com.petro.smsapp.data.ThemeMode
 import com.petro.smsapp.data.TimeFilterSelection
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 
 data class DrawerItem(
     val route: String,
@@ -59,10 +59,11 @@ fun AppDrawerContent(
     timeSelection: TimeFilterSelection = TimeFilterSelection.None,
     onTimeSelectionChange: (TimeFilterSelection) -> Unit = {},
     sortType: ConversationSortType? = null,
-    onSortTypeChange: (ConversationSortType?) -> Unit = {}
+    onSortTypeChange: (ConversationSortType?) -> Unit = {},
+    sims: List<com.petro.smsapp.data.SimInfo> = emptyList()
 ) {
     // مرکز آیکن تم در مختصات root (برای شروع انیمیشن دایره‌ای از همان نقطه)
-    var iconCenter by remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+    var iconCenter by remember { mutableStateOf(Offset.Zero) }
 
     Row(
         modifier = Modifier
@@ -134,7 +135,8 @@ fun AppDrawerContent(
         timeSelection = timeSelection,
         onTimeSelectionChange = onTimeSelectionChange,
         sortType = sortType,
-        onSortTypeChange = onSortTypeChange
+        onSortTypeChange = onSortTypeChange,
+        sims = sims
     )
 
     Spacer(modifier = Modifier.height(4.dp))

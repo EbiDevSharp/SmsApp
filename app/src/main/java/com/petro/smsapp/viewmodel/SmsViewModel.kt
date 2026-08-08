@@ -66,6 +66,15 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
 
+    private val _sim1ThreadIds = MutableStateFlow<Set<Long>>(emptySet())
+    val sim1ThreadIds: StateFlow<Set<Long>> = _sim1ThreadIds.asStateFlow()
+    private val _sim2ThreadIds = MutableStateFlow<Set<Long>>(emptySet())
+    val sim2ThreadIds: StateFlow<Set<Long>> = _sim2ThreadIds.asStateFlow()
+    private val _outgoingThreadIds = MutableStateFlow<Set<Long>>(emptySet())
+    val outgoingThreadIds: StateFlow<Set<Long>> = _outgoingThreadIds.asStateFlow()
+    private val _incomingThreadIds = MutableStateFlow<Set<Long>>(emptySet())
+    val incomingThreadIds: StateFlow<Set<Long>> = _incomingThreadIds.asStateFlow()
+
     private val _messages = MutableStateFlow<List<SmsMessage>>(emptyList())
     val messages: StateFlow<List<SmsMessage>> = _messages.asStateFlow()
 
@@ -196,10 +205,26 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().contentResolver.unregisterContentObserver(smsObserver)
     }
 
+    /**
+     * جستجوی threadIdهایی که حداقل یک پیام با متنِ داده‌شده دارند.
+     * outgoingOnly / incomingOnly محدودکنندهٔ نوع پیام برای فیلتر ارسالی/دریافتی در سرچ‌اند.
+     */
+    suspend fun searchThreadsByMessageBody(
+        query: String,
+        outgoingOnly: Boolean = false,
+        incomingOnly: Boolean = false
+    ): Set<Long> = withContext(Dispatchers.IO) {
+        repository.searchThreadsByMessageBody(query, outgoingOnly, incomingOnly)
+    }
+
     fun loadConversations() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.getConversations() }
-            _conversations.value = result
+            _conversations.value = result.conversations
+            _sim1ThreadIds.value = result.sim1ThreadIds
+            _sim2ThreadIds.value = result.sim2ThreadIds
+            _outgoingThreadIds.value = result.outgoingThreadIds
+            _incomingThreadIds.value = result.incomingThreadIds
         }
     }
 

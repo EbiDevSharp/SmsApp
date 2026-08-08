@@ -48,8 +48,20 @@ class SmsRepository(
         return hasPermission
     }
 
-    suspend fun getConversations(): List<Conversation> {
-        if (!requireReadSmsPermission("خواندن لیست مکالمات")) return emptyList()
+    /**
+     * نتیجهٔ بارگذاری لیست مکالمات به‌همراه مجموعه‌های لازم برای فیلترهای سطحِ پیام
+     * (سیم ۱/۲، ارسالی، دریافتی) که در همان پاسِ اسکن پیام‌ها جمع می‌شن.
+     */
+    data class ConversationsLoadResult(
+        val conversations: List<Conversation>,
+        val sim1ThreadIds: Set<Long> = emptySet(),
+        val sim2ThreadIds: Set<Long> = emptySet(),
+        val outgoingThreadIds: Set<Long> = emptySet(),
+        val incomingThreadIds: Set<Long> = emptySet()
+    )
+
+    suspend fun getConversations(): ConversationsLoadResult {
+        if (!requireReadSmsPermission("خواندن لیست مکالمات")) return ConversationsLoadResult(emptyList())
         val threadsResult = getAllThreadsMeta()
         val threadMeta = threadsResult.meta
         val groupedThreadIds = threadsResult.groupedThreadIds
@@ -89,34 +101,63 @@ class SmsRepository(
         val pinnedAtByThread = conversations.filter { it.isPinned }
             .associate { it.threadId to pinRepository.getPinnedAt(it.threadId) }
 
-        return conversations.sortedWith(
+        val sorted = conversations.sortedWith(
             compareByDescending<Conversation> { it.isPinned }
                 .thenByDescending { pinnedAtByThread[it.threadId] ?: 0L }
                 .thenByDescending { it.date }
+        )
+        return ConversationsLoadResult(
+            conversations = sorted,
+            sim1ThreadIds = threadsResult.sim1ThreadIds,
+            sim2ThreadIds = threadsResult.sim2ThreadIds,
+            outgoingThreadIds = threadsResult.outgoingThreadIds,
+            incomingThreadIds = threadsResult.incomingThreadIds
         )
     }
 
     private data class ThreadMeta(val address: String, val date: Long, val unreadCount: Int, val messageCount: Int, val snippet: String)
     private data class DraftMeta(val address: String, val body: String, val date: Long)
-    /** خروجیِ getAllThreadsMeta - علاوه بر متادیتای هر ترد، threadId هایی که حداقل یه پیامِ گروه‌بندی‌شده دارن رو هم برمی‌گردونه */
-    private data class ThreadsResult(val meta: Map<Long, ThreadMeta>, val groupedThreadIds: Set<Long>)
+    /** خروجیِ getAllThreadsMeta - متادیتای هر ترد + threadId های گروه‌بندی‌شده و مجموعه‌های فیلتر سیم/ارسالی/دریافتی */
+    private data class ThreadsResult(
+        val meta: Map<Long, ThreadMeta>,
+        val groupedThreadIds: Set<Long>,
+        val sim1ThreadIds: Set<Long> = emptySet(),
+        val sim2ThreadIds: Set<Long> = emptySet(),
+        val outgoingThreadIds: Set<Long> = emptySet(),
+        val incomingThreadIds: Set<Long> = emptySet()
+    )
 
     private suspend fun getAllThreadsMeta(): ThreadsResult {
         val result = mutableMapOf<Long, ThreadMeta>()
         val unreadCounts = mutableMapOf<Long, Int>()
         val messageCounts = mutableMapOf<Long, Int>()
         val groupedThreadIds = mutableSetOf<Long>()
+        val sim1ThreadIds = mutableSetOf<Long>()
+        val sim2ThreadIds = mutableSetOf<Long>()
+        val outgoingThreadIds = mutableSetOf<Long>()
+        val incomingThreadIds = mutableSetOf<Long>()
         val trashedIds = trashRepository.getTrashedIds()
         // پیام‌هایی که تویِ یه گروهِ فیلترِ hideFromMainList=true افتادن - از لیستِ اصلی مخفی میشن
         val hiddenByFilterGroup = filterGroupRepository.getHiddenMessageIds()
         // پیام‌هایی که عضوِ *هر* گروهی هستن (چه مخفی چه غیرِمخفی) - برای فیلترِ «گروه‌بندی‌شده»
         val allGroupedMessageIds = filterGroupRepository.getAllMatchedMessageIds()
+
+        // نگاشت subscriptionId -> slotIndex برای فیلتر سیم ۱/۲ (اسلات ۰ و ۱)
+        val subIdToSlot = try {
+            SimRepository(context).getActiveSims().associate { it.subscriptionId to it.slotIndex }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
                 arrayOf(
                     Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
-                    Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY, Telephony.Sms.TYPE
+                    Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.BODY, Telephony.Sms.TYPE,
+                    // فقط SUBSCRIPTION_ID (sub_id) - ستون sim_id روی خیلی از دستگاه‌ها وجود نداره
+                    // و گذاشتنش تو projection باعث SQLiteException و کرش میشه
+                    Telephony.Sms.SUBSCRIPTION_ID
                 ),
                 null, null,
                 "${Telephony.Sms.DATE} DESC"
@@ -128,6 +169,8 @@ class SmsRepository(
                 val readIdx = cursor.getColumnIndex(Telephony.Sms.READ)
                 val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
                 val typeIdx = cursor.getColumnIndex(Telephony.Sms.TYPE)
+                val subIdIdx = cursor.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
+                val simIdIdx = cursor.getColumnIndex("sim_id")
                 while (cursor.moveToNext()) {
                     val messageId = cursor.getLong(idIdx)
                     if (messageId in trashedIds) continue
@@ -142,7 +185,11 @@ class SmsRepository(
                     if (cursor.getInt(readIdx) == 0) {
                         unreadCounts[threadId] = (unreadCounts[threadId] ?: 0) + 1
                     }
-                    if (!result.containsKey(threadId)) {
+                    // کوئری بر اساس DATE DESC است؛ اولین باری که یک threadId دیده می‌شود
+                    // همان آخرین پیام مکالمه است. فیلتر ارسالی/دریافتی فقط روی همین پیام آخر
+                    // اعمال می‌شود (نه «حداقل یک پیام در کل تاریخچه» که تقریباً همیشه هر دو true می‌شود).
+                    val isFirstForThread = !result.containsKey(threadId)
+                    if (isFirstForThread) {
                         result[threadId] = ThreadMeta(
                             address = cursor.getStringOrNull(addressIdx) ?: "",
                             date = cursor.getLong(dateIdx),
@@ -150,6 +197,37 @@ class SmsRepository(
                             messageCount = 0,
                             snippet = cursor.getStringOrNull(bodyIdx) ?: ""
                         )
+
+                        val type = if (typeIdx >= 0) cursor.getInt(typeIdx) else -1
+                        val isOutgoing = type == Telephony.Sms.MESSAGE_TYPE_SENT ||
+                                type == Telephony.Sms.MESSAGE_TYPE_OUTBOX ||
+                                type == Telephony.Sms.MESSAGE_TYPE_FAILED ||
+                                type == Telephony.Sms.MESSAGE_TYPE_QUEUED
+                        if (isOutgoing) {
+                            outgoingThreadIds.add(threadId)
+                        } else if (type == Telephony.Sms.MESSAGE_TYPE_INBOX) {
+                            incomingThreadIds.add(threadId)
+                        }
+                    }
+
+                    // سیم ۱ / سیم ۲ بر اساس subscriptionId یا sim_id
+                    val rawSubId = when {
+                        subIdIdx >= 0 && !cursor.isNull(subIdIdx) -> cursor.getInt(subIdIdx)
+                        simIdIdx >= 0 && !cursor.isNull(simIdIdx) -> cursor.getInt(simIdIdx)
+                        else -> -1
+                    }
+                    if (rawSubId >= 0) {
+                        when (subIdToSlot[rawSubId]) {
+                            0 -> sim1ThreadIds.add(threadId)
+                            1 -> sim2ThreadIds.add(threadId)
+                            else -> {
+                                // اگه نگاشت slot پیدا نشد، بعضی دستگاه‌ها subscriptionId رو مستقیم اسلات نگه می‌دارن
+                                when (rawSubId) {
+                                    0 -> sim1ThreadIds.add(threadId)
+                                    1 -> sim2ThreadIds.add(threadId)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -160,7 +238,14 @@ class SmsRepository(
         val finalMeta = result.mapValues { (threadId, meta) ->
             meta.copy(unreadCount = unreadCounts[threadId] ?: 0, messageCount = messageCounts[threadId] ?: 0)
         }
-        return ThreadsResult(finalMeta, groupedThreadIds)
+        return ThreadsResult(
+            meta = finalMeta,
+            groupedThreadIds = groupedThreadIds,
+            sim1ThreadIds = sim1ThreadIds,
+            sim2ThreadIds = sim2ThreadIds,
+            outgoingThreadIds = outgoingThreadIds,
+            incomingThreadIds = incomingThreadIds
+        )
     }
 
     private fun getAllDrafts(): Map<Long, DraftMeta> {
@@ -238,6 +323,103 @@ class SmsRepository(
         } catch (e: SecurityException) {
             Log.w("SmsRepository", "SecurityException موقع ذخیره‌ی پیش‌نویس", e)
         }
+    }
+
+    /**
+     * جستجوی متن داخل body پیام‌ها و برگرداندن threadIdهایی که حداقل یک پیامِ مچ‌شده دارند.
+     *
+     * @param outgoingOnly فقط پیام‌های ارسالی (SENT/OUTBOX/FAILED/QUEUED)
+     * @param incomingOnly فقط پیام‌های دریافتی (INBOX)
+     * اگر هر دو false باشند، همه نوع‌ها به‌جز draft جستجو می‌شوند.
+     * اگر هر دو true باشند (نباید از UI بیاید)، مثل any رفتار می‌کند.
+     */
+    suspend fun searchThreadsByMessageBody(
+        query: String,
+        outgoingOnly: Boolean = false,
+        incomingOnly: Boolean = false
+    ): Set<Long> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptySet()
+        if (!requireReadSmsPermission("جستجوی متن پیام‌ها")) return emptySet()
+
+        val trashedIds = trashRepository.getTrashedIds()
+        val hiddenByFilterGroup = filterGroupRepository.getHiddenMessageIds()
+        val matched = linkedSetOf<Long>()
+
+        // جلوگیری از wildcard تزریقی کاربر در LIKE
+        fun escapeLike(raw: String): String =
+            raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+        val likeArg = "%${escapeLike(trimmed)}%"
+
+        val (typeSql, typeArgs) = when {
+            outgoingOnly && !incomingOnly -> {
+                "${Telephony.Sms.TYPE} IN (?, ?, ?, ?)" to listOf(
+                    Telephony.Sms.MESSAGE_TYPE_SENT.toString(),
+                    Telephony.Sms.MESSAGE_TYPE_OUTBOX.toString(),
+                    Telephony.Sms.MESSAGE_TYPE_FAILED.toString(),
+                    Telephony.Sms.MESSAGE_TYPE_QUEUED.toString()
+                )
+            }
+            incomingOnly && !outgoingOnly -> {
+                "${Telephony.Sms.TYPE} = ?" to listOf(Telephony.Sms.MESSAGE_TYPE_INBOX.toString())
+            }
+            else -> {
+                "${Telephony.Sms.TYPE} != ?" to listOf(Telephony.Sms.MESSAGE_TYPE_DRAFT.toString())
+            }
+        }
+
+        val selection = "${Telephony.Sms.BODY} LIKE ? ESCAPE '\\' AND $typeSql"
+        val selectionArgs = arrayOf(likeArg) + typeArgs.toTypedArray()
+
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.BODY),
+                selection,
+                selectionArgs,
+                "${Telephony.Sms.DATE} DESC"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
+                val threadIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
+                while (cursor.moveToNext()) {
+                    val messageId = cursor.getLong(idIdx)
+                    if (messageId in trashedIds) continue
+                    if (messageId in hiddenByFilterGroup) continue
+                    matched.add(cursor.getLong(threadIdx))
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.w("SmsRepository", "SecurityException موقع جستجوی متن پیام‌ها", e)
+            return emptySet()
+        } catch (e: Exception) {
+            // بعضی OEMها ESCAPE را پشتیبانی نمی‌کنند؛ یک‌بار بدون ESCAPE retry
+            Log.w("SmsRepository", "جستجو با ESCAPE شکست خورد، retry بدون ESCAPE", e)
+            try {
+                val fallbackSelection = "${Telephony.Sms.BODY} LIKE ? AND $typeSql"
+                val fallbackArgs = arrayOf("%$trimmed%") + typeArgs.toTypedArray()
+                context.contentResolver.query(
+                    Telephony.Sms.CONTENT_URI,
+                    arrayOf(Telephony.Sms._ID, Telephony.Sms.THREAD_ID),
+                    fallbackSelection,
+                    fallbackArgs,
+                    "${Telephony.Sms.DATE} DESC"
+                )?.use { cursor ->
+                    val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
+                    val threadIdx = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
+                    while (cursor.moveToNext()) {
+                        val messageId = cursor.getLong(idIdx)
+                        if (messageId in trashedIds) continue
+                        if (messageId in hiddenByFilterGroup) continue
+                        matched.add(cursor.getLong(threadIdx))
+                    }
+                }
+            } catch (e2: Exception) {
+                Log.w("SmsRepository", "جستجوی متن پیام‌ها ناموفق بود", e2)
+                return emptySet()
+            }
+        }
+        return matched
     }
 
     suspend fun getMessagesForThread(threadId: Long): List<SmsMessage> {

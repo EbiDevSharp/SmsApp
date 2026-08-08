@@ -263,6 +263,10 @@ fun AppNavigation(
     val pinnedMessageIds by viewModel.pinnedMessageIds.collectAsState()
     val pinnedMessageThreadIds by viewModel.pinnedMessageThreadIds.collectAsState()
     val favoriteThreadIds by viewModel.favoriteThreadIds.collectAsState()
+    val sim1ThreadIds by viewModel.sim1ThreadIds.collectAsState()
+    val sim2ThreadIds by viewModel.sim2ThreadIds.collectAsState()
+    val outgoingThreadIds by viewModel.outgoingThreadIds.collectAsState()
+    val incomingThreadIds by viewModel.incomingThreadIds.collectAsState()
     val trash by viewModel.trash.collectAsState()
     val filterGroupSummaries by viewModel.filterGroupSummaries.collectAsState()
     val notificationPickerGroups by viewModel.notificationPickerGroups.collectAsState()
@@ -289,6 +293,10 @@ fun AppNavigation(
         selectedFilterIds,
         pinnedMessageThreadIds,
         favoriteThreadIds,
+        sim1ThreadIds,
+        sim2ThreadIds,
+        outgoingThreadIds,
+        incomingThreadIds,
         timeSelection,
         sortType
     ) {
@@ -296,7 +304,11 @@ fun AppNavigation(
             selectedFilterIds.mapNotNull { ConversationFilterType.fromId(it) }.toSet(),
             ConversationFilterContext(
                 pinnedMessageThreadIds = pinnedMessageThreadIds,
-                favoriteThreadIds = favoriteThreadIds
+                favoriteThreadIds = favoriteThreadIds,
+                sim1ThreadIds = sim1ThreadIds,
+                sim2ThreadIds = sim2ThreadIds,
+                outgoingThreadIds = outgoingThreadIds,
+                incomingThreadIds = incomingThreadIds
             )
         )
             .applyTimeFilter(timeSelection)
@@ -418,7 +430,8 @@ fun AppNavigation(
                     timeSelection = timeSelection,
                     onTimeSelectionChange = { timeSelection = it },
                     sortType = sortType,
-                    onSortTypeChange = { sortType = it }
+                    onSortTypeChange = { sortType = it },
+                    sims = sims
                 )
             }
         }
@@ -456,6 +469,7 @@ fun AppNavigation(
                     onFilterTimeSelectionChange = { timeSelection = it },
                     filterSortType = sortType,
                     onFilterSortTypeChange = { sortType = it },
+                    sims = sims,
                     onDeleteConversations = { threadIds -> viewModel.deleteConversations(threadIds) },
                     onAddToGroupClick = { selectedConversations -> viewModel.requestAddConversationsToGroup(selectedConversations) },
                     onMakeConversationsPrivate = { selectedConversations -> viewModel.makeConversationsPrivate(selectedConversations) },
@@ -465,6 +479,9 @@ fun AppNavigation(
                     swipeDeleteRequiresConfirmation = appSettings.swipeDeleteRequiresConfirmation,
                     showContactNumberEnabled = appSettings.showContactNumberInListEnabled,
                     alphabetIndexBarEnabled = appSettings.alphabetIndexBarEnabled,
+                    alphabetBubbleSizeDp = appSettings.alphabetBubbleSizeDp,
+                    alphabetOffsetXDp = appSettings.alphabetOffsetXDp,
+                    alphabetOffsetYDp = appSettings.alphabetOffsetYDp,
                     onMarkThreadRead = { threadId -> viewModel.markThreadReadFromSwipe(threadId) },
                     onMarkThreadUnread = { threadId -> viewModel.markThreadUnreadFromSwipe(threadId) }
                 )
@@ -474,7 +491,15 @@ fun AppNavigation(
                     conversations = conversations,
                     pinnedMessageThreadIds = pinnedMessageThreadIds,
                     favoriteThreadIds = favoriteThreadIds,
+                    sim1ThreadIds = sim1ThreadIds,
+                    sim2ThreadIds = sim2ThreadIds,
+                    outgoingThreadIds = outgoingThreadIds,
+                    incomingThreadIds = incomingThreadIds,
+                    sims = sims,
                     showContactNumberEnabled = appSettings.showContactNumberInListEnabled,
+                    searchMessageThreads = { q, outgoingOnly, incomingOnly ->
+                        viewModel.searchThreadsByMessageBody(q, outgoingOnly, incomingOnly)
+                    },
                     onBack = { navController.popBackStack() },
                     onConversationClick = { conversation ->
                         if (conversation.address.isNotBlank()) {
@@ -588,7 +613,13 @@ fun AppNavigation(
                 SettingsScreen(
                     onOpenNotificationActions = { navController.navigate("notification_actions") },
                     onOpenPopupSettings = { navController.navigate("popup_settings") },
+                    onOpenAlphabetIndexSettings = { navController.navigate("alphabet_index_settings") },
                     onMenuClick = { scope.launch { drawerState.open() } },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("alphabet_index_settings") {
+                com.petro.smsapp.ui.AlphabetIndexSettingsScreen(
                     onBack = { navController.popBackStack() }
                 )
             }

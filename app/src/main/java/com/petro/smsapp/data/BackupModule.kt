@@ -107,6 +107,9 @@ object BackupModule {
         return JSONObject().apply {
             put("showContactNumberInListEnabled", s.showContactNumberInListEnabled)
             put("alphabetIndexBarEnabled", s.alphabetIndexBarEnabled)
+            put("alphabetBubbleSizeDp", s.alphabetBubbleSizeDp)
+            put("alphabetOffsetXDp", s.alphabetOffsetXDp)
+            put("alphabetOffsetYDp", s.alphabetOffsetYDp)
             put("swipeRightToLeftAction", s.swipeRightToLeftAction.id)
             put("swipeLeftToRightAction", s.swipeLeftToRightAction.id)
             put("swipeDeleteRequiresConfirmation", s.swipeDeleteRequiresConfirmation)
@@ -433,6 +436,12 @@ object BackupModule {
             AppSettings.setShowContactNumberInListEnabled(context, data.getBoolean("showContactNumberInListEnabled"))
         if (data.has("alphabetIndexBarEnabled"))
             AppSettings.setAlphabetIndexBarEnabled(context, data.getBoolean("alphabetIndexBarEnabled"))
+        if (data.has("alphabetBubbleSizeDp"))
+            AppSettings.setAlphabetBubbleSizeDp(context, data.getInt("alphabetBubbleSizeDp"))
+        if (data.has("alphabetOffsetXDp"))
+            AppSettings.setAlphabetOffsetXDp(context, data.getInt("alphabetOffsetXDp"))
+        if (data.has("alphabetOffsetYDp"))
+            AppSettings.setAlphabetOffsetYDp(context, data.getInt("alphabetOffsetYDp"))
         data.optString("swipeRightToLeftAction").takeIf { it.isNotBlank() }?.let {
             AppSettings.setSwipeRightToLeftAction(context, SwipeAction.fromId(it, AppSettings.DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION))
         }

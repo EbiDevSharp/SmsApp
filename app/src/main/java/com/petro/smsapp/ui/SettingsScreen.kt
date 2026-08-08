@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.scale
 fun SettingsScreen(
     onOpenNotificationActions: () -> Unit,
     onOpenPopupSettings: () -> Unit = {},
+    onOpenAlphabetIndexSettings: () -> Unit = {},
     onMenuClick: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -276,12 +277,10 @@ fun SettingsScreen(
                     onInfo = { infoDialogText = it }
 
                 )
-                SwitchRow(
+                SettingRow(
                     title = "نوار حروف الفبا",
-                    info = "نوار کناری سمت چپ برای پرش سریع به مخاطبین بر اساس حرف اول اسم",
-                    checked = settings.alphabetIndexBarEnabled,
-                    onChecked = { AppSettings.setAlphabetIndexBarEnabled(context, it) },
-                    onInfo = { infoDialogText = it }
+                    subtitle = if (settings.alphabetIndexBarEnabled) "فعال" else "غیرفعال",
+                    onClick = onOpenAlphabetIndexSettings
                 )
                 ThinDivider()
                 SettingRow(

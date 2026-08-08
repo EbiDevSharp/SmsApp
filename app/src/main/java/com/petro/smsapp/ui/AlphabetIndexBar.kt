@@ -39,12 +39,19 @@ import androidx.compose.ui.unit.sp
  * هم لمسِ تکی هم درگِ عمودی پشتیبانی میشه: با هر تغییرِ موقعیتِ انگشت روی نوار،
  * onLetterChange با حرفِ زیرِ انگشت صدا زده میشه - خودِ اسکرول‌کردنِ لیست به‌عهده‌ی
  * صداکننده‌ست (ConversationListScreen)، این کامپوننت فقط تشخیصِ حرف رو انجام میده.
+ *
+ * @param bubbleSizeDp اندازه بادکنک حرف جاری (۴۸ تا ۹۶)
+ * @param offsetXDp فاصله افقی از لبه چپ فیزیکی (۰ تا ۲۴) — هم فاصله از لبه و هم کمک به جدا شدن از ردیف‌ها
+ * @param offsetYDp فاصله عمودی حروف از بالا/پایین (۰ تا ۴۰)
  */
 @Composable
 fun AlphabetIndexBar(
     letters: List<String>,
     onLetterChange: (String) -> Unit,
     onDragEnd: () -> Unit,
+    bubbleSizeDp: Int = 64,
+    offsetXDp: Int = 6,
+    offsetYDp: Int = 8,
     modifier: Modifier = Modifier
 ) {
     if (letters.isEmpty()) return
@@ -57,12 +64,17 @@ fun AlphabetIndexBar(
         return (y / rowHeightPx).toInt().coerceIn(0, letters.lastIndex)
     }
 
+    val bubbleSize = bubbleSizeDp.coerceIn(48, 96).dp
+    val bubbleFontSize = (bubbleSizeDp * 0.4f).coerceIn(18f, 36f).sp
+    val hPad = offsetXDp.coerceIn(0, 24).dp
+    val vPad = offsetYDp.coerceIn(0, 40).dp
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Box(modifier = modifier) {
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(vertical = 8.dp, horizontal = 2.dp)
+                    .padding(vertical = vPad, horizontal = hPad)
                     .pointerInput(letters) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
@@ -105,7 +117,7 @@ fun AlphabetIndexBar(
                 Surface(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .size(64.dp),
+                        .size(bubbleSize),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
                     shadowElevation = 6.dp
@@ -114,7 +126,7 @@ fun AlphabetIndexBar(
                         Text(
                             text = letters[currentIndex],
                             color = Color.White,
-                            fontSize = 26.sp
+                            fontSize = bubbleFontSize
                         )
                     }
                 }

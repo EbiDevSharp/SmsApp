@@ -47,6 +47,9 @@ object AppSettings {
     private const val KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME = "swipe_left_to_right_action"
     private const val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME = "swipe_delete_requires_confirmation"
     private const val KEY_ALPHABET_INDEX_BAR_ENABLED_NAME = "alphabet_index_bar_enabled"
+    private const val KEY_ALPHABET_BUBBLE_SIZE_DP_NAME = "alphabet_bubble_size_dp"
+    private const val KEY_ALPHABET_OFFSET_X_DP_NAME = "alphabet_offset_x_dp"
+    private const val KEY_ALPHABET_OFFSET_Y_DP_NAME = "alphabet_offset_y_dp"
     // جدید: نمایشِ پاپ‌آپِ روی صفحه به‌جای نوتیفِ معمولی برای پیامکِ تازه‌رسیده
     private const val KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME = "popup_instead_of_notification_enabled"
     private const val KEY_POPUP_ON_LOCK_ENABLED_NAME = "popup_on_lock_enabled"
@@ -71,6 +74,9 @@ object AppSettings {
     private val KEY_SWIPE_LEFT_TO_RIGHT_ACTION = stringPreferencesKey(KEY_SWIPE_LEFT_TO_RIGHT_ACTION_NAME)
     private val KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION = booleanPreferencesKey(KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION_NAME)
     private val KEY_ALPHABET_INDEX_BAR_ENABLED = booleanPreferencesKey(KEY_ALPHABET_INDEX_BAR_ENABLED_NAME)
+    private val KEY_ALPHABET_BUBBLE_SIZE_DP = intPreferencesKey(KEY_ALPHABET_BUBBLE_SIZE_DP_NAME)
+    private val KEY_ALPHABET_OFFSET_X_DP = intPreferencesKey(KEY_ALPHABET_OFFSET_X_DP_NAME)
+    private val KEY_ALPHABET_OFFSET_Y_DP = intPreferencesKey(KEY_ALPHABET_OFFSET_Y_DP_NAME)
     private val KEY_POPUP_INSTEAD_OF_NOTIFICATION = booleanPreferencesKey(KEY_POPUP_INSTEAD_OF_NOTIFICATION_NAME)
     private val KEY_POPUP_ON_LOCK_ENABLED = booleanPreferencesKey(KEY_POPUP_ON_LOCK_ENABLED_NAME)
     private val KEY_POPUP_WHEN_UNLOCKED_ENABLED = booleanPreferencesKey(KEY_POPUP_WHEN_UNLOCKED_ENABLED_NAME)
@@ -81,6 +87,21 @@ object AppSettings {
     const val DEFAULT_SEND_DELAY_SECONDS = 0
     const val MIN_SEND_DELAY_SECONDS = 0
     const val MAX_SEND_DELAY_SECONDS = 15
+
+    /** اندازه بادکنک حرف جاری (dp) */
+    const val DEFAULT_ALPHABET_BUBBLE_SIZE_DP = 64
+    const val MIN_ALPHABET_BUBBLE_SIZE_DP = 48
+    const val MAX_ALPHABET_BUBBLE_SIZE_DP = 96
+
+    /** فاصله افقی نوار از لبه چپ فیزیکی صفحه (dp) — فاصله از لبه و فضای بین نوار و ردیف‌ها */
+    const val DEFAULT_ALPHABET_OFFSET_X_DP = 6
+    const val MIN_ALPHABET_OFFSET_X_DP = 0
+    const val MAX_ALPHABET_OFFSET_X_DP = 24
+
+    /** فاصله عمودی حروف از بالا/پایین نوار (dp) */
+    const val DEFAULT_ALPHABET_OFFSET_Y_DP = 8
+    const val MIN_ALPHABET_OFFSET_Y_DP = 0
+    const val MAX_ALPHABET_OFFSET_Y_DP = 40
 
     val DEFAULT_SWIPE_RIGHT_TO_LEFT_ACTION = SwipeAction.DELETE
     val DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION = SwipeAction.MARK_READ
@@ -140,6 +161,9 @@ object AppSettings {
         val swipeLeftToRightAction: SwipeAction = DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION,
         val swipeDeleteRequiresConfirmation: Boolean = true,
         val alphabetIndexBarEnabled: Boolean = true,
+        val alphabetBubbleSizeDp: Int = DEFAULT_ALPHABET_BUBBLE_SIZE_DP,
+        val alphabetOffsetXDp: Int = DEFAULT_ALPHABET_OFFSET_X_DP,
+        val alphabetOffsetYDp: Int = DEFAULT_ALPHABET_OFFSET_Y_DP,
         // جدید: به‌جای نوتیفِ معمولی، پیامکِ تازه‌رسیده با یه پاپ‌آپِ روی صفحه نشون داده بشه
         val popupInsteadOfNotificationEnabled: Boolean = false,
         // پاپ‌آپ روی صفحه‌قفل (فقط وقتی master روشن است)
@@ -184,6 +208,12 @@ object AppSettings {
                         swipeLeftToRightAction = SwipeAction.fromId(prefs[KEY_SWIPE_LEFT_TO_RIGHT_ACTION], DEFAULT_SWIPE_LEFT_TO_RIGHT_ACTION),
                         swipeDeleteRequiresConfirmation = prefs[KEY_SWIPE_DELETE_REQUIRES_CONFIRMATION] ?: true,
                         alphabetIndexBarEnabled = prefs[KEY_ALPHABET_INDEX_BAR_ENABLED] ?: true,
+                        alphabetBubbleSizeDp = (prefs[KEY_ALPHABET_BUBBLE_SIZE_DP] ?: DEFAULT_ALPHABET_BUBBLE_SIZE_DP)
+                            .coerceIn(MIN_ALPHABET_BUBBLE_SIZE_DP, MAX_ALPHABET_BUBBLE_SIZE_DP),
+                        alphabetOffsetXDp = (prefs[KEY_ALPHABET_OFFSET_X_DP] ?: DEFAULT_ALPHABET_OFFSET_X_DP)
+                            .coerceIn(MIN_ALPHABET_OFFSET_X_DP, MAX_ALPHABET_OFFSET_X_DP),
+                        alphabetOffsetYDp = (prefs[KEY_ALPHABET_OFFSET_Y_DP] ?: DEFAULT_ALPHABET_OFFSET_Y_DP)
+                            .coerceIn(MIN_ALPHABET_OFFSET_Y_DP, MAX_ALPHABET_OFFSET_Y_DP),
                         popupInsteadOfNotificationEnabled = prefs[KEY_POPUP_INSTEAD_OF_NOTIFICATION] ?: false,
                         popupOnLockEnabled = prefs[KEY_POPUP_ON_LOCK_ENABLED] ?: true,
                         popupWhenUnlockedEnabled = prefs[KEY_POPUP_WHEN_UNLOCKED_ENABLED] ?: true,
@@ -276,6 +306,21 @@ object AppSettings {
     fun isAlphabetIndexBarEnabled(context: Context): Boolean = _state.value.alphabetIndexBarEnabled
     fun setAlphabetIndexBarEnabled(context: Context, enabled: Boolean) =
         write(context) { it[KEY_ALPHABET_INDEX_BAR_ENABLED] = enabled }
+
+    fun setAlphabetBubbleSizeDp(context: Context, sizeDp: Int) {
+        val clamped = sizeDp.coerceIn(MIN_ALPHABET_BUBBLE_SIZE_DP, MAX_ALPHABET_BUBBLE_SIZE_DP)
+        write(context) { it[KEY_ALPHABET_BUBBLE_SIZE_DP] = clamped }
+    }
+
+    fun setAlphabetOffsetXDp(context: Context, offsetDp: Int) {
+        val clamped = offsetDp.coerceIn(MIN_ALPHABET_OFFSET_X_DP, MAX_ALPHABET_OFFSET_X_DP)
+        write(context) { it[KEY_ALPHABET_OFFSET_X_DP] = clamped }
+    }
+
+    fun setAlphabetOffsetYDp(context: Context, offsetDp: Int) {
+        val clamped = offsetDp.coerceIn(MIN_ALPHABET_OFFSET_Y_DP, MAX_ALPHABET_OFFSET_Y_DP)
+        write(context) { it[KEY_ALPHABET_OFFSET_Y_DP] = clamped }
+    }
 
     /** پیامکِ تازه‌رسیده به‌جای نوتیفِ معمولی، با پاپ‌آپِ روی صفحه (QuickReplyPopupActivity) نشون داده بشه */
     fun isPopupInsteadOfNotificationEnabled(context: Context): Boolean = _state.value.popupInsteadOfNotificationEnabled
