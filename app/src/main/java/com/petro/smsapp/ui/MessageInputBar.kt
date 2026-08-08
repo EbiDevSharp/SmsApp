@@ -10,7 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -76,6 +78,8 @@ fun MessageInputBar(
 ) {
     var showAttachMenu by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showFavoritePicker by remember { mutableStateOf(false) }
+    var showTemplateManager by remember { mutableStateOf(false) }
     var isPending by remember { mutableStateOf(false) }
     var pendingSnapshot by remember { mutableStateOf("") }
 
@@ -88,6 +92,16 @@ fun MessageInputBar(
                         icon = Icons.Filled.Schedule,
                         label = "زمان‌بندی",
                         onClick = { showTimePicker = true }
+                    ),
+                    AttachMenuItem(
+                        icon = Icons.Filled.Star,
+                        label = "علاقه‌مندی",
+                        onClick = { showFavoritePicker = true }
+                    ),
+                    AttachMenuItem(
+                        icon = Icons.Filled.Description,
+                        label = "تمپلیت",
+                        onClick = { showTemplateManager = true }
                     )
                     // بقیه‌ی آیتم‌های همین صفحه (تا ۶تا در مجموع) همینجا اضافه میشن
                 ),
@@ -106,6 +120,30 @@ fun MessageInputBar(
                 showTimePicker = false
             },
             onDismiss = { showTimePicker = false }
+        )
+    }
+
+    if (showFavoritePicker) {
+        FavoritePickerSheet(
+            onSelect = { body ->
+                onValueChange(
+                    if (value.isBlank()) body
+                    else value.trimEnd() + "\n" + body
+                )
+            },
+            onDismiss = { showFavoritePicker = false }
+        )
+    }
+
+    if (showTemplateManager) {
+        TemplateManagerSheet(
+            onSelect = { body ->
+                onValueChange(
+                    if (value.isBlank()) body
+                    else value.trimEnd() + "\n" + body
+                )
+            },
+            onDismiss = { showTemplateManager = false }
         )
     }
 

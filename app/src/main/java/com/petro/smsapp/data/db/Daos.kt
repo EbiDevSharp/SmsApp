@@ -356,3 +356,27 @@ interface FilterGroupDao {
     @Query("SELECT groupId as groupId, COUNT(*) as cnt FROM filter_group_matched_messages GROUP BY groupId")
     fun observeMessageCounts(): Flow<List<GroupIdCount>>
 }
+
+@Dao
+interface TemplateDao {
+    @Query("SELECT * FROM message_templates ORDER BY updatedAt DESC")
+    fun observeAll(): Flow<List<TemplateEntity>>
+
+    @Query("SELECT * FROM message_templates ORDER BY updatedAt DESC")
+    suspend fun getAllOnce(): List<TemplateEntity>
+
+    @Query("SELECT * FROM message_templates WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): TemplateEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: TemplateEntity): Long
+
+    @Query("UPDATE message_templates SET title = :title, body = :body, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun update(id: Long, title: String, body: String, updatedAt: Long)
+
+    @Query("DELETE FROM message_templates WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM message_templates")
+    suspend fun deleteAll()
+}

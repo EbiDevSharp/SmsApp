@@ -25,6 +25,7 @@ import com.petro.smsapp.data.db.PinEntity
 import com.petro.smsapp.data.db.PinnedMessageEntity
 import com.petro.smsapp.data.db.PrivateNumberEntity
 import com.petro.smsapp.data.db.ScheduledMessageEntity
+import com.petro.smsapp.data.db.TemplateEntity
 import com.petro.smsapp.data.db.TrashEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -42,7 +43,7 @@ enum class BackupCategory(
     MESSAGING("messaging", "پیام‌رسانی", "سطل زباله، گروه‌های پیامکی و تأخیر ارسال"),
     NOTIFICATIONS("notifications", "اعلان‌ها", "دلیوری، دکمه‌های نوتیف و پاپ‌آپ"),
     SMS("sms", "پیامک‌ها", "تمام پیامک‌های موجود در گوشی"),
-    APP_DATA("app_data", "داده‌های برنامه", "فیوریت، پین، سطل زباله، گروه‌ها، فیلترها و ...");
+    APP_DATA("app_data", "داده‌های برنامه", "فیوریت، پین، سطل زباله، گروه‌ها، فیلترها، تمپلیت‌ها و ...");
 
     companion object {
         fun fromId(id: String): BackupCategory? = entries.find { it.id == id }
@@ -369,6 +370,20 @@ object BackupModule {
             })
         }
 
+        // Templates
+        val templates = db.templateDao().getAllOnce()
+        val templatesJson = JSONArray().apply {
+            templates.forEach { t ->
+                put(JSONObject().apply {
+                    put("id", t.id)
+                    put("title", t.title)
+                    put("body", t.body)
+                    put("createdAt", t.createdAt)
+                    put("updatedAt", t.updatedAt)
+                })
+            }
+        }
+
         return JSONObject().apply {
             put("favorites", favoritesJson)
             put("privateNumbers", privateJson)
@@ -379,6 +394,7 @@ object BackupModule {
             put("delivery", deliveryJson)
             put("messageGroups", groupsJson)
             put("filterGroups", filterGroupsJson)
+            put("templates", templatesJson)
         }
     }
 
@@ -755,6 +771,23 @@ object BackupModule {
                     }
                     if (matches.isNotEmpty()) db.filterGroupDao().insertMatches(matches)
                 }
+            }
+        }
+
+        // Templates
+        db.templateDao().deleteAll()
+        data.optJSONArray("templates")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                db.templateDao().insert(
+                    TemplateEntity(
+                        id = o.optLong("id", 0L),
+                        title = o.optString("title"),
+                        body = o.optString("body"),
+                        createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+                        updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
+                    )
+                )
             }
         }
     }

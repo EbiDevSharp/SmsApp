@@ -111,3 +111,12 @@ data class FilterMatchResult(
     val matchType: FilterMatchType,
     val matchedValue: String?
 )
+
+/** تمپلیت متنی قابل‌استفاده در باکس ارسال پیام */
+data class MessageTemplate(
+    val id: Long,
+    val title: String,
+    val body: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)

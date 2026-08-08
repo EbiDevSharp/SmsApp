@@ -26,9 +26,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FilterGroupNumberEntity::class,
         FilterGroupKeywordEntity::class,
         FilterGroupPatternEntity::class,
-        FilterGroupMatchedMessageEntity::class
+        FilterGroupMatchedMessageEntity::class,
+        TemplateEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -41,6 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun deliveryDao(): DeliveryDao
     abstract fun messageGroupDao(): MessageGroupDao
     abstract fun filterGroupDao(): FilterGroupDao
+    abstract fun templateDao(): TemplateDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -105,6 +107,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * نسخه‌ی ۶ -> ۷: جدول تمپلیت‌های متنی برای استفاده در باکس ارسال پیام.
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `message_templates` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`title` TEXT NOT NULL, " +
+                            "`body` TEXT NOT NULL, " +
+                            "`createdAt` INTEGER NOT NULL, " +
+                            "`updatedAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -112,7 +130,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sms_app.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }

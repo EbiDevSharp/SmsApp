@@ -162,3 +162,17 @@ data class FilterGroupMatchedMessageEntity(
     val matchedValue: String?,
     val matchedAt: Long
 )
+
+/**
+ * تمپلیت‌های متنیِ قابل‌استفاده در باکسِ ارسال پیام.
+ * کاربر می‌تونه چند تمپلیت بسازه، ویرایش و حذف کنه؛ با انتخاب از منوی «+»
+ * متن تمپلیت داخل باکس پیام می‌نشینه.
+ */
+@Entity(tableName = "message_templates")
+data class TemplateEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val body: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)
