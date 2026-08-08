@@ -5,22 +5,31 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.petro.smsapp.R
 import com.petro.smsapp.data.ConversationFilterType
 import com.petro.smsapp.data.ConversationSortType
+import com.petro.smsapp.data.ThemeMode
 import com.petro.smsapp.data.TimeFilterSelection
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 data class DrawerItem(
     val route: String,
@@ -43,8 +52,8 @@ val drawerItems = listOf(
 fun AppDrawerContent(
     currentRoute: String?,
     onItemClick: (String) -> Unit,
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
+    themeMode: ThemeMode,
+    onCycleTheme: (centerInRoot: Offset) -> Unit,
     selectedFilterIds: Set<String> = emptySet(),
     onToggleFilter: (ConversationFilterType) -> Unit = {},
     timeSelection: TimeFilterSelection = TimeFilterSelection.None,
@@ -52,6 +61,9 @@ fun AppDrawerContent(
     sortType: ConversationSortType? = null,
     onSortTypeChange: (ConversationSortType?) -> Unit = {}
 ) {
+    // مرکز آیکن تم در مختصات root (برای شروع انیمیشن دایره‌ای از همان نقطه)
+    var iconCenter by remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -81,15 +93,37 @@ fun AppDrawerContent(
             modifier = Modifier.weight(1f)
         )
 
-        IconButton(onClick = onToggleTheme) {
+        IconButton(
+            onClick = { onCycleTheme(iconCenter) },
+            modifier = Modifier.onGloballyPositioned { coords ->
+                val pos = coords.positionInRoot()
+                iconCenter = Offset(
+                    pos.x + coords.size.width / 2f,
+                    pos.y + coords.size.height / 2f
+                )
+            }
+        ) {
+            val (icon, description, tint) = when (themeMode) {
+                ThemeMode.LIGHT -> Triple(
+                    Icons.Filled.LightMode,
+                    "حالت روز — برای تغییر به شب بزن",
+                    Color(0xFFFFA000)
+                )
+                ThemeMode.DARK -> Triple(
+                    Icons.Filled.DarkMode,
+                    "حالت شب — برای تغییر به سیستم بزن",
+                    Color(0xFF90CAF9)
+                )
+                ThemeMode.SYSTEM -> Triple(
+                    Icons.Filled.BrightnessAuto,
+                    "حالت سیستم — برای تغییر به روز بزن",
+                    MaterialTheme.colorScheme.primary
+                )
+            }
             Icon(
-                imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                contentDescription = if (isDarkTheme) "حالت روز" else "حالت شب",
-                tint = if (isDarkTheme) {
-                    Color(0xFFFFD700)
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                imageVector = icon,
+                contentDescription = description,
+                tint = tint
             )
         }
     }

@@ -700,9 +700,17 @@ class SmsRepository(
         val type = cursor.getInt(col(Telephony.Sms.TYPE))
         val dateSentIdx = col(Telephony.Sms.DATE_SENT)
         val statusIdx = col(Telephony.Sms.STATUS)
+        // استاندارد: sub_id (Telephony.Sms.SUBSCRIPTION_ID)
+        // بعضی OEMها (مثل شیائومی قدیمی) به‌جاش ستون sim_id دارن
         val subIdIdx = col(Telephony.Sms.SUBSCRIPTION_ID)
+        val simIdIdx = col("sim_id")
         val id = cursor.getLong(col(Telephony.Sms._ID))
         val status = if (statusIdx >= 0) cursor.getInt(statusIdx) else -1
+        val rawSubId = when {
+            subIdIdx >= 0 && !cursor.isNull(subIdIdx) -> cursor.getInt(subIdIdx)
+            simIdIdx >= 0 && !cursor.isNull(simIdIdx) -> cursor.getInt(simIdIdx)
+            else -> -1
+        }
         return SmsMessage(
             id = id,
             threadId = cursor.getLong(col(Telephony.Sms.THREAD_ID)),
@@ -718,7 +726,7 @@ class SmsRepository(
             isRead = cursor.getInt(col(Telephony.Sms.READ)) == 1,
             status = status,
             deliveredAt = if (status == Telephony.Sms.STATUS_COMPLETE) deliveryRepository.getDeliveredAt(id) else 0L,
-            subscriptionId = if (subIdIdx >= 0) cursor.getInt(subIdIdx) else -1
+            subscriptionId = rawSubId
         )
     }
 

@@ -8,8 +8,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.provider.Telephony
+import android.telephony.SubscriptionManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
@@ -47,6 +49,11 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         val sentTimestamp = messages[0].timestampMillis
         val receivedTimestamp = System.currentTimeMillis()
 
+        // تشخیص سیم‌کارتی که پیام روش اومده (dual-SIM)
+        // اندروید معمولاً یکی از این extras رو تو SMS_DELIVER می‌ذاره:
+        // "subscription" / EXTRA_SUBSCRIPTION_INDEX / "slot" / EXTRA_SLOT_INDEX
+        val subscriptionId = resolveIncomingSubscriptionId(context, intent)
+
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, sender)
             put(Telephony.Sms.BODY, fullBody)
@@ -54,6 +61,9 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             put(Telephony.Sms.DATE_SENT, sentTimestamp)
             put(Telephony.Sms.READ, 0)
             put(Telephony.Sms.SEEN, 0)
+            if (subscriptionId != null && subscriptionId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
+            }
         }
         val insertedUri = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values) ?: return
         val messageId = android.content.ContentUris.parseId(insertedUri)
@@ -492,5 +502,46 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         return NotificationCompat.Action.Builder(R.drawable.ic_reply, "پاسخ", replyPendingIntent)
             .addRemoteInput(remoteInput)
             .build()
+    }
+
+    /**
+     * از extrasِ intentِ SMS_DELIVER، subscriptionId سیم‌کارتی که پیام روش رسیده
+     * رو درمیاره. OEMها کلیدهای مختلفی می‌ذارن؛ این تابع چند مسیر رایج رو چک می‌کنه.
+     */
+    private fun resolveIncomingSubscriptionId(context: Context, intent: Intent): Int? {
+        // مسیر استاندارد (بیشتر دستگاه‌ها)
+        var subId = intent.getIntExtra("subscription", SubscriptionManager.INVALID_SUBSCRIPTION_ID)
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            subId = intent.getIntExtra("subscription_id", SubscriptionManager.INVALID_SUBSCRIPTION_ID)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                subId = intent.getIntExtra(
+                    SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
+                    SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                )
+            }
+        }
+        if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) return subId
+
+        // بعضی دستگاه‌ها فقط slot می‌دن → تبدیل به subscriptionId
+        var slot = intent.getIntExtra("slot", -1)
+        if (slot < 0) slot = intent.getIntExtra("simId", -1)
+        if (slot < 0) slot = intent.getIntExtra("phone", -1)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (slot < 0) {
+                slot = intent.getIntExtra(SubscriptionManager.EXTRA_SLOT_INDEX, -1)
+            }
+        }
+        if (slot >= 0) {
+            try {
+                val sm = context.getSystemService(SubscriptionManager::class.java) ?: return null
+                val info = sm.getActiveSubscriptionInfoForSimSlotIndex(slot)
+                if (info != null) return info.subscriptionId
+            } catch (_: SecurityException) {
+                // READ_PHONE_STATE نیست
+            }
+        }
+        return null
     }
 }

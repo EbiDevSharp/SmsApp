@@ -365,11 +365,7 @@ fun AppNavigation(
         drawerContent = {
             ModalDrawerSheet {
                 val settings by AppSettings.state.collectAsState()
-                val isDarkTheme = when (settings.themeMode) {
-                    ThemeMode.LIGHT -> false
-                    ThemeMode.DARK -> true
-                    ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
-                }
+                val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
                 AppDrawerContent(
                     currentRoute = currentRoute,
                     onItemClick = { route ->
@@ -389,10 +385,27 @@ fun AppNavigation(
                             }
                         }
                     },
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = {
-                        val newMode = if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK
-                        AppSettings.setThemeMode(context, newMode)
+                    themeMode = settings.themeMode,
+                    onCycleTheme = { center ->
+                        // چرخه: روشن → تاریک → سیستم → روشن
+                        val nextMode = when (settings.themeMode) {
+                            ThemeMode.LIGHT -> ThemeMode.DARK
+                            ThemeMode.DARK -> ThemeMode.SYSTEM
+                            ThemeMode.SYSTEM -> ThemeMode.LIGHT
+                        }
+                        // رنگ پس‌زمینهٔ فعلی (تم قدیم) برای overlay بیرونِ دایره
+                        val currentDark = when (settings.themeMode) {
+                            ThemeMode.LIGHT -> false
+                            ThemeMode.DARK -> true
+                            ThemeMode.SYSTEM -> isSystemDark
+                        }
+                        // تم همان لحظه عوض می‌شود؛ داخل دایره UI واقعی دیده می‌شود
+                        // (بدون recreate — سبک و بدون هنگ)
+                        com.petro.smsapp.ui.ThemeRevealController.request(
+                            center = center,
+                            oldBackground = com.petro.smsapp.ui.themeBackgroundColor(currentDark),
+                            applyMode = nextMode
+                        )
                     },
                     selectedFilterIds = selectedFilterIds,
                     onToggleFilter = { filterType ->
