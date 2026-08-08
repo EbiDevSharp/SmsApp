@@ -13,8 +13,8 @@ android {
         applicationId = "com.petro.smsapp"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "3.2.0"
+        versionCode = 6
+        versionName = "3.6.0"
     }
 
     buildFeatures {
