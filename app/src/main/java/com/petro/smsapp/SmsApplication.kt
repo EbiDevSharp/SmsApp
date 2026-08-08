@@ -55,6 +55,20 @@ class SmsApplication : Application() {
                 setBypassDnd(false)
             }
             manager.createNotificationChannel(popupChannel)
+
+            // کانال بی‌صدا برای یادآوری‌هایی که فقط نوتیف می‌خواهند (بدون صدا)
+            // یا وقتی صدا جداگانه با SmsAlertSoundPlayer پخش می‌شود
+            val reminderSilent = NotificationChannel(
+                "sms_reminder_silent_channel",
+                "یادآوری پیام خوانده‌نشده",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "نوتیف یادآوری بدون صدای کانال"
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
+            }
+            manager.createNotificationChannel(reminderSilent)
         }
 
         ensureContactsObserverRegistered()

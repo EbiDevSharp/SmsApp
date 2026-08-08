@@ -62,6 +62,8 @@ object AppSettings {
     private const val KEY_UNREAD_REMINDER_ENABLED_NAME = "unread_reminder_enabled"
     private const val KEY_UNREAD_REMINDER_COUNT_NAME = "unread_reminder_count"
     private const val KEY_UNREAD_REMINDER_INTERVAL_MINUTES_NAME = "unread_reminder_interval_minutes"
+    private const val KEY_UNREAD_REMINDER_SHOW_NOTIFICATION_NAME = "unread_reminder_show_notification"
+    private const val KEY_UNREAD_REMINDER_PLAY_SOUND_NAME = "unread_reminder_play_sound"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -89,6 +91,8 @@ object AppSettings {
     private val KEY_UNREAD_REMINDER_ENABLED = booleanPreferencesKey(KEY_UNREAD_REMINDER_ENABLED_NAME)
     private val KEY_UNREAD_REMINDER_COUNT = intPreferencesKey(KEY_UNREAD_REMINDER_COUNT_NAME)
     private val KEY_UNREAD_REMINDER_INTERVAL_MINUTES = intPreferencesKey(KEY_UNREAD_REMINDER_INTERVAL_MINUTES_NAME)
+    private val KEY_UNREAD_REMINDER_SHOW_NOTIFICATION = booleanPreferencesKey(KEY_UNREAD_REMINDER_SHOW_NOTIFICATION_NAME)
+    private val KEY_UNREAD_REMINDER_PLAY_SOUND = booleanPreferencesKey(KEY_UNREAD_REMINDER_PLAY_SOUND_NAME)
 
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
     const val DEFAULT_SEND_DELAY_SECONDS = 0
@@ -190,7 +194,9 @@ object AppSettings {
         // یادآوری پیام‌های خوانده‌نشده
         val unreadReminderEnabled: Boolean = false,
         val unreadReminderCount: Int = DEFAULT_UNREAD_REMINDER_COUNT,
-        val unreadReminderIntervalMinutes: Int = DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
+        val unreadReminderIntervalMinutes: Int = DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES,
+        val unreadReminderShowNotification: Boolean = true,
+        val unreadReminderPlaySound: Boolean = true
     )
 
     private val _state = MutableStateFlow(State())
@@ -243,7 +249,9 @@ object AppSettings {
                         unreadReminderIntervalMinutes = (prefs[KEY_UNREAD_REMINDER_INTERVAL_MINUTES]
                             ?: DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES).let { v ->
                             if (v in UNREAD_REMINDER_INTERVAL_OPTIONS) v else DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
-                        }
+                        },
+                        unreadReminderShowNotification = prefs[KEY_UNREAD_REMINDER_SHOW_NOTIFICATION] ?: true,
+                        unreadReminderPlaySound = prefs[KEY_UNREAD_REMINDER_PLAY_SOUND] ?: true
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -375,8 +383,12 @@ object AppSettings {
 
     /** یادآوری دوره‌ای برای پیام‌های خوانده‌نشده */
     fun isUnreadReminderEnabled(context: Context): Boolean = _state.value.unreadReminderEnabled
-    fun setUnreadReminderEnabled(context: Context, enabled: Boolean) =
+    fun setUnreadReminderEnabled(context: Context, enabled: Boolean) {
         write(context) { it[KEY_UNREAD_REMINDER_ENABLED] = enabled }
+        if (!enabled) {
+            UnreadReminderScheduler.cancelAll(context)
+        }
+    }
 
     fun getUnreadReminderCount(context: Context): Int = _state.value.unreadReminderCount
     fun setUnreadReminderCount(context: Context, count: Int) {
@@ -389,6 +401,14 @@ object AppSettings {
         val value = if (minutes in UNREAD_REMINDER_INTERVAL_OPTIONS) minutes else DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
         write(context) { it[KEY_UNREAD_REMINDER_INTERVAL_MINUTES] = value }
     }
+
+    fun isUnreadReminderShowNotification(context: Context): Boolean = _state.value.unreadReminderShowNotification
+    fun setUnreadReminderShowNotification(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_UNREAD_REMINDER_SHOW_NOTIFICATION] = enabled }
+
+    fun isUnreadReminderPlaySound(context: Context): Boolean = _state.value.unreadReminderPlaySound
+    fun setUnreadReminderPlaySound(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_UNREAD_REMINDER_PLAY_SOUND] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

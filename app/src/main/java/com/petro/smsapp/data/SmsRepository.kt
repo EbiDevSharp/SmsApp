@@ -858,6 +858,8 @@ class SmsRepository(
             Log.w("SmsRepository", "SecurityException موقع خونده‌شده‌کردن مکالمه", e)
             return false
         }
+        // پیام خوانده شد → زنجیره یادآوری این مکالمه را متوقف کن
+        UnreadReminderScheduler.cancelForThread(context, threadId)
         return true
     }
 

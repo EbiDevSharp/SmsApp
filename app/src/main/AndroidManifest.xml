@@ -119,6 +119,11 @@
             android:name=".receiver.ScheduledSmsReceiver"
             android:exported="false" />
 
+        <!-- یادآوری پیام‌های خوانده‌نشده (AlarmManager) -->
+        <receiver
+            android:name=".receiver.UnreadReminderReceiver"
+            android:exported="false" />
+
         <!-- بعد از روشن شدن گوشی، پیام‌های زمان‌بندی‌شده‌ی هنوز-در-انتظار رو دوباره تو AlarmManager ثبت می‌کنه -->
         <receiver
             android:name=".receiver.BootReceiver"

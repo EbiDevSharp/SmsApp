@@ -416,6 +416,22 @@ fun SettingsScreen(
                     onChange = { AppSettings.setUnreadReminderIntervalMinutes(context, it) },
                     enabled = reminderOn
                 )
+                SwitchRow(
+                    title = "نمایش نوتیفیکیشن",
+                    info = "با هر یادآوری، دوباره نوتیف پیامک خوانده‌نشده نشون داده بشه",
+                    checked = settings.unreadReminderShowNotification,
+                    onChecked = { AppSettings.setUnreadReminderShowNotification(context, it) },
+                    onInfo = { infoDialogText = it },
+                    enabled = reminderOn
+                )
+                SwitchRow(
+                    title = "پخش صدا",
+                    info = "با هر یادآوری، صدای هشدار پیامک پخش بشه (حتی اگر نوتیف خاموش باشد)",
+                    checked = settings.unreadReminderPlaySound,
+                    onChecked = { AppSettings.setUnreadReminderPlaySound(context, it) },
+                    onInfo = { infoDialogText = it },
+                    enabled = reminderOn
+                )
                 }
 
 
@@ -581,22 +597,36 @@ private fun SwitchRow(
     info: String,
     checked: Boolean,
     onChecked: (Boolean) -> Unit,
-    onInfo: (String) -> Unit
+    onInfo: (String) -> Unit,
+    enabled: Boolean = true
 ) {
     ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
+        headlineContent = {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                }
+            )
+        },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onInfo(info) }) {
+                IconButton(onClick = { onInfo(info) }, enabled = enabled) {
                     Icon(
                         Icons.Outlined.Info,
                         contentDescription = "توضیحات",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                            alpha = if (enabled) 1f else 0.38f
+                        )
                     )
                 }
                 Switch(
                     checked = checked,
                     onCheckedChange = onChecked,
+                    enabled = enabled,
                     modifier = Modifier.scale(0.65f)
                 )
             }

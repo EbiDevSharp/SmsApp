@@ -24,6 +24,7 @@ import com.petro.smsapp.data.AppSettings
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.NotificationActionType
+import com.petro.smsapp.data.UnreadReminderScheduler
 import com.petro.smsapp.service.PopupOverlayService
 import com.petro.smsapp.util.SmsAlertSoundPlayer
 import kotlinx.coroutines.CoroutineScope
@@ -175,6 +176,17 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         } else {
             showNotification(context, sender, displayName, fullBody, threadId, messageId, quickAddTargetGroupName, contactPhotoUri)
         }
+
+        // یادآوری پیام خوانده‌نشده (در صورت فعال بودن در تنظیمات)
+        UnreadReminderScheduler.scheduleForIncoming(
+            context = context,
+            threadId = threadId,
+            address = sender,
+            displayName = displayName,
+            body = fullBody,
+            contactPhotoUri = contactPhotoUri,
+            notificationId = sender.hashCode()
+        )
     }
 
     /**

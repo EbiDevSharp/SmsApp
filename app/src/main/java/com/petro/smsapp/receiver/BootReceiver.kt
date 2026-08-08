@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.petro.smsapp.data.AlarmScheduler
+import com.petro.smsapp.data.UnreadReminderScheduler
 import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.SmsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +36,9 @@ class BootReceiver : BroadcastReceiver() {
                         scheduledMessageRepository.remove(message.id)
                     }
                 }
+
+                // یادآوری‌های پیام خوانده‌نشده را بعد از بوت دوباره ثبت کن
+                UnreadReminderScheduler.rescheduleAll(context)
             } finally {
                 pendingResult.finish()
             }
