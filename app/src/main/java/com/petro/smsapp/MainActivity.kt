@@ -483,10 +483,13 @@ fun AppNavigation(
                     },
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onSearchClick = { navController.navigate("search") },
-                    hasActiveFilter = selectedFilterIds.isNotEmpty() || timeSelection != TimeFilterSelection.None,
+                    hasActiveFilter = selectedFilterIds.isNotEmpty() ||
+                            timeSelection != TimeFilterSelection.None ||
+                            sortType != null,
                     onClearFilters = {
                         selectedFilterIds = emptySet()
                         timeSelection = TimeFilterSelection.None
+                        sortType = null
                     },
                     filterSelectedIds = selectedFilterIds,
                     onToggleFilter = { filterType ->

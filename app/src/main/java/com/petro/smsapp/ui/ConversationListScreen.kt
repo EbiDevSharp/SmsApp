@@ -305,14 +305,15 @@ fun ConversationListScreen(
                         }
                     },
                     actions = {
-                        // یه آیکونِ فیلترِ واحد: تو حالتِ عادی FilterList خالیه، وقتی فیلتری
-                        // فعاله همون آیکون با یه نقطه‌ی قرمز مشخص میشه. تو هر دو حالت با زدنش
-                        // مودالِ فیلتر باز میشه (دیگه با تپ مستقیم پاک نمیشه)
-                        IconButton(onClick = { showFilterSheet = true }) {
+                        // آیکون فیلتر: بدون فیلتر → باز کردن مودال؛ با فیلتر فعال (نقطه قرمز)
+                        // → پاک‌کردن همه‌ی فیلترها و برگشت لیست به حالت اولیه
+                        IconButton(onClick = {
+                            if (hasActiveFilter) onClearFilters() else showFilterSheet = true
+                        }) {
                             Box {
                                 Icon(
                                     if (hasActiveFilter) Icons.Filled.FilterAlt else Icons.Filled.FilterList,
-                                    contentDescription = if (hasActiveFilter) "فیلتر (فعال)" else "فیلتر"
+                                    contentDescription = if (hasActiveFilter) "پاک کردن فیلترها" else "فیلتر"
                                 )
                                 if (hasActiveFilter) {
                                     Box(
