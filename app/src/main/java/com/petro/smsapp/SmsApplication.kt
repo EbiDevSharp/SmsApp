@@ -10,6 +10,11 @@ import android.os.Looper
 import android.provider.ContactsContract
 import android.util.Log
 import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.util.AppShortcutsManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.petro.smsapp.data.ContactsCache
 import com.petro.smsapp.data.DataChangeSignal
 import com.petro.smsapp.data.PermissionHelper
@@ -22,6 +27,11 @@ class SmsApplication : Application() {
         super.onCreate()
         // باید قبل از هر استفاده‌ی دیگه از AppSettings.state (مثلاً توی DateFormatter) صدا زده بشه
         AppSettings.init(this)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // کمی صبر تا state DataStore لود شود
+            kotlinx.coroutines.delay(400)
+            AppShortcutsManager.updateShortcuts(this@SmsApplication)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             // کانال نوتیف معمولی (با صدا/ویبره)

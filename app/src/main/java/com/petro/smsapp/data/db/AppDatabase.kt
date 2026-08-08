@@ -27,9 +27,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FilterGroupKeywordEntity::class,
         FilterGroupPatternEntity::class,
         FilterGroupMatchedMessageEntity::class,
-        TemplateEntity::class
+        TemplateEntity::class,
+        ShortcutContactEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,9 +44,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageGroupDao(): MessageGroupDao
     abstract fun filterGroupDao(): FilterGroupDao
     abstract fun templateDao(): TemplateDao
+    abstract fun shortcutContactDao(): ShortcutContactDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
+
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -123,6 +126,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * نسخه‌ی ۷ -> ۸: جدول مخاطبین شورتکات لانچر (لانگ‌کلیک روی آیکون اپ).
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `shortcut_contacts` (" +
+                            "`normalizedAddress` TEXT NOT NULL, " +
+                            "`address` TEXT NOT NULL, " +
+                            "`displayName` TEXT NOT NULL, " +
+                            "`addedAt` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`normalizedAddress`))"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -130,10 +149,11 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sms_app.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }
         }
+
     }
 }

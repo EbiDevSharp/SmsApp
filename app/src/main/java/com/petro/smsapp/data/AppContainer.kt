@@ -9,6 +9,7 @@ import com.petro.smsapp.data.repository.MessageGroupRepository
 import com.petro.smsapp.data.repository.PinRepository
 import com.petro.smsapp.data.repository.PrivateRepository
 import com.petro.smsapp.data.repository.ScheduledMessageRepository
+import com.petro.smsapp.data.repository.ShortcutContactRepository
 import com.petro.smsapp.data.repository.TemplateRepository
 import com.petro.smsapp.data.repository.TrashRepository
 
@@ -45,4 +46,8 @@ object AppContainer {
     fun filterGroupRepository(context: Context) = FilterGroupRepository(database(context).filterGroupDao())
 
     fun templateRepository(context: Context) = TemplateRepository(database(context).templateDao())
+
+    fun shortcutContactRepository(context: Context) =
+        ShortcutContactRepository(database(context).shortcutContactDao())
 }
+

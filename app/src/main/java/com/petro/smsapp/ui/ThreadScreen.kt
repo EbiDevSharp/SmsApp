@@ -1,5 +1,6 @@
 package com.petro.smsapp.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -43,7 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.util.AppShortcutsManager
 import com.petro.smsapp.data.ScheduledMessage
 import com.petro.smsapp.data.SimInfo
 import com.petro.smsapp.data.SmsMessage
@@ -126,6 +130,12 @@ fun ThreadScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val canSend = remember(address) { PhoneNumberUtils.isSendableAddress(address) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showThreadMenu by remember { mutableStateOf(false) }
+    var isShortcutContact by remember { mutableStateOf(false) }
+    LaunchedEffect(address) {
+        isShortcutContact = AppContainer.shortcutContactRepository(context).isShortcutContact(address)
+    }
     var selectedSimId by remember { mutableStateOf<Int?>(null) }
     var selectedMessage by remember { mutableStateOf<SmsMessage?>(null) }
     var selectedScheduledMessage by remember { mutableStateOf<ScheduledMessage?>(null) }
@@ -304,6 +314,40 @@ fun ThreadScreen(
                                         imageVector = if (isKnownContact) Icons.Filled.Person else Icons.Filled.PersonAdd,
                                         contentDescription = if (isKnownContact) "مشاهده اطلاعات مخاطب" else "افزودن به مخاطبین"
                                     )
+                                }
+                                Box {
+                                    IconButton(onClick = { showThreadMenu = true }) {
+                                        Icon(Icons.Filled.MoreVert, contentDescription = "منوی بیشتر")
+                                    }
+                                    DropdownMenu(
+                                        expanded = showThreadMenu,
+                                        onDismissRequest = { showThreadMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    if (isShortcutContact) "حذف از شورتکات"
+                                                    else "افزودن به شورتکات"
+                                                )
+                                            },
+                                            onClick = {
+                                                showThreadMenu = false
+                                                scope.launch {
+                                                    val repo = AppContainer.shortcutContactRepository(context)
+                                                    if (isShortcutContact) {
+                                                        repo.remove(address)
+                                                        isShortcutContact = false
+                                                        Toast.makeText(context, "از شورتکات حذف شد", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        repo.add(address, displayName)
+                                                        isShortcutContact = true
+                                                        Toast.makeText(context, "به شورتکات اضافه شد", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                    AppShortcutsManager.updateShortcuts(context)
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

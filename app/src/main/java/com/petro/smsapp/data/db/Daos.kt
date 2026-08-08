@@ -380,3 +380,27 @@ interface TemplateDao {
     @Query("DELETE FROM message_templates")
     suspend fun deleteAll()
 }
+
+@Dao
+interface ShortcutContactDao {
+    @Query("SELECT * FROM shortcut_contacts ORDER BY addedAt DESC")
+    fun observeAll(): Flow<List<ShortcutContactEntity>>
+
+    @Query("SELECT * FROM shortcut_contacts ORDER BY addedAt DESC")
+    suspend fun getAllOnce(): List<ShortcutContactEntity>
+
+    @Query("SELECT * FROM shortcut_contacts WHERE normalizedAddress = :normalized LIMIT 1")
+    suspend fun getByNormalized(normalized: String): ShortcutContactEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: ShortcutContactEntity)
+
+    @Query("DELETE FROM shortcut_contacts WHERE normalizedAddress = :normalized")
+    suspend fun delete(normalized: String)
+
+    @Query("DELETE FROM shortcut_contacts")
+    suspend fun deleteAll()
+
+    @Query("SELECT COUNT(*) FROM shortcut_contacts")
+    suspend fun count(): Int
+}

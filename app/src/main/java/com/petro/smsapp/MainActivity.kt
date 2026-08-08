@@ -64,6 +64,7 @@ import com.petro.smsapp.ui.PrivatePinSettingsScreen
 import com.petro.smsapp.ui.PrivateScreen
 import com.petro.smsapp.ui.SearchScreen
 import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.util.AppShortcutsManager
 import com.petro.smsapp.ui.NotificationActionsSettingsScreen
 import com.petro.smsapp.ui.SettingsScreen
 import com.petro.smsapp.ui.SmsAppTheme
@@ -140,6 +141,10 @@ class MainActivity : ComponentActivity() {
 
         handleNotificationIntent(intent)
         handleQuickGroupPickIntent(intent)
+        handleShortcutIntent(intent)
+        lifecycleScope.launch(Dispatchers.IO) {
+            AppShortcutsManager.updateShortcuts(this@MainActivity)
+        }
     }
 
     override fun onPause() {
@@ -157,6 +162,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleNotificationIntent(intent)
         handleQuickGroupPickIntent(intent)
+        handleShortcutIntent(intent)
     }
 
     private fun handleNotificationIntent(intent: Intent?) {
@@ -181,6 +187,20 @@ class MainActivity : ComponentActivity() {
         val address = intent.getStringExtra(EXTRA_QUICK_GROUP_ADDRESS) ?: return
         val displayName = intent.getStringExtra(EXTRA_QUICK_GROUP_DISPLAY_NAME) ?: address
         viewModel.requestQuickGroupPick(address, displayName)
+    }
+
+    private fun handleShortcutIntent(intent: Intent?) {
+        intent ?: return
+        if (intent.action != AppShortcutsManager.ACTION_SHORTCUT) return
+        when (intent.getStringExtra(AppShortcutsManager.EXTRA_SHORTCUT_TYPE)) {
+            AppShortcutsManager.TYPE_NEW_MESSAGE -> viewModel.requestShortcutRoute("new")
+            AppShortcutsManager.TYPE_SETTINGS -> viewModel.requestShortcutRoute("settings")
+            AppShortcutsManager.TYPE_CONTACT -> {
+                val address = intent.getStringExtra(AppShortcutsManager.EXTRA_ADDRESS) ?: return
+                val displayName = intent.getStringExtra(AppShortcutsManager.EXTRA_DISPLAY_NAME) ?: address
+                viewModel.openThreadFromShortcut(address, displayName)
+            }
+        }
     }
 
     private fun checkPermissionsAndLoad() {
@@ -343,6 +363,17 @@ fun AppNavigation(
             }
             navController.navigate("thread/${target.threadId}/${Uri.encode(target.address)}/${Uri.encode(target.displayName)}")
             viewModel.consumeNewConversationTarget()
+        }
+    }
+
+    val pendingShortcutRoute by viewModel.pendingShortcutRoute.collectAsState()
+    LaunchedEffect(pendingShortcutRoute) {
+        val route = pendingShortcutRoute
+        if (route != null) {
+            navController.navigate(route) {
+                launchSingleTop = true
+            }
+            viewModel.consumePendingShortcutRoute()
         }
     }
 

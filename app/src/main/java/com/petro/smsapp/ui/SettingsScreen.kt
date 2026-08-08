@@ -33,7 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.petro.smsapp.data.AppContainer
 import com.petro.smsapp.data.AppSettings
+import com.petro.smsapp.util.AppShortcutsManager
 import com.petro.smsapp.data.CalendarType
 import com.petro.smsapp.data.ClockFormat
 import com.petro.smsapp.data.SwipeAction
@@ -42,6 +44,7 @@ import com.petro.smsapp.data.backup.BackupCategory
 import com.petro.smsapp.data.backup.BackupModule
 import kotlinx.coroutines.launch
 import com.petro.smsapp.util.SettingsDropdown
+import com.petro.smsapp.util.autoDirection
 import androidx.compose.ui.draw.scale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,8 +67,13 @@ fun SettingsScreen(
     var expandedConversations by remember { mutableStateOf(false) }
     var expandedMessaging by remember { mutableStateOf(false) }
     var expandedNotifications by remember { mutableStateOf(false) }
+    var expandedShortcuts by remember { mutableStateOf(false) }
     var expandedGeneral by remember { mutableStateOf(false) }
     var expandedBackup by remember { mutableStateOf(false) }
+
+    val shortcutContacts by AppContainer.shortcutContactRepository(context)
+        .observeAll()
+        .collectAsState(initial = emptyList())
 
     var showBackupDialog by remember { mutableStateOf(false) }
     var selectedCategories by remember { mutableStateOf(BackupCategory.entries.toSet()) }
@@ -94,6 +102,7 @@ fun SettingsScreen(
                 .onSuccess { cats ->
                     val names = cats.joinToString("، ") { it.title }
                     Toast.makeText(context, "بازیابی شد: $names", Toast.LENGTH_LONG).show()
+                    AppShortcutsManager.updateShortcuts(context)
                 }
                 .onFailure {
                     Toast.makeText(context, "خطا در بازیابی داده‌ها", Toast.LENGTH_SHORT).show()
@@ -434,6 +443,91 @@ fun SettingsScreen(
                 )
                 }
 
+
+            // شورتکات‌های لانچر
+            AccordionSection(
+                title = "شورتکات‌ها",
+                icon = Icons.Outlined.TouchApp,
+                expanded = expandedShortcuts,
+                onToggle = { expandedShortcuts = !expandedShortcuts }
+            ) {
+                SwitchRow(
+                    title = "پیام جدید",
+                    info = "با لانگ‌کلیک روی آیکون اپ، شورتکات «پیام جدید» نمایش داده شود",
+                    checked = settings.shortcutNewMessageEnabled,
+                    onChecked = {
+                        AppSettings.setShortcutNewMessageEnabled(context, it)
+                        scope.launch { AppShortcutsManager.updateShortcuts(context) }
+                    },
+                    onInfo = { infoDialogText = it }
+                )
+                SwitchRow(
+                    title = "تنظیمات",
+                    info = "با لانگ‌کلیک روی آیکون اپ، شورتکات «تنظیمات» نمایش داده شود",
+                    checked = settings.shortcutSettingsEnabled,
+                    onChecked = {
+                        AppSettings.setShortcutSettingsEnabled(context, it)
+                        scope.launch { AppShortcutsManager.updateShortcuts(context) }
+                    },
+                    onInfo = { infoDialogText = it }
+                )
+                SwitchRow(
+                    title = "مخاطبین انتخاب‌شده",
+                    info = "شورتکات پیام مستقیم به مخاطبینی که از داخل چت اضافه کرده‌اید. روی دستگاه‌ها معمولاً حداکثر چند شورتکات نمایش داده می‌شود.",
+                    checked = settings.shortcutContactsEnabled,
+                    onChecked = {
+                        AppSettings.setShortcutContactsEnabled(context, it)
+                        scope.launch { AppShortcutsManager.updateShortcuts(context) }
+                    },
+                    onInfo = { infoDialogText = it }
+                )
+                if (shortcutContacts.isNotEmpty()) {
+                    ThinDivider()
+                    Text(
+                        text = "مخاطبین شورتکات",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    shortcutContacts.forEach { contact ->
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    contact.displayName.ifBlank { contact.address },
+                                    style = LocalTextStyle.current.autoDirection()
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    contact.address,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        textDirection = androidx.compose.ui.text.style.TextDirection.Ltr
+                                    )
+                                )
+                            },
+                            trailingContent = {
+                                IconButton(onClick = {
+                                    scope.launch {
+                                        AppContainer.shortcutContactRepository(context)
+                                            .removeByNormalized(contact.normalizedAddress)
+                                        AppShortcutsManager.updateShortcuts(context)
+                                    }
+                                }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "حذف از شورتکات")
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "هنوز مخاطبی اضافه نشده. از داخل هر چت، گزینه «افزودن به شورتکات» را بزنید.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
 
             // عمومی
             AccordionSection(

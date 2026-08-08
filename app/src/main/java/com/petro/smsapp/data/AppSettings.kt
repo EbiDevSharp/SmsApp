@@ -64,6 +64,10 @@ object AppSettings {
     private const val KEY_UNREAD_REMINDER_INTERVAL_MINUTES_NAME = "unread_reminder_interval_minutes"
     private const val KEY_UNREAD_REMINDER_SHOW_NOTIFICATION_NAME = "unread_reminder_show_notification"
     private const val KEY_UNREAD_REMINDER_PLAY_SOUND_NAME = "unread_reminder_play_sound"
+    // شورتکات‌های لانچر (لانگ‌کلیک روی آیکون اپ)
+    private const val KEY_SHORTCUT_NEW_MESSAGE_ENABLED_NAME = "shortcut_new_message_enabled"
+    private const val KEY_SHORTCUT_SETTINGS_ENABLED_NAME = "shortcut_settings_enabled"
+    private const val KEY_SHORTCUT_CONTACTS_ENABLED_NAME = "shortcut_contacts_enabled"
 
     private val KEY_TRASH_ENABLED = booleanPreferencesKey(KEY_TRASH_ENABLED_NAME)
     private val KEY_CALENDAR_TYPE = stringPreferencesKey(KEY_CALENDAR_TYPE_NAME)
@@ -93,6 +97,9 @@ object AppSettings {
     private val KEY_UNREAD_REMINDER_INTERVAL_MINUTES = intPreferencesKey(KEY_UNREAD_REMINDER_INTERVAL_MINUTES_NAME)
     private val KEY_UNREAD_REMINDER_SHOW_NOTIFICATION = booleanPreferencesKey(KEY_UNREAD_REMINDER_SHOW_NOTIFICATION_NAME)
     private val KEY_UNREAD_REMINDER_PLAY_SOUND = booleanPreferencesKey(KEY_UNREAD_REMINDER_PLAY_SOUND_NAME)
+    private val KEY_SHORTCUT_NEW_MESSAGE_ENABLED = booleanPreferencesKey(KEY_SHORTCUT_NEW_MESSAGE_ENABLED_NAME)
+    private val KEY_SHORTCUT_SETTINGS_ENABLED = booleanPreferencesKey(KEY_SHORTCUT_SETTINGS_ENABLED_NAME)
+    private val KEY_SHORTCUT_CONTACTS_ENABLED = booleanPreferencesKey(KEY_SHORTCUT_CONTACTS_ENABLED_NAME)
 
     const val DEFAULT_MAX_PINNED_CONVERSATIONS = 3
     const val DEFAULT_SEND_DELAY_SECONDS = 0
@@ -196,7 +203,11 @@ object AppSettings {
         val unreadReminderCount: Int = DEFAULT_UNREAD_REMINDER_COUNT,
         val unreadReminderIntervalMinutes: Int = DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES,
         val unreadReminderShowNotification: Boolean = true,
-        val unreadReminderPlaySound: Boolean = true
+        val unreadReminderPlaySound: Boolean = true,
+        // شورتکات لانچر
+        val shortcutNewMessageEnabled: Boolean = true,
+        val shortcutSettingsEnabled: Boolean = true,
+        val shortcutContactsEnabled: Boolean = true
     )
 
     private val _state = MutableStateFlow(State())
@@ -251,7 +262,10 @@ object AppSettings {
                             if (v in UNREAD_REMINDER_INTERVAL_OPTIONS) v else DEFAULT_UNREAD_REMINDER_INTERVAL_MINUTES
                         },
                         unreadReminderShowNotification = prefs[KEY_UNREAD_REMINDER_SHOW_NOTIFICATION] ?: true,
-                        unreadReminderPlaySound = prefs[KEY_UNREAD_REMINDER_PLAY_SOUND] ?: true
+                        unreadReminderPlaySound = prefs[KEY_UNREAD_REMINDER_PLAY_SOUND] ?: true,
+                        shortcutNewMessageEnabled = prefs[KEY_SHORTCUT_NEW_MESSAGE_ENABLED] ?: true,
+                        shortcutSettingsEnabled = prefs[KEY_SHORTCUT_SETTINGS_ENABLED] ?: true,
+                        shortcutContactsEnabled = prefs[KEY_SHORTCUT_CONTACTS_ENABLED] ?: true
                     )
                 }
                 .collect { newState -> _state.value = newState }
@@ -409,6 +423,21 @@ object AppSettings {
     fun isUnreadReminderPlaySound(context: Context): Boolean = _state.value.unreadReminderPlaySound
     fun setUnreadReminderPlaySound(context: Context, enabled: Boolean) =
         write(context) { it[KEY_UNREAD_REMINDER_PLAY_SOUND] = enabled }
+
+    /** شورتکات «پیام جدید» روی لانگ‌کلیک آیکون اپ */
+    fun isShortcutNewMessageEnabled(context: Context): Boolean = _state.value.shortcutNewMessageEnabled
+    fun setShortcutNewMessageEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SHORTCUT_NEW_MESSAGE_ENABLED] = enabled }
+
+    /** شورتکات «تنظیمات» روی لانگ‌کلیک آیکون اپ */
+    fun isShortcutSettingsEnabled(context: Context): Boolean = _state.value.shortcutSettingsEnabled
+    fun setShortcutSettingsEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SHORTCUT_SETTINGS_ENABLED] = enabled }
+
+    /** شورتکات‌های مخاطبین انتخاب‌شده روی لانگ‌کلیک آیکون اپ */
+    fun isShortcutContactsEnabled(context: Context): Boolean = _state.value.shortcutContactsEnabled
+    fun setShortcutContactsEnabled(context: Context, enabled: Boolean) =
+        write(context) { it[KEY_SHORTCUT_CONTACTS_ENABLED] = enabled }
 
     private fun write(context: Context, block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         scope.launch {

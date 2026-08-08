@@ -176,3 +176,15 @@ data class TemplateEntity(
     val createdAt: Long,
     val updatedAt: Long
 )
+
+/**
+ * مخاطبینی که کاربر برای شورتکات لانچر (لانگ‌کلیک روی آیکون اپ) انتخاب کرده.
+ * هر ردیف یک مخاطب است که می‌تواند به‌صورت شورتکات پویا روی آیکون ظاهر شود.
+ */
+@Entity(tableName = "shortcut_contacts")
+data class ShortcutContactEntity(
+    @PrimaryKey val normalizedAddress: String,
+    val address: String,
+    val displayName: String,
+    val addedAt: Long
+)

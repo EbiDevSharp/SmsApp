@@ -25,6 +25,7 @@ import com.petro.smsapp.data.db.PinEntity
 import com.petro.smsapp.data.db.PinnedMessageEntity
 import com.petro.smsapp.data.db.PrivateNumberEntity
 import com.petro.smsapp.data.db.ScheduledMessageEntity
+import com.petro.smsapp.data.db.ShortcutContactEntity
 import com.petro.smsapp.data.db.TemplateEntity
 import com.petro.smsapp.data.db.TrashEntity
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +40,11 @@ enum class BackupCategory(
     val description: String
 ) {
     APPEARANCE("appearance", "ظاهر", "تم، نوع تقویم و فرمت ساعت"),
-    CONVERSATIONS("conversations", "لیست مکالمات", "نمایش شماره، نوار الفبا، سویپ‌ها و سقف پین"),
+    CONVERSATIONS("conversations", "لیست مکالمات", "نمایش شماره، نوار الفبا، سویپ‌ها، سقف پین و شورتکات لانچر"),
     MESSAGING("messaging", "پیام‌رسانی", "سطل زباله، گروه‌های پیامکی و تأخیر ارسال"),
     NOTIFICATIONS("notifications", "اعلان‌ها", "دلیوری، دکمه‌های نوتیف و پاپ‌آپ"),
     SMS("sms", "پیامک‌ها", "تمام پیامک‌های موجود در گوشی"),
-    APP_DATA("app_data", "داده‌های برنامه", "فیوریت، پین، سطل زباله، گروه‌ها، فیلترها، تمپلیت‌ها و ...");
+    APP_DATA("app_data", "داده‌های برنامه", "فیوریت، پین، سطل زباله، گروه‌ها، فیلترها، تمپلیت‌ها، شورتکات‌ها و ...");
 
     companion object {
         fun fromId(id: String): BackupCategory? = entries.find { it.id == id }
@@ -115,6 +116,9 @@ object BackupModule {
             put("swipeLeftToRightAction", s.swipeLeftToRightAction.id)
             put("swipeDeleteRequiresConfirmation", s.swipeDeleteRequiresConfirmation)
             put("maxPinnedConversations", s.maxPinnedConversations)
+            put("shortcutNewMessageEnabled", s.shortcutNewMessageEnabled)
+            put("shortcutSettingsEnabled", s.shortcutSettingsEnabled)
+            put("shortcutContactsEnabled", s.shortcutContactsEnabled)
         }
     }
 
@@ -389,6 +393,19 @@ object BackupModule {
             }
         }
 
+        // Shortcut contacts (لانچر)
+        val shortcutContacts = db.shortcutContactDao().getAllOnce()
+        val shortcutContactsJson = JSONArray().apply {
+            shortcutContacts.forEach { c ->
+                put(JSONObject().apply {
+                    put("normalizedAddress", c.normalizedAddress)
+                    put("address", c.address)
+                    put("displayName", c.displayName)
+                    put("addedAt", c.addedAt)
+                })
+            }
+        }
+
         return JSONObject().apply {
             put("favorites", favoritesJson)
             put("privateNumbers", privateJson)
@@ -400,6 +417,7 @@ object BackupModule {
             put("messageGroups", groupsJson)
             put("filterGroups", filterGroupsJson)
             put("templates", templatesJson)
+            put("shortcutContacts", shortcutContactsJson)
         }
     }
 
@@ -473,6 +491,12 @@ object BackupModule {
             AppSettings.setSwipeDeleteRequiresConfirmation(context, data.getBoolean("swipeDeleteRequiresConfirmation"))
         if (data.has("maxPinnedConversations"))
             AppSettings.setMaxPinnedConversations(context, data.getInt("maxPinnedConversations"))
+        if (data.has("shortcutNewMessageEnabled"))
+            AppSettings.setShortcutNewMessageEnabled(context, data.getBoolean("shortcutNewMessageEnabled"))
+        if (data.has("shortcutSettingsEnabled"))
+            AppSettings.setShortcutSettingsEnabled(context, data.getBoolean("shortcutSettingsEnabled"))
+        if (data.has("shortcutContactsEnabled"))
+            AppSettings.setShortcutContactsEnabled(context, data.getBoolean("shortcutContactsEnabled"))
     }
 
     private fun importMessaging(context: Context, data: JSONObject) {
@@ -801,6 +825,22 @@ object BackupModule {
                         body = o.optString("body"),
                         createdAt = o.optLong("createdAt", System.currentTimeMillis()),
                         updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        // Shortcut contacts
+        db.shortcutContactDao().deleteAll()
+        data.optJSONArray("shortcutContacts")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                db.shortcutContactDao().insert(
+                    ShortcutContactEntity(
+                        normalizedAddress = o.getString("normalizedAddress"),
+                        address = o.optString("address"),
+                        displayName = o.optString("displayName"),
+                        addedAt = o.optLong("addedAt", System.currentTimeMillis())
                     )
                 )
             }

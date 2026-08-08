@@ -102,6 +102,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     private val _newConversationTarget = MutableStateFlow<NewConversationTarget?>(null)
     val newConversationTarget: StateFlow<NewConversationTarget?> = _newConversationTarget.asStateFlow()
 
+    /** مسیر شورتکات لانچر: "new" | "settings" | null */
+    private val _pendingShortcutRoute = MutableStateFlow<String?>(null)
+    val pendingShortcutRoute: StateFlow<String?> = _pendingShortcutRoute.asStateFlow()
+
     private val _noteText = MutableStateFlow<String?>(null)
     val noteText: StateFlow<String?> = _noteText.asStateFlow()
 
@@ -1100,6 +1104,23 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openThreadFromNotification(threadId: Long, address: String, displayName: String) {
         _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
+    }
+
+    fun requestShortcutRoute(route: String) {
+        _pendingShortcutRoute.value = route
+    }
+
+    fun consumePendingShortcutRoute() {
+        _pendingShortcutRoute.value = null
+    }
+
+    fun openThreadFromShortcut(address: String, displayName: String) {
+        viewModelScope.launch {
+            val threadId = withContext(Dispatchers.IO) {
+                repository.getOrCreateThreadId(address)
+            }
+            _newConversationTarget.value = NewConversationTarget(threadId, address, displayName)
+        }
     }
 
     fun openNote(text: String) {
